@@ -1,4 +1,5 @@
 import type { CatalogMovieDetails } from './catalog'
+import { parseReleaseTitle, parseSizeBytes, type ReleaseInfo } from './release-info'
 
 export type TorrentSearchErrorCode =
   | 'NO_CREDENTIALS'
@@ -12,8 +13,8 @@ export type TorrentProviderError = {
   message: string
 }
 
-/** One row from a torrent indexer (HTML scrape, API, etc.). */
-export type TorrentSource = {
+/** One row as returned by a torrent indexer (HTML scrape, API, etc.). */
+export type RawTorrentSource = {
   title: string
   providerName: string
   size: string | null
@@ -25,6 +26,16 @@ export type TorrentSource = {
   /** HTTPS details/comments page when available. */
   detailsUrl: string | null
   uploadDate: string | null
+}
+
+/** An indexer row plus what we parsed from its name and size. */
+export type TorrentSource = RawTorrentSource & {
+  sizeBytes: number | null
+  release: ReleaseInfo
+}
+
+export function withReleaseInfo(row: RawTorrentSource): TorrentSource {
+  return { ...row, sizeBytes: parseSizeBytes(row.size), release: parseReleaseTitle(row.title) }
 }
 
 export type TorrentSearchResponse =

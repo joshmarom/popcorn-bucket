@@ -1,4 +1,4 @@
-import type { TorrentSource } from '@shared/torrent'
+import type { RawTorrentSource } from '@shared/torrent'
 import { isSafeTorrentDetailsUrl, isValidMagnetUri } from '@shared/torrent'
 import type { TorrentProviderContext } from '../provider-context'
 import { formatBytes } from '../format-bytes'
@@ -17,7 +17,7 @@ function absolutizeDetails(raw: string): string | null {
 export async function searchKnaben(
   ctx: TorrentProviderContext,
   signal: AbortSignal
-): Promise<TorrentSource[]> {
+): Promise<RawTorrentSource[]> {
   const q = ctx.query.trim()
   if (!q) return []
 
@@ -44,7 +44,7 @@ export async function searchKnaben(
   const hits = (json as { hits: unknown }).hits
   if (!Array.isArray(hits)) return []
 
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   for (const raw of hits) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>

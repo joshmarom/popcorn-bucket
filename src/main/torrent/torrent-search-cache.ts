@@ -1,5 +1,10 @@
 import * as ElectronStoreModule from 'electron-store'
-import type { TorrentProviderError, TorrentSearchResponse, TorrentSource } from '@shared/torrent'
+import {
+  withReleaseInfo,
+  type RawTorrentSource,
+  type TorrentProviderError,
+  type TorrentSearchResponse
+} from '@shared/torrent'
 
 type StoreCtor = typeof import('electron-store').default
 
@@ -24,7 +29,7 @@ const MAX_ENTRIES = 100
 
 type CachedPayload = {
   savedAt: number
-  results: TorrentSource[]
+  results: RawTorrentSource[]
   errors: TorrentProviderError[]
 }
 
@@ -63,7 +68,8 @@ export function readTorrentSearchCache(cacheKey: string): TorrentSearchResponse 
 
   return {
     ok: true,
-    results: row.results,
+    // Entries written before release parsing existed lack `release`; re-derive for all rows.
+    results: row.results.map(withReleaseInfo),
     errors: row.errors,
     cached: true,
     cachedAtMs: row.savedAt

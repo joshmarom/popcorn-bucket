@@ -1,6 +1,6 @@
 import { load } from 'cheerio'
 import type { AnyNode } from 'domhandler'
-import type { TorrentSource } from '@shared/torrent'
+import type { RawTorrentSource } from '@shared/torrent'
 import { isSafeTorrentDetailsUrl, isValidMagnetUri } from '@shared/torrent'
 import type { TorrentProviderContext } from '../provider-context'
 import { limitedFetch } from '../fetch-limited'
@@ -8,7 +8,7 @@ import { limitedFetch } from '../fetch-limited'
 const BASE = 'https://uindex.org'
 const PROVIDER = 'UIndex'
 
-function parseRow($: ReturnType<typeof load>, el: AnyNode): TorrentSource | null {
+function parseRow($: ReturnType<typeof load>, el: AnyNode): RawTorrentSource | null {
   const row = $(el)
   const magnetUri = row.find('td.sr-col-name a.sr-magnet').first().attr('href') ?? ''
   if (!magnetUri || !isValidMagnetUri(magnetUri)) return null
@@ -47,7 +47,7 @@ function parseRow($: ReturnType<typeof load>, el: AnyNode): TorrentSource | null
 export async function searchUindex(
   ctx: TorrentProviderContext,
   signal: AbortSignal
-): Promise<TorrentSource[]> {
+): Promise<RawTorrentSource[]> {
   const q = ctx.query.trim()
   if (!q) return []
 
@@ -58,7 +58,7 @@ export async function searchUindex(
   const html = await res.text()
   const $ = load(html)
   const tbody = $('table.sr-table > tbody').first()
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   tbody.children('tr').each((_, el) => {
     const parsed = parseRow($, el)
     if (parsed) out.push(parsed)

@@ -1,4 +1,4 @@
-import type { TorrentSource } from '@shared/torrent'
+import type { RawTorrentSource } from '@shared/torrent'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 import type { TorrentProviderContext } from '../provider-context'
 import { magnetFromInfoHash } from '../magnet-from-hash'
@@ -18,7 +18,7 @@ type YtsTorrent = {
   date_uploaded_unix?: number
 }
 
-function parseMovieTorrents(movie: Record<string, unknown>): TorrentSource[] {
+function parseMovieTorrents(movie: Record<string, unknown>): RawTorrentSource[] {
   const descriptionPageUrl =
     typeof movie.url === 'string' && isSafeTorrentDetailsUrl(movie.url) ? movie.url : null
   const titleLong = typeof movie.title_long === 'string' ? movie.title_long : null
@@ -27,7 +27,7 @@ function parseMovieTorrents(movie: Record<string, unknown>): TorrentSource[] {
   const torrents = movie.torrents
   if (!Array.isArray(torrents)) return []
 
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   for (const raw of torrents) {
     if (!raw || typeof raw !== 'object') continue
     const t = raw as YtsTorrent
@@ -69,7 +69,7 @@ function parseMovieTorrents(movie: Record<string, unknown>): TorrentSource[] {
 export async function searchYts(
   ctx: TorrentProviderContext,
   signal: AbortSignal
-): Promise<TorrentSource[]> {
+): Promise<RawTorrentSource[]> {
   const imdb = ctx.imdbId
   const term = ctx.query.trim()
   if (!term && !imdb) return []
@@ -99,7 +99,7 @@ export async function searchYts(
 
   const movies = data.movies
   if (!Array.isArray(movies)) return []
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   for (const m of movies) {
     if (m && typeof m === 'object') {
       out.push(...parseMovieTorrents(m as Record<string, unknown>))

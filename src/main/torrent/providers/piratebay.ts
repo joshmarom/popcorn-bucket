@@ -1,4 +1,4 @@
-import type { TorrentSource } from '@shared/torrent'
+import type { RawTorrentSource } from '@shared/torrent'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 import type { TorrentProviderContext } from '../provider-context'
 import { formatBytes } from '../format-bytes'
@@ -13,7 +13,7 @@ const SITE = 'https://thepiratebay.org'
 export async function searchPirateBay(
   ctx: TorrentProviderContext,
   signal: AbortSignal
-): Promise<TorrentSource[]> {
+): Promise<RawTorrentSource[]> {
   const q = ctx.query.trim()
   if (!q) return []
 
@@ -24,7 +24,7 @@ export async function searchPirateBay(
   const json: unknown = await res.json()
   if (!Array.isArray(json)) return []
 
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   for (const raw of json) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>

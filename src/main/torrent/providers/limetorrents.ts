@@ -1,6 +1,6 @@
 import { load } from 'cheerio'
 import type { AnyNode } from 'domhandler'
-import type { TorrentSource } from '@shared/torrent'
+import type { RawTorrentSource } from '@shared/torrent'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 import type { TorrentProviderContext } from '../provider-context'
 import { magnetFromInfoHash } from '../magnet-from-hash'
@@ -10,7 +10,7 @@ const BASE = 'https://limetorrents.lol'
 const PROVIDER = 'LimeTorrents'
 const INFO_HASH_REGEX = /\/torrent\/([A-Fa-f0-9]{40})\.torrent/
 
-function parseTorrentRow($: ReturnType<typeof load>, el: AnyNode): TorrentSource | null {
+function parseTorrentRow($: ReturnType<typeof load>, el: AnyNode): RawTorrentSource | null {
   const row = $(el)
   const nameAnchor = row.find('div.tt-name > a[href^="/"]').first()
   const href = nameAnchor.attr('href')
@@ -70,7 +70,7 @@ function parseTorrentRow($: ReturnType<typeof load>, el: AnyNode): TorrentSource
 export async function searchLimeTorrents(
   ctx: TorrentProviderContext,
   signal: AbortSignal
-): Promise<TorrentSource[]> {
+): Promise<RawTorrentSource[]> {
   const q = ctx.query.trim()
   if (!q) return []
 
@@ -84,7 +84,7 @@ export async function searchLimeTorrents(
   const html = await res.text()
   const $ = load(html)
   const rows = $('.table2 > tbody > tr[bgcolor]')
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   rows.each((_, el) => {
     const parsed = parseTorrentRow($, el)
     if (parsed) out.push(parsed)

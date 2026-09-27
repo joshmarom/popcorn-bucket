@@ -1,4 +1,4 @@
-import type { TorrentProviderError, TorrentSource } from '@shared/torrent'
+import type { TorrentProviderError, RawTorrentSource } from '@shared/torrent'
 import type { TorrentProviderContext } from './provider-context'
 import { searchKnaben } from './providers/knaben'
 import { searchLimeTorrents } from './providers/limetorrents'
@@ -12,7 +12,7 @@ const PROVIDER_TIMEOUT_MS = 12_000
 type TorrentProviderFn = (
   ctx: TorrentProviderContext,
   signal: AbortSignal
-) => Promise<TorrentSource[]>
+) => Promise<RawTorrentSource[]>
 
 const PROVIDERS: { name: string; search: TorrentProviderFn }[] = [
   { name: 'TorrentsCSV', search: searchTorrentsCsv },
@@ -26,7 +26,7 @@ const PROVIDERS: { name: string; search: TorrentProviderFn }[] = [
 async function runOneProvider(
   provider: (typeof PROVIDERS)[number],
   ctx: TorrentProviderContext
-): Promise<{ name: string; rows: TorrentSource[] } | { name: string; error: string }> {
+): Promise<{ name: string; rows: RawTorrentSource[] } | { name: string; error: string }> {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), PROVIDER_TIMEOUT_MS)
   try {
@@ -46,11 +46,11 @@ async function runOneProvider(
  * failures are collected in `errors` without failing the whole search.
  */
 export async function runTorrentProviders(ctx: TorrentProviderContext): Promise<{
-  results: TorrentSource[]
+  results: RawTorrentSource[]
   errors: TorrentProviderError[]
 }> {
   const settled = await Promise.allSettled(PROVIDERS.map((p) => runOneProvider(p, ctx)))
-  const results: TorrentSource[] = []
+  const results: RawTorrentSource[] = []
   const errors: TorrentProviderError[] = []
 
   settled.forEach((outcome, i) => {

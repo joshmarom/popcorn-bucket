@@ -1,13 +1,19 @@
 import type { AppSettings } from '@shared/app-settings'
-import type { TorrentSearchInput, TorrentSearchResponse, TorrentSource } from '@shared/torrent'
+import {
+  withReleaseInfo,
+  type RawTorrentSource,
+  type TorrentSearchInput,
+  type TorrentSearchResponse,
+  type TorrentSource
+} from '@shared/torrent'
 import { runTorrentProviders } from './scrape-providers'
 import { resolveTorrentSearchInput } from './torrent-search-resolve'
 
 const AGGREGATE_MAX = 400
 
 /** Merge rows that share the same info-hash; keep the copy with the highest seeder count. */
-function dedupeTorrentSources(rows: TorrentSource[]): TorrentSource[] {
-  const map = new Map<string, TorrentSource>()
+export function dedupeTorrentSources<T extends RawTorrentSource>(rows: T[]): T[] {
+  const map = new Map<string, T>()
   for (const r of rows) {
     const m = r.magnetUri?.trim().toLowerCase() ?? ''
     const btih = /btih:([a-f0-9]{40})/.exec(m)?.[1]
@@ -40,7 +46,7 @@ export async function searchTorrentSources(
     query: resolved.query,
     imdbId: resolved.imdbId
   })
-  const merged = sortAggregated(dedupeTorrentSources(results))
+  const merged = sortAggregated(dedupeTorrentSources(results).map(withReleaseInfo))
 
   return { ok: true, results: merged.slice(0, AGGREGATE_MAX), errors }
 }

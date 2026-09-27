@@ -1,4 +1,4 @@
-import type { TorrentSource } from '@shared/torrent'
+import type { RawTorrentSource } from '@shared/torrent'
 import type { TorrentProviderContext } from '../provider-context'
 import { formatBytes } from '../format-bytes'
 import { magnetFromInfoHash } from '../magnet-from-hash'
@@ -10,7 +10,7 @@ const BASE = 'https://torrents-csv.com'
 export async function searchTorrentsCsv(
   ctx: TorrentProviderContext,
   signal: AbortSignal
-): Promise<TorrentSource[]> {
+): Promise<RawTorrentSource[]> {
   const q = ctx.query.trim()
   if (!q) return []
 
@@ -23,7 +23,7 @@ export async function searchTorrentsCsv(
   const torrents = (json as { torrents: unknown }).torrents
   if (!Array.isArray(torrents)) return []
 
-  const out: TorrentSource[] = []
+  const out: RawTorrentSource[] = []
   for (const raw of torrents) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>
