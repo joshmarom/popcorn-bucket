@@ -37,6 +37,8 @@ export type PersistedMovieDownload = {
   createdAt: number
   /** Relative path of the chosen video within the torrent, once metadata is known. */
   playFilePath: string | null
+  /** Absolute path of the finished video on disk; null until the download completes. */
+  playFileAbsPath: string | null
   paused: boolean
   /** True when the download had fully finished (kept in the list until the user deletes it). */
   completed: boolean
@@ -95,6 +97,7 @@ export function loadPersistedMovieDownloads(): PersistedMovieDownload[] {
           : 0,
       createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
       playFilePath: typeof r.playFilePath === 'string' ? r.playFilePath : null,
+      playFileAbsPath: typeof r.playFileAbsPath === 'string' ? r.playFileAbsPath : null,
       paused: Boolean(r.paused),
       completed,
       completeSummary

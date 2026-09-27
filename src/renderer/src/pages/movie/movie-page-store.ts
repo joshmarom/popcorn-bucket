@@ -6,6 +6,7 @@ import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import type { TorrentSearchErrorCode, TorrentSearchResponse, TorrentSource } from '@shared/torrent'
 import type { TorrentSubtitleTrack } from '@shared/torrent-stream'
 import { isValidMagnetUri } from '@shared/torrent'
+import { acknowledgeNetworkNotice, hasAcknowledgedNetworkNotice } from '@/lib/network-notice'
 import type { DetailTab, OverviewSubTab } from './movie-types'
 
 export function getSortedTorrents(torrentData: TorrentSearchResponse | null): TorrentSource[] {
@@ -38,6 +39,8 @@ type MoviePageState = {
   downloadsRefreshBusy: boolean
   deleteConfirmId: string | null
   deleteBusy: boolean
+  /** Source waiting on the one-time network notice before it is queued. */
+  networkNoticeRow: TorrentSource | null
 }
 
 type MoviePageActions = {
@@ -50,6 +53,8 @@ type MoviePageActions = {
   closePlayDialog: (open: boolean) => void
   setPlayErrorFromPlayer: (message: string) => void
   queueDownload: (row: TorrentSource) => Promise<void>
+  confirmNetworkNotice: () => void
+  cancelNetworkNotice: () => void
   beginPlayback: (downloadId: string) => Promise<void>
   removeDownload: (downloadId: string) => Promise<boolean>
   confirmRemoveDownload: () => Promise<void>
@@ -89,7 +94,8 @@ function initialState(movieId: number): MoviePageState {
     pauseBusyDownloadId: null,
     downloadsRefreshBusy: false,
     deleteConfirmId: null,
-    deleteBusy: false
+    deleteBusy: false,
+    networkNoticeRow: null
   }
 }
 
@@ -174,6 +180,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
 
     closePlayDialog: (open) => {
       if (!open) {
+        void window.api.torrent.endInlinePlayback()
         set({
           playDialogOpen: false,
           playUrl: null,
@@ -189,8 +196,21 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
 
     setPlayErrorFromPlayer: (message) => set({ playError: message }),
 
+    confirmNetworkNotice: () => {
+      const row = get().networkNoticeRow
+      acknowledgeNetworkNotice()
+      set({ networkNoticeRow: null })
+      if (row) void get().queueDownload(row)
+    },
+
+    cancelNetworkNotice: () => set({ networkNoticeRow: null }),
+
     queueDownload: async (row) => {
       if (!row.magnetUri || !isValidMagnetUri(row.magnetUri)) return
+      if (!hasAcknowledgedNetworkNotice()) {
+        set({ networkNoticeRow: row })
+        return
+      }
       const id = get().movieId
       set({ addBusyMagnet: row.magnetUri, addFeedback: null })
       try {

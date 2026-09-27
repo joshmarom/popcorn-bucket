@@ -67,6 +67,7 @@ const api = {
       downloadId: string
     ): Promise<TorrentStreamStartResponse> =>
       ipcRenderer.invoke('torrent:startMoviePlayback', { movieId, downloadId }),
+    endInlinePlayback: (): Promise<void> => ipcRenderer.invoke('torrent:endInlinePlayback'),
     setMovieDownloadPaused: (
       movieId: number,
       downloadId: string,

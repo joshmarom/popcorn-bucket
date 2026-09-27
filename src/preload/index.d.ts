@@ -57,6 +57,8 @@ export type PopcornApi = {
       downloadId: string
     ): Promise<{ ok: true } | { ok: false; error: string }>
     startMoviePlayback(movieId: number, downloadId: string): Promise<TorrentStreamStartResponse>
+    /** The in-app player closed; a download that finished meanwhile can leave the swarm. */
+    endInlinePlayback(): Promise<void>
     setMovieDownloadPaused(
       movieId: number,
       downloadId: string,

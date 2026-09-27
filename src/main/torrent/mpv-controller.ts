@@ -20,8 +20,10 @@ export const mpvEvents = new EventEmitter()
 let currentChild: ChildProcess | null = null
 
 export async function startExternalMpvSession(params: {
+  /** Stream URL or local file path. */
   url: string
   title: string
+  subFiles?: string[]
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const bin = findMpvBinary()
   if (!bin) return { ok: false, error: mpvNotFoundMessage() }
@@ -36,7 +38,8 @@ export async function startExternalMpvSession(params: {
     '--idle=no',
     '--keep-open=no',
     '--no-terminal',
-    '--msg-level=all=warn'
+    '--msg-level=all=warn',
+    ...(params.subFiles ?? []).map((p) => `--sub-file=${p}`)
   ]
 
   let child: ChildProcess

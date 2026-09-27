@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import { basename, isAbsolute, join, relative } from 'node:path'
 import { isValidMagnetUri } from '@shared/torrent'
 import type {
   AddMovieTorrentPayload,
@@ -28,7 +29,8 @@ import {
   type PersistedDownloadCompleteSummary,
   type PersistedMovieDownload
 } from './movie-downloads-persistence'
-import { shutdownCurrentMpvSession, startExternalMpvSession } from './mpv-controller'
+import { mpvEvents, shutdownCurrentMpvSession, startExternalMpvSession } from './mpv-controller'
+import { localMediaUrl } from '../local-media-protocol'
 
 /** Containers Chromium refuses to play inline; we hand these off to mpv. */
 const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
@@ -55,11 +57,65 @@ type DownloadRecord = {
   resumedPlayFilePath?: string | null
   /** Restored from disk: pause swarm after metadata if still in progress. */
   resumedPaused?: boolean
+  /** Folder holding this download's files. */
+  downloadDir: string
+  /** Absolute path of the finished video on disk; set once the torrent leaves the swarm. */
+  playFileAbsPath?: string | null
+  /** Finished while being streamed; leave the swarm when that playback ends. */
+  pendingDetach?: boolean
 }
 
 const records = new Map<string, DownloadRecord>()
 
+/** Download currently streamed through the WebTorrent HTTP server (inline player or mpv). */
+let streamingDownloadId: string | null = null
+let streamingVia: 'inline' | 'mpv' | null = null
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+function recordDownloadDir(movieId: number, id: string): string {
+  return join(baseDownloadDir(), String(movieId), id)
+}
+
+/**
+ * Finished torrents leave the swarm so the app never uploads after a download completes.
+ * Files stay on disk and are played locally from then on.
+ */
+function detachCompletedTorrent(rec: DownloadRecord): void {
+  const t = rec.wt
+  if (!t || t.destroyed) return
+  if (streamingDownloadId === rec.id) {
+    rec.pendingDetach = true
+    return
+  }
+  rec.pendingDetach = false
+  rec.status = 'complete'
+  captureCompleteSnapshot(rec, t)
+  if (rec.playFile) {
+    rec.playFileAbsPath = join(rec.downloadDir, rec.playFile.path)
+  }
+  rec.wt = null
+  const c = getClientIfExists()
+  if (c) {
+    void c.remove(t, { destroyStore: false }).catch(() => {})
+  }
+  schedulePersistMovieDownloads()
+}
+
+/** Called when a stream through the WebTorrent HTTP server stops (player closed or mpv exited). */
+export function endStreamingPlayback(via?: 'inline' | 'mpv'): void {
+  if (via && streamingVia !== via) return
+  const id = streamingDownloadId
+  streamingDownloadId = null
+  streamingVia = null
+  if (!id) return
+  const rec = records.get(id)
+  if (rec?.pendingDetach) {
+    detachCompletedTorrent(rec)
+  }
+}
+
+mpvEvents.on('end', () => endStreamingPlayback('mpv'))
 
 function captureCompleteSnapshot(rec: DownloadRecord, torrent: WtTorrent): void {
   rec.completeSnapshot = {
@@ -101,7 +157,8 @@ function serializeRecord(rec: DownloadRecord): PersistedMovieDownload {
     indexerSeeders: rec.indexerSeeders,
     indexerLeechers: rec.indexerLeechers,
     createdAt: rec.createdAt,
-    playFilePath: rec.playFile?.path ?? null,
+    playFilePath: rec.playFile?.path ?? rec.resumedPlayFilePath ?? null,
+    playFileAbsPath: rec.playFileAbsPath ?? null,
     paused,
     completed: rec.status === 'complete',
     completeSummary
@@ -138,6 +195,7 @@ export function restoreMovieDownloadsOnStartup(): void {
     if (seenMagnets.has(mKey)) continue
     seenMagnets.add(mKey)
     if (records.has(row.id)) continue
+    const downloadDir = recordDownloadDir(row.movieId, row.id)
     const rec: DownloadRecord = {
       id: row.id,
       movieId: row.movieId,
@@ -151,11 +209,29 @@ export function restoreMovieDownloadsOnStartup(): void {
       status: row.completed ? 'complete' : 'pending_metadata',
       completeSnapshot: row.completeSummary,
       resumedPlayFilePath: row.playFilePath ? row.playFilePath : undefined,
-      resumedPaused: row.completed ? false : row.paused
+      resumedPaused: row.completed ? false : row.paused,
+      downloadDir
     }
     records.set(rec.id, rec)
+    if (row.completed) {
+      restoreCompletedFromDisk(rec, row.playFileAbsPath)
+      continue
+    }
     void attachTorrent(rec)
   }
+}
+
+/** Completed downloads are never re-added to the swarm; only confirm the file is still there. */
+function restoreCompletedFromDisk(rec: DownloadRecord, savedAbsPath: string | null): void {
+  const legacyPath =
+    rec.resumedPlayFilePath != null ? join(rec.downloadDir, rec.resumedPlayFilePath) : null
+  const abs = savedAbsPath ?? legacyPath
+  if (abs && existsSync(abs)) {
+    rec.playFileAbsPath = abs
+    return
+  }
+  rec.status = 'error'
+  rec.errorMessage = 'File was moved or deleted.'
 }
 
 function normalizeMagnet(m: string): string {
@@ -360,21 +436,19 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
   const wantPause = Boolean(rec.resumedPaused)
   rec.resumedPaused = undefined
   if (torrent.done) {
-    rec.status = 'complete'
-    captureCompleteSnapshot(rec, torrent)
-  } else if (wantPause) {
+    detachCompletedTorrent(rec)
+    return
+  }
+  if (wantPause) {
     torrent.pause?.()
     rec.status = 'paused'
   } else {
     rec.status = 'downloading'
   }
   torrent.once('done', () => {
-    rec.status = 'complete'
-    const tor = rec.wt
-    if (tor && !tor.destroyed) {
-      captureCompleteSnapshot(rec, tor)
+    if (rec.wt === torrent) {
+      detachCompletedTorrent(rec)
     }
-    schedulePersistMovieDownloads()
   })
   schedulePersistMovieDownloads()
 }
@@ -382,13 +456,12 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
 async function attachTorrent(rec: DownloadRecord): Promise<void> {
   try {
     const c = await getReadyClient()
-    const downloadPath = join(baseDownloadDir(), String(rec.movieId), rec.id)
-    mkdirSync(downloadPath, { recursive: true })
+    mkdirSync(rec.downloadDir, { recursive: true })
 
     const t = c.add(
       rec.magnetUri.trim(),
       {
-        path: downloadPath,
+        path: rec.downloadDir,
         destroyStoreOnDestroy: false,
         strategy: 'sequential'
       },
@@ -397,7 +470,9 @@ async function attachTorrent(rec: DownloadRecord): Promise<void> {
       }
     ) as WtTorrent
 
-    rec.wt = t
+    if (rec.status !== 'complete') {
+      rec.wt = t
+    }
 
     t.once('error', (err) => {
       if (rec.status !== 'complete') {
@@ -453,7 +528,8 @@ export function addMovieDownload(payload: AddMovieTorrentPayload): AddMovieTorre
     createdAt: Date.now(),
     wt: null,
     playFile: null,
-    status: 'pending_metadata'
+    status: 'pending_metadata',
+    downloadDir: recordDownloadDir(payload.movieId, id)
   }
   records.set(id, rec)
   void attachTorrent(rec)
@@ -481,11 +557,19 @@ export async function removeMovieDownload(
     return { ok: false, error: 'Download not found.' }
   }
   records.delete(downloadId)
+  if (streamingDownloadId === downloadId) {
+    streamingDownloadId = null
+    await shutdownCurrentMpvSession()
+  }
   if (rec.wt && !rec.wt.destroyed) {
     const c = getClientIfExists()
     if (c) {
       await c.remove(rec.wt, { destroyStore: true }).catch(() => {})
     }
+  }
+  const rel = relative(baseDownloadDir(), rec.downloadDir)
+  if (rel && !rel.startsWith('..') && !isAbsolute(rel)) {
+    await rm(rec.downloadDir, { recursive: true, force: true }).catch(() => {})
   }
   schedulePersistMovieDownloads()
   return { ok: true }
@@ -501,11 +585,11 @@ export async function setMovieDownloadPaused(
     return { ok: false, error: 'Download not found.' }
   }
   const torrent = rec.wt
+  if (rec.status === 'complete' || torrent?.done) {
+    return { ok: false, error: 'Cannot pause a completed download.' }
+  }
   if (!torrent || torrent.destroyed) {
     return { ok: false, error: 'Torrent is not active yet.' }
-  }
-  if (torrent.done) {
-    return { ok: false, error: 'Cannot pause a completed download.' }
   }
   if (paused) {
     torrent.pause?.()
@@ -523,6 +607,12 @@ export async function startMoviePlayback(
   const rec = records.get(downloadId)
   if (!rec || rec.movieId !== movieId) {
     return { ok: false, error: 'Download not found.' }
+  }
+
+  endStreamingPlayback()
+
+  if (rec.status === 'complete' && !rec.wt) {
+    return startLocalPlayback(rec)
   }
 
   const torrent = rec.wt
@@ -573,6 +663,8 @@ export async function startMoviePlayback(
       // requests that WebTorrent prioritizes (seek-aware download).
       const res = await startExternalMpvSession({ url: streamUrl, title: live.name })
       if (!res.ok) return res
+      streamingDownloadId = rec.id
+      streamingVia = 'mpv'
       return {
         ok: true,
         kind: 'external',
@@ -581,11 +673,75 @@ export async function startMoviePlayback(
       }
     }
 
+    streamingDownloadId = rec.id
+    streamingVia = 'inline'
     return { ok: true, kind: 'inline', streamUrl, fileLabel: live.name, subtitles }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return { ok: false, error: msg || 'Could not start playback.' }
   }
+}
+
+function listLocalSubtitleFiles(
+  dir: string
+): { absPath: string; name: string; format: TorrentSubtitleTrack['type'] }[] {
+  let entries: string[]
+  try {
+    entries = readdirSync(dir, { recursive: true, encoding: 'utf8' })
+  } catch {
+    return []
+  }
+  const out: { absPath: string; name: string; format: TorrentSubtitleTrack['type'] }[] = []
+  for (const entry of entries) {
+    const m = /\.(srt|vtt|ssa|ass)$/i.exec(entry)
+    if (!m) continue
+    out.push({
+      absPath: join(dir, entry),
+      name: basename(entry),
+      format: m[1].toLowerCase() as TorrentSubtitleTrack['type']
+    })
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Plays a finished download straight from disk; the swarm is never involved. */
+async function startLocalPlayback(rec: DownloadRecord): Promise<TorrentStreamStartResponse> {
+  const abs = rec.playFileAbsPath
+  if (!abs || !existsSync(abs)) {
+    rec.status = 'error'
+    rec.errorMessage = 'File was moved or deleted.'
+    schedulePersistMovieDownloads()
+    return { ok: false, error: rec.errorMessage }
+  }
+  const label = basename(abs)
+  const subs = listLocalSubtitleFiles(rec.downloadDir)
+
+  if (needsExternalPlayer(label)) {
+    const res = await startExternalMpvSession({
+      url: abs,
+      title: label,
+      subFiles: subs.map((s) => s.absPath)
+    })
+    if (!res.ok) return res
+    return { ok: true, kind: 'external', player: 'mpv', fileLabel: label }
+  }
+
+  const streamUrl = localMediaUrl(abs)
+  if (!streamUrl) {
+    return { ok: false, error: 'File is outside the download folder.' }
+  }
+  const subtitles: TorrentSubtitleTrack[] = []
+  for (const s of subs) {
+    const src = localMediaUrl(s.absPath)
+    if (!src) continue
+    subtitles.push({
+      src,
+      label: subtitleTrackLabel(s.name),
+      type: s.format,
+      language: guessSubtitleLanguage(s.name)
+    })
+  }
+  return { ok: true, kind: 'inline', streamUrl, fileLabel: label, subtitles }
 }
 
 export function shutdownMovieDownloads(): void {

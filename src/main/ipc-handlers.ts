@@ -18,6 +18,7 @@ import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torre
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
 import {
   addMovieDownload,
+  endStreamingPlayback,
   getAllMovieDownloads,
   getMovieDownloads,
   removeMovieDownload,
@@ -221,6 +222,10 @@ export function registerIpcHandlers(): void {
       }
     }
   )
+
+  ipcMain.handle('torrent:endInlinePlayback', (): void => {
+    endStreamingPlayback('inline')
+  })
 
   ipcMain.handle('torrent:setMovieDownloadPaused', async (_evt, raw: unknown) => {
     const parsed = movieDownloadPauseInput.safeParse(raw)

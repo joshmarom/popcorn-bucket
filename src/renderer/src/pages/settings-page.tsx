@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { NETWORK_NOTICE_TEXT } from '@/lib/network-notice'
 
 export function SettingsPage(): ReactElement {
   const [settingsKey, setSettingsKey] = useState('')
@@ -106,6 +107,10 @@ export function SettingsPage(): ReactElement {
         and <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">TMDB_API_KEY</code>{' '}
         in the environment before launch; they are used only when a field here is left empty.
       </p>
+      <section className="space-y-2 border-t border-border pt-6">
+        <h2 className="text-lg font-semibold tracking-tight">Network</h2>
+        <p className="text-muted-foreground text-sm leading-relaxed">{NETWORK_NOTICE_TEXT}</p>
+      </section>
     </div>
   )
 }

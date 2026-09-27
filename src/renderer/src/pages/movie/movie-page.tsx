@@ -12,6 +12,7 @@ import { MoviePageShell } from './movie-page-shell'
 import { MoviePlaybackDialog } from './movie-playback-dialog'
 import { MovieTorrentSourcesSection } from './movie-torrent-sources-section'
 import { MovieVidkingTab } from './movie-vidking-tab'
+import { NetworkNoticeDialog } from './network-notice-dialog'
 
 function MoviePageContent(): ReactElement {
   const store = useContext(MoviePageStoreContext)
@@ -25,6 +26,9 @@ function MoviePageContent(): ReactElement {
 
   useEffect(() => {
     void store.getState().loadCatalog()
+    return (): void => {
+      if (store.getState().playUrl) void window.api.torrent.endInlinePlayback()
+    }
   }, [store])
 
   useEffect(() => {
@@ -123,6 +127,12 @@ function MoviePageContent(): ReactElement {
         }}
         onCancel={() => s.setDeleteConfirmId(null)}
         onConfirm={() => void s.confirmRemoveDownload()}
+      />
+
+      <NetworkNoticeDialog
+        open={s.networkNoticeRow != null}
+        onCancel={s.cancelNetworkNotice}
+        onConfirm={s.confirmNetworkNotice}
       />
 
       <MoviePlaybackDialog

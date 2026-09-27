@@ -7,7 +7,7 @@ import { MediaPlayer, MediaProvider, Track, type MediaErrorDetail } from '@vidst
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default'
 
 function isLocalAppStreamUrl(url: string): boolean {
-  return /^https?:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url)
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url) || url.startsWith('pb-media:')
 }
 
 export function MoviePlaybackDialog({
@@ -32,7 +32,7 @@ export function MoviePlaybackDialog({
     return 'anonymous' as const
   }, [playUrl])
 
-  const resolvedPlayUrl = useMemo(() => { 
+  const resolvedPlayUrl = useMemo(() => {
     return playUrl ? alignLoopbackStreamUrlToPageHost(playUrl) : null
   }, [playUrl])
 

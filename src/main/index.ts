@@ -20,6 +20,9 @@ import {
   restoreMovieDownloadsOnStartup,
   shutdownMovieDownloads
 } from './torrent/movie-downloads'
+import { installLocalMediaProtocol, registerLocalMediaScheme } from './local-media-protocol'
+
+registerLocalMediaScheme()
 
 function installVidkingNetworkCompatibilityShim(): void {
   const ses = session.defaultSession
@@ -121,6 +124,7 @@ app.whenReady().then(() => {
 
   installVidkingNetworkCompatibilityShim()
   installVidkingDiagnosticsHooks(session.defaultSession)
+  installLocalMediaProtocol()
   registerIpcHandlers()
   restoreMovieDownloadsOnStartup()
 
