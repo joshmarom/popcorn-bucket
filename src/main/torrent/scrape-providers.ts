@@ -7,6 +7,7 @@ import {
   recordProviderSuccess,
   shouldQueryProvider
 } from './provider-health'
+import { searchEztv } from './providers/eztv'
 import { searchKnaben } from './providers/knaben'
 import { searchLimeTorrents } from './providers/limetorrents'
 import { searchPirateBay } from './providers/piratebay'
@@ -27,6 +28,7 @@ const PROVIDERS: { name: string; search: TorrentProviderFn }[] = [
   { name: 'Knaben', search: searchKnaben },
   { name: 'ThePirateBay', search: searchPirateBay },
   { name: 'YTS', search: searchYts },
+  { name: 'EZTV', search: searchEztv },
   { name: 'UIndex', search: searchUindex },
   { name: 'LimeTorrents', search: searchLimeTorrents }
 ]

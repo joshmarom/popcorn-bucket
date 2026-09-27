@@ -162,7 +162,7 @@ export function TvShowPage(): ReactElement {
       const pack = `S${String(ep.seasonNumber).padStart(2, '0')}`
       const searches = await Promise.all(
         [`${show.name} ${code}`, `${show.name} ${pack}`].map((title) =>
-          window.api.torrent.search({ title, releaseDate: null, imdbId: null })
+          window.api.torrent.search({ title, releaseDate: null, imdbId: show.imdbId })
         )
       )
       const rows = mergeResults(searches.map((r) => (r.ok ? r.results : [])))
