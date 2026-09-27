@@ -7,12 +7,36 @@ import type { TorrentSearchErrorCode, TorrentSearchResponse, TorrentSource } fro
 import type { TorrentSubtitleTrack } from '@shared/torrent-stream'
 import { isValidMagnetUri } from '@shared/torrent'
 import { acknowledgeNetworkNotice, hasAcknowledgedNetworkNotice } from '@/lib/network-notice'
+import {
+  defaultRankingPreferences,
+  rankTorrentSources,
+  type RankedSources,
+  type RankingPreferences
+} from '@shared/release-ranking'
 import type { DetailTab, OverviewSubTab } from './movie-types'
 
-export function getSortedTorrents(torrentData: TorrentSearchResponse | null): TorrentSource[] {
-  if (!torrentData || !torrentData.ok) return []
-  return [...torrentData.results].sort((a, b) => b.seeders - a.seeders)
+export function getRankedSources(
+  torrentData: TorrentSearchResponse | null,
+  detail: CatalogMovieDetails | null,
+  prefs: RankingPreferences
+): RankedSources {
+  if (!torrentData || !torrentData.ok || !detail) return { ranked: [], excluded: [] }
+  const year = detail.releaseDate ? Number.parseInt(detail.releaseDate.slice(0, 4), 10) : NaN
+  return rankTorrentSources(
+    torrentData.results,
+    { movieTitle: detail.title, movieYear: Number.isFinite(year) ? year : null },
+    prefs
+  )
 }
+
+/** Progress of the one-click Play flow on the movie page. */
+export type QuickPlayState =
+  | { phase: 'idle' }
+  | { phase: 'searching' }
+  | { phase: 'awaiting-notice' }
+  | { phase: 'buffering'; downloadId: string }
+  | { phase: 'no-sources' }
+  | { phase: 'error'; message: string }
 
 type MoviePageState = {
   movieId: number
@@ -41,6 +65,8 @@ type MoviePageState = {
   deleteBusy: boolean
   /** Source waiting on the one-time network notice before it is queued. */
   networkNoticeRow: TorrentSource | null
+  quickPlay: QuickPlayState
+  rankingPrefs: RankingPreferences
 }
 
 type MoviePageActions = {
@@ -52,7 +78,14 @@ type MoviePageActions = {
   refreshDownloadsList: () => void
   closePlayDialog: (open: boolean) => void
   setPlayErrorFromPlayer: (message: string) => void
-  queueDownload: (row: TorrentSource) => Promise<void>
+  /** Resolves to the new download id, or null when nothing was queued. */
+  queueDownload: (row: TorrentSource) => Promise<string | null>
+  /** One-click Play: existing download, else the best-ranked copy. */
+  playBest: () => Promise<void>
+  /** Called on each downloads refresh; starts playback once the buffering copy can play. */
+  advanceQuickPlay: () => void
+  resetQuickPlay: () => void
+  setRankingPrefs: (prefs: RankingPreferences) => void
   confirmNetworkNotice: () => void
   cancelNetworkNotice: () => void
   beginPlayback: (downloadId: string) => Promise<void>
@@ -95,7 +128,9 @@ function initialState(movieId: number): MoviePageState {
     downloadsRefreshBusy: false,
     deleteConfirmId: null,
     deleteBusy: false,
-    networkNoticeRow: null
+    networkNoticeRow: null,
+    quickPlay: { phase: 'idle' },
+    rankingPrefs: defaultRankingPreferences
   }
 }
 
@@ -200,16 +235,97 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
       const row = get().networkNoticeRow
       acknowledgeNetworkNotice()
       set({ networkNoticeRow: null })
-      if (row) void get().queueDownload(row)
+      if (!row) return
+      void get()
+        .queueDownload(row)
+        .then((downloadId) => {
+          if (get().quickPlay.phase !== 'awaiting-notice') return
+          set({
+            quickPlay: downloadId
+              ? { phase: 'buffering', downloadId }
+              : { phase: 'error', message: get().addFeedback ?? 'Could not start the download.' }
+          })
+        })
     },
 
-    cancelNetworkNotice: () => set({ networkNoticeRow: null }),
+    cancelNetworkNotice: () => {
+      set({ networkNoticeRow: null })
+      if (get().quickPlay.phase === 'awaiting-notice') set({ quickPlay: { phase: 'idle' } })
+    },
+
+    playBest: async () => {
+      const refresh = async (): Promise<MovieTorrentDownloadSnapshot[]> => {
+        const rows = await window.api.torrent.getMovieDownloads(get().movieId)
+        set({ downloads: rows })
+        return rows
+      }
+      const downloads = await refresh()
+      const playable =
+        downloads.find((d) => d.status === 'complete' && d.canPlay) ??
+        downloads.find((d) => d.canPlay && d.status !== 'error')
+      if (playable) {
+        set({ quickPlay: { phase: 'idle' } })
+        await get().beginPlayback(playable.downloadId)
+        return
+      }
+      const inProgress = downloads.find((d) => d.status !== 'error')
+      if (inProgress) {
+        set({ quickPlay: { phase: 'buffering', downloadId: inProgress.downloadId } })
+        if (inProgress.status === 'paused') {
+          await window.api.torrent.setMovieDownloadPaused(
+            get().movieId,
+            inProgress.downloadId,
+            false
+          )
+        }
+        return
+      }
+
+      set({ quickPlay: { phase: 'searching' } })
+      if (!get().torrentData?.ok) {
+        await get().runTorrentSearch(false)
+      }
+      const best = getRankedSources(get().torrentData, get().detail, get().rankingPrefs).ranked[0]
+      if (!best) {
+        set({ quickPlay: { phase: 'no-sources' } })
+        return
+      }
+      if (!hasAcknowledgedNetworkNotice()) {
+        set({ quickPlay: { phase: 'awaiting-notice' }, networkNoticeRow: best })
+        return
+      }
+      const downloadId = await get().queueDownload(best)
+      set({
+        quickPlay: downloadId
+          ? { phase: 'buffering', downloadId }
+          : { phase: 'error', message: get().addFeedback ?? 'Could not start the download.' }
+      })
+    },
+
+    advanceQuickPlay: () => {
+      const qp = get().quickPlay
+      if (qp.phase !== 'buffering') return
+      const snap = get().downloads.find((d) => d.downloadId === qp.downloadId)
+      if (!snap) return
+      if (snap.status === 'error') {
+        set({ quickPlay: { phase: 'error', message: snap.errorMessage ?? 'Download failed.' } })
+        return
+      }
+      if (snap.canPlay && get().playBusyDownloadId == null) {
+        set({ quickPlay: { phase: 'idle' } })
+        void get().beginPlayback(qp.downloadId)
+      }
+    },
+
+    resetQuickPlay: () => set({ quickPlay: { phase: 'idle' } }),
+
+    setRankingPrefs: (rankingPrefs) => set({ rankingPrefs }),
 
     queueDownload: async (row) => {
-      if (!row.magnetUri || !isValidMagnetUri(row.magnetUri)) return
+      if (!row.magnetUri || !isValidMagnetUri(row.magnetUri)) return null
       if (!hasAcknowledgedNetworkNotice()) {
         set({ networkNoticeRow: row })
-        return
+        return null
       }
       const id = get().movieId
       set({ addBusyMagnet: row.magnetUri, addFeedback: null })
@@ -224,13 +340,15 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
         if (res.ok) {
           set({ addFeedback: 'Download queued — see above.' })
           window.setTimeout(() => set({ addFeedback: null }), 2800)
-        } else {
-          set({ addFeedback: res.error })
+          return res.downloadId
         }
+        set({ addFeedback: res.error })
+        return null
       } catch (e) {
         set({
           addFeedback: e instanceof Error ? e.message : 'Could not queue download.'
         })
+        return null
       } finally {
         set({ addBusyMagnet: null })
       }

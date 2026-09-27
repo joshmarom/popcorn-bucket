@@ -28,6 +28,7 @@ export function MovieTorrentSourcesTable({
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-border bg-muted/95 backdrop-blur-sm supports-[backdrop-filter]:bg-muted/80">
             <th className="p-2 font-medium">Title</th>
+            <th className="p-2 font-medium">Quality</th>
             <th className="p-2 font-medium">Indexer</th>
             <th className="p-2 font-medium">Size</th>
             <th className="p-2 font-medium">S</th>
@@ -40,6 +41,11 @@ export function MovieTorrentSourcesTable({
             <tr key={`${row.title}-${idx}`} className="border-b border-border last:border-0">
               <td className="max-w-[240px] ps-4 p-2 align-top">
                 <span className="line-clamp-2">{row.title}</span>
+              </td>
+              <td className="text-muted-foreground whitespace-nowrap p-2 align-top">
+                {[row.release.resolution, row.release.source, row.release.hdr ? 'HDR' : null]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
               </td>
               <td className="text-muted-foreground whitespace-nowrap p-2 align-top">
                 {row.providerName}

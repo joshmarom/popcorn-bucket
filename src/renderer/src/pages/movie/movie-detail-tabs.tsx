@@ -28,7 +28,7 @@ export function MovieDetailTabs({
         className={cn(tab !== 'sources' && 'text-muted-foreground')}
         onClick={() => onTabChange('sources')}
       >
-        Find sources
+        Sources
       </Button>
       <Button
         type="button"

@@ -2,7 +2,8 @@ import { useContext, useEffect, useMemo, type ReactElement } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { MediaErrorDetail } from '@vidstack/react'
 import { useShallow } from 'zustand/react/shallow'
-import { createMoviePageStore, getSortedTorrents } from './movie-page-store'
+import { createMoviePageStore, getRankedSources } from './movie-page-store'
+import { QuickPlayBar } from './quick-play-bar'
 import { MoviePageStoreContext, useMoviePageStore } from './movie-page-store-context'
 import { DeleteDownloadDialog } from './delete-download-dialog'
 import { MovieDetailTabs } from './movie-detail-tabs'
@@ -31,13 +32,15 @@ function MoviePageContent(): ReactElement {
     }
   }, [store])
 
+  const buffering = s.quickPlay.phase === 'buffering'
   useEffect(() => {
-    if (s.tab !== 'sources') {
+    if (s.tab !== 'sources' && !buffering) {
       return
     }
     const tick = (): void => {
       void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {
         store.setState({ downloads: rows })
+        store.getState().advanceQuickPlay()
       })
     }
     tick()
@@ -45,7 +48,13 @@ function MoviePageContent(): ReactElement {
     return (): void => {
       clearInterval(interval)
     }
-  }, [s.tab, s.movieId, store])
+  }, [s.tab, buffering, s.movieId, store])
+
+  useEffect(() => {
+    void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {
+      store.setState({ downloads: rows })
+    })
+  }, [s.movieId, store])
 
   useEffect(() => {
     // Reset the "now playing in mpv" pill when mpv closes on its own.
@@ -54,7 +63,20 @@ function MoviePageContent(): ReactElement {
     })
   }, [store])
 
-  const sortedTorrents = useMemo(() => getSortedTorrents(s.torrentData), [s.torrentData])
+  const rankedSources = useMemo(
+    () => getRankedSources(s.torrentData, s.detail, s.rankingPrefs),
+    [s.torrentData, s.detail, s.rankingPrefs]
+  )
+  const existingDownload =
+    s.downloads.find((d) => d.status === 'complete' && d.canPlay) ??
+    s.downloads.find((d) => d.status !== 'error') ??
+    null
+  const bufferingDownload =
+    s.quickPlay.phase === 'buffering'
+      ? (s.downloads.find(
+          (d) => s.quickPlay.phase === 'buffering' && d.downloadId === s.quickPlay.downloadId
+        ) ?? null)
+      : null
 
   const backdropImageUrl = s.detail?.backdropUrl ?? s.detail?.posterUrl ?? null
 
@@ -74,6 +96,18 @@ function MoviePageContent(): ReactElement {
 
       {s.detail && (
         <>
+          <QuickPlayBar
+            quickPlay={s.quickPlay}
+            best={rankedSources.ranked[0] ?? null}
+            existingDownload={existingDownload}
+            bufferingDownload={bufferingDownload}
+            playBusy={s.playBusyDownloadId != null}
+            onPlay={() => void s.playBest()}
+            onShowSources={() => s.setTab('sources')}
+            onUseVidking={() => s.setTab('vidking')}
+            onDismiss={s.resetQuickPlay}
+          />
+
           <MovieDetailTabs tab={s.tab} onTabChange={s.setTab} />
 
           {s.tab === 'overview' && (
@@ -103,7 +137,7 @@ function MoviePageContent(): ReactElement {
                 detailPresent
                 torrentLoading={s.torrentLoading}
                 torrentData={s.torrentData}
-                sortedTorrents={sortedTorrents}
+                rankedSources={rankedSources}
                 addFeedback={s.addFeedback}
                 addBusyMagnet={s.addBusyMagnet}
                 onRefreshSources={s.refreshTorrentSources}

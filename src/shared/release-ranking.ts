@@ -32,12 +32,26 @@ function significantWords(s: string): string[] {
     .filter((w) => w.length > 0 && !STOP_WORDS.has(w))
 }
 
-/** True when the release name plausibly refers to this movie (title words present, year close). */
+/** Words that may follow a movie title in a release name without making it a different title. */
+const AFTER_TITLE_OK =
+  /^((19|20)\d{2}|\d{3,4}p|4k|uhd|hdr|bluray|blu|brrip|bdrip|bdremux|remux|web|webrip|webdl|dl|hdrip|dvdrip|dvd|hdtv|x264|x265|h264|h265|hevc|avc|av1|remastered|extended|uncut|unrated|directors|imax|proper|repack|multi|dual|complete|yify|yts)$/
+
+/**
+ * True when the release name refers to this movie: the title's words appear in order and are
+ * followed by a year, a quality marker, or the end of the name (so "Matrix Reloaded" is not
+ * "Matrix"), and any year is within one of the movie's.
+ */
 export function matchesMovie(row: TorrentSource, ctx: RankingContext): boolean {
   const wanted = significantWords(ctx.movieTitle)
   if (wanted.length > 0) {
-    const have = new Set(significantWords(row.title))
-    if (!wanted.every((w) => have.has(w))) return false
+    const words = significantWords(row.title)
+    let matched = false
+    for (let i = 0; i + wanted.length <= words.length && !matched; i++) {
+      if (!wanted.every((w, j) => words[i + j] === w)) continue
+      const next = words[i + wanted.length]
+      matched = next === undefined || AFTER_TITLE_OK.test(next)
+    }
+    if (!matched) return false
   }
   const year = row.release.year
   if (ctx.movieYear != null && year != null && Math.abs(year - ctx.movieYear) > 1) return false
@@ -74,7 +88,7 @@ function sizeScore(bytes: number | null, res: ReleaseResolution | null): number 
 
 function seedScore(seeders: number): number {
   if (seeders <= 0) return -50
-  return Math.min(30, Math.log2(seeders + 1) * 5)
+  return Math.min(40, Math.log2(seeders + 1) * 5)
 }
 
 export function scoreTorrentSource(row: TorrentSource, prefs: RankingPreferences): number {

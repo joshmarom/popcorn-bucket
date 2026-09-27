@@ -1,4 +1,5 @@
 import type { TorrentSearchResponse, TorrentSource } from '@shared/torrent'
+import type { RankedSources } from '@shared/release-ranking'
 import { RefreshCw } from 'lucide-react'
 import type { ReactElement } from 'react'
 import { Button } from '@/components/ui/button'
@@ -9,7 +10,7 @@ export function MovieTorrentSourcesSection({
   detailPresent,
   torrentLoading,
   torrentData,
-  sortedTorrents,
+  rankedSources,
   addFeedback,
   addBusyMagnet,
   onRefreshSources,
@@ -20,7 +21,7 @@ export function MovieTorrentSourcesSection({
   detailPresent: boolean
   torrentLoading: boolean
   torrentData: TorrentSearchResponse | null
-  sortedTorrents: TorrentSource[]
+  rankedSources: RankedSources
   addFeedback: string | null
   addBusyMagnet: string | null
   onRefreshSources: () => void
@@ -72,17 +73,39 @@ export function MovieTorrentSourcesSection({
           ))}
         </ul>
       )}
-      {!torrentLoading && torrentData && torrentData.ok && sortedTorrents.length === 0 && (
-        <p className="text-muted-foreground text-sm">No torrent rows returned for this title.</p>
+      {!torrentLoading &&
+        torrentData &&
+        torrentData.ok &&
+        rankedSources.ranked.length === 0 &&
+        rankedSources.excluded.length === 0 && (
+          <p className="text-muted-foreground text-sm">No torrent rows returned for this title.</p>
+        )}
+      {!torrentLoading && rankedSources.ranked.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">Best matches</h3>
+          <MovieTorrentSourcesTable
+            rows={rankedSources.ranked}
+            addBusyMagnet={addBusyMagnet}
+            onQueueDownload={onQueueDownload}
+            onCopyMagnet={onCopyMagnet}
+            onOpenDetails={onOpenDetails}
+          />
+        </section>
       )}
-      {!torrentLoading && sortedTorrents.length > 0 && (
-        <MovieTorrentSourcesTable
-          rows={sortedTorrents}
-          addBusyMagnet={addBusyMagnet}
-          onQueueDownload={onQueueDownload}
-          onCopyMagnet={onCopyMagnet}
-          onOpenDetails={onOpenDetails}
-        />
+      {!torrentLoading && rankedSources.excluded.length > 0 && (
+        <details className="space-y-2">
+          <summary className="text-muted-foreground cursor-pointer text-sm">
+            Other copies ({rankedSources.excluded.length}): cam recordings, other titles, or no
+            magnet link
+          </summary>
+          <MovieTorrentSourcesTable
+            rows={rankedSources.excluded}
+            addBusyMagnet={addBusyMagnet}
+            onQueueDownload={onQueueDownload}
+            onCopyMagnet={onCopyMagnet}
+            onOpenDetails={onOpenDetails}
+          />
+        </details>
       )}
 
       <div className="flex flex-wrap justify-center gap-3">

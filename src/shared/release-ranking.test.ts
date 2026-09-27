@@ -26,6 +26,23 @@ describe('matchesMovie', () => {
     expect(matchesMovie(row('The Animatrix 2003', 10), ctx)).toBe(false)
   })
 
+  it('rejects sequels and packs even when the year is mislabeled', () => {
+    expect(matchesMovie(row('The Matrix Reloaded (1999) 1080p BrRip x264 - YIFY', 10), ctx)).toBe(
+      false
+    )
+    expect(matchesMovie(row('The Matrix 1-4 Pack 1999-2021 1080p BluRay', 10), ctx)).toBe(false)
+  })
+
+  it('accepts site prefixes and bracket formats', () => {
+    expect(matchesMovie(row('[YTS] The Matrix (1999) [2160p] [4K] [BluRay]', 10), ctx)).toBe(true)
+    expect(
+      matchesMovie(row('2001 A Space Odyssey 1968 1080p', 10), {
+        movieTitle: '2001: A Space Odyssey',
+        movieYear: 1968
+      })
+    ).toBe(true)
+  })
+
   it('accepts rows without a year', () => {
     expect(matchesMovie(row('The Matrix 1080p WEB', 10), ctx)).toBe(true)
   })
