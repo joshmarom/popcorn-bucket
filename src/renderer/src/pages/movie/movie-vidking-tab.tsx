@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): ReactElement {
-  const embedUrl = `https://www.vidking.net/embed/movie/${detail.id}`
+  const embedUrl = `https://vidsrc.sh/embed/movie/${detail.id}`
   const [iframeKey, setIframeKey] = useState(0)
   const [clearing, setClearing] = useState(false)
   const [copyingDiag, setCopyingDiag] = useState(false)
@@ -16,9 +16,9 @@ export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): Re
     try {
       await window.api.app.clearVidkingData()
       setIframeKey((n) => n + 1)
-      setNotice('Cleared cached VidKing data and reloaded the player.')
+      setNotice('Cleared cached VidSrc data and reloaded the player.')
     } catch {
-      setNotice('Could not clear cached VidKing data.')
+      setNotice('Could not clear cached VidSrc data.')
     } finally {
       setClearing(false)
     }
@@ -33,11 +33,11 @@ export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): Re
       await navigator.clipboard.writeText(text)
       setNotice(
         rows.length > 0
-          ? `Copied ${rows.length} VidKing diagnostic events to clipboard.`
-          : 'No VidKing diagnostic events captured yet.'
+          ? `Copied ${rows.length} VidSrc diagnostic events to clipboard.`
+          : 'No VidSrc diagnostic events captured yet.'
       )
     } catch {
-      setNotice('Could not copy VidKing diagnostics.')
+      setNotice('Could not copy VidSrc diagnostics.')
     } finally {
       setCopyingDiag(false)
     }
@@ -48,7 +48,7 @@ export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): Re
       <div className="overflow-hidden rounded-lg border border-border bg-black shadow-sm">
         <webview
           key={iframeKey}
-          title={`Vidking — ${detail.title}`}
+          title={`VidSrc — ${detail.title}`}
           src={embedUrl}
           partition="persist:vidking"
           allowpopups
@@ -78,7 +78,7 @@ export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): Re
           onClick={() => void handleClearData()}
           disabled={clearing}
         >
-          {clearing ? 'Clearing…' : 'Clear VidKing cached data & reload'}
+          {clearing ? 'Clearing…' : 'Clear VidSrc cached data & reload'}
         </Button>
         <Button
           type="button"
@@ -87,7 +87,7 @@ export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): Re
           onClick={() => void handleCopyDiagnostics()}
           disabled={copyingDiag}
         >
-          {copyingDiag ? 'Copying…' : 'Copy VidKing diagnostics'}
+          {copyingDiag ? 'Copying…' : 'Copy VidSrc diagnostics'}
         </Button>
       </div>
       {notice ? <p className="text-muted-foreground text-xs">{notice}</p> : null}

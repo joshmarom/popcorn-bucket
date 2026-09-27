@@ -19,6 +19,7 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSDownloadsFolderUsageDescription: Popcorn Bucket saves movies to your Downloads folder.

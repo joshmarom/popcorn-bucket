@@ -12,6 +12,7 @@ export type WtFile = {
   downloaded: number
   progress: number
   select?: (priority?: number) => void
+  deselect?: () => void
   /** Present on WebTorrent `File` instances (not on persisted snapshots). */
   createReadStream?: (opts?: { start?: number; end?: number }) => Readable
 }
@@ -34,6 +35,7 @@ export type WtTorrent = {
   resume?: () => void
   once: (ev: string, fn: (err?: Error) => void) => void
   on: (ev: string, fn: () => void) => void
+  removeListener?: (ev: string, fn: () => void) => void
 }
 
 export type WebTorrentClient = {

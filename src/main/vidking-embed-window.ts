@@ -3,16 +3,19 @@ import { VIDKING_PARTITION, restrictVidkingPopups } from './vidking-session'
 
 let vidkingWindow: BrowserWindow | null = null
 
+const VIDKING_EMBED_HOST = 'vidsrc.sh'
+
+/**
+ * vidsrc.sh embeds its player from cloudorchestranova.com, which talks to
+ * data.vidsrc.sh. Stream/CDN hosts rotate and are not listed here on purpose:
+ * subresource loads are not gated by this check, only popups and storage access.
+ */
 function isVidkingRelatedOrigin(hostname: string): boolean {
   return (
-    hostname === 'vidking.net' ||
-    hostname === 'www.vidking.net' ||
-    hostname.endsWith('.vidking.net') ||
-    hostname === 'videasy.net' ||
-    hostname === 'api.videasy.net' ||
-    hostname === 'db.videasy.net' ||
-    hostname === 'users.videasy.net' ||
-    hostname.endsWith('.videasy.net')
+    hostname === VIDKING_EMBED_HOST ||
+    hostname.endsWith(`.${VIDKING_EMBED_HOST}`) ||
+    hostname === 'cloudorchestranova.com' ||
+    hostname.endsWith('.cloudorchestranova.com')
   )
 }
 
@@ -29,22 +32,21 @@ export function isVidkingEmbedUrl(url: string): boolean {
   try {
     const u = new URL(url)
     if (u.protocol !== 'https:') return false
-    const hostOk = u.hostname === 'www.vidking.net' || u.hostname === 'vidking.net'
-    return hostOk && u.pathname.startsWith('/embed/')
+    return u.hostname === VIDKING_EMBED_HOST && u.pathname.startsWith('/embed/')
   } catch {
     return false
   }
 }
 
 /**
- * Open (or reuse) a dedicated BrowserWindow for the VidKing embed. The embed URL
+ * Open (or reuse) a dedicated BrowserWindow for the VidSrc embed. The embed URL
  * is loaded as a true top-level document (no parent iframe), which bypasses any
- * embed-specific gating on VidKing's side — matching the behavior of just
+ * embed-specific gating on VidSrc's side — matching the behavior of just
  * pasting the URL into a browser tab.
  */
 export function openOrFocusVidkingEmbed(url: string, parent: BrowserWindow | null): void {
   if (!isVidkingEmbedUrl(url)) {
-    throw new Error('Invalid VidKing embed URL.')
+    throw new Error('Invalid VidSrc embed URL.')
   }
 
   if (vidkingWindow && !vidkingWindow.isDestroyed()) {

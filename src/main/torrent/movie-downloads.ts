@@ -31,6 +31,7 @@ import {
 } from './movie-downloads-persistence'
 import { mpvEvents, shutdownCurrentMpvSession, startExternalMpvSession } from './mpv-controller'
 import { localMediaUrl } from '../local-media-protocol'
+import { PUBLIC_TRACKERS } from './public-trackers'
 
 /** Containers Chromium refuses to play inline; we hand these off to mpv. */
 const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
@@ -63,6 +64,32 @@ type DownloadRecord = {
   playFileAbsPath?: string | null
   /** Finished while being streamed; leave the swarm when that playback ends. */
   pendingDetach?: boolean
+  /** Paths (within the torrent) of the only files we download: the video and its subtitles. */
+  wantedPaths: string[]
+}
+
+function wantedFiles(rec: DownloadRecord, t: WtTorrent): WtFile[] {
+  if (!t.files?.length) return []
+  if (rec.wantedPaths.length === 0) return t.files
+  return t.files.filter((f) => rec.wantedPaths.includes(f.path))
+}
+
+function wantedTotals(rec: DownloadRecord, t: WtTorrent): { length: number; downloaded: number } {
+  let length = 0
+  let downloaded = 0
+  for (const f of wantedFiles(rec, t)) {
+    length += f.length
+    downloaded += Math.min(f.length, f.downloaded)
+  }
+  return { length, downloaded }
+}
+
+/** The download is finished when every wanted file is on disk; other files are never fetched. */
+function isWantedDone(rec: DownloadRecord, t: WtTorrent): boolean {
+  if (t.done) return true
+  if (!t.ready) return false
+  const files = wantedFiles(rec, t)
+  return files.length > 0 && files.every((f) => f.downloaded >= f.length)
 }
 
 const records = new Map<string, DownloadRecord>()
@@ -118,13 +145,11 @@ export function endStreamingPlayback(via?: 'inline' | 'mpv'): void {
 mpvEvents.on('end', () => endStreamingPlayback('mpv'))
 
 function captureCompleteSnapshot(rec: DownloadRecord, torrent: WtTorrent): void {
+  const totals = wantedTotals(rec, torrent)
   rec.completeSnapshot = {
-    totalBytes: torrent.length ?? 0,
-    downloaded: torrent.downloaded ?? 0,
-    progress:
-      typeof torrent.progress === 'number' && Number.isFinite(torrent.progress)
-        ? Math.min(1, Math.max(0, torrent.progress))
-        : 1,
+    totalBytes: totals.length,
+    downloaded: totals.downloaded,
+    progress: 1,
     torrentName: torrent.name ?? null,
     playFileLabel: rec.playFile?.name ?? null
   }
@@ -136,18 +161,6 @@ function serializeRecord(rec: DownloadRecord): PersistedMovieDownload {
   let completeSummary: PersistedDownloadCompleteSummary | undefined
   if (rec.completeSnapshot) {
     completeSummary = { ...rec.completeSnapshot }
-  }
-  if (t && !t.destroyed && t.ready && t.done) {
-    completeSummary = {
-      totalBytes: t.length ?? 0,
-      downloaded: t.downloaded ?? 0,
-      progress:
-        typeof t.progress === 'number' && Number.isFinite(t.progress)
-          ? Math.min(1, Math.max(0, t.progress))
-          : 1,
-      torrentName: t.name ?? null,
-      playFileLabel: rec.playFile?.name ?? null
-    }
   }
   return {
     id: rec.id,
@@ -210,7 +223,8 @@ export function restoreMovieDownloadsOnStartup(): void {
       completeSnapshot: row.completeSummary,
       resumedPlayFilePath: row.playFilePath ? row.playFilePath : undefined,
       resumedPaused: row.completed ? false : row.paused,
-      downloadDir
+      downloadDir,
+      wantedPaths: []
     }
     records.set(rec.id, rec)
     if (row.completed) {
@@ -234,8 +248,10 @@ function restoreCompletedFromDisk(rec: DownloadRecord, savedAbsPath: string | nu
   rec.errorMessage = 'File was moved or deleted.'
 }
 
+/** Same info-hash means the same torrent, whatever trackers or name the magnet carries. */
 function normalizeMagnet(m: string): string {
-  return m.trim().toLowerCase()
+  const lower = m.trim().toLowerCase()
+  return /xt=urn:btih:([a-f0-9]{40})/.exec(lower)?.[1] ?? lower
 }
 
 /** Strip extension and tidy dots/underscores for UI labels. */
@@ -281,9 +297,8 @@ async function removeTorrentFromClient(torrent: WtTorrent): Promise<void> {
   await c.remove(torrent, { destroyStore: true }).catch(() => {})
 }
 
-function mapFileProgress(t: WtTorrent): MovieTorrentFileProgress[] {
-  if (!t.files?.length) return []
-  return t.files.map((f) => ({
+function mapFileProgress(rec: DownloadRecord, t: WtTorrent): MovieTorrentFileProgress[] {
+  return wantedFiles(rec, t).map((f) => ({
     path: f.path,
     length: f.length,
     downloaded: f.downloaded,
@@ -316,7 +331,7 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
   if (rec.status === 'error') {
     const errT = rec.wt
     if (errT && !errT.destroyed && errT.ready) {
-      base.files = mapFileProgress(errT)
+      base.files = mapFileProgress(rec, errT)
       base.torrentName = errT.name ?? null
     }
     return base
@@ -380,13 +395,15 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
     return { ...base, status: 'pending_metadata' }
   }
 
-  base.files = mapFileProgress(t)
+  const done = isWantedDone(rec, t)
+  const totals = wantedTotals(rec, t)
+  base.files = mapFileProgress(rec, t)
   base.numPeers = t.numPeers ?? 0
   base.downloadSpeed = t.paused ? 0 : (t.downloadSpeed ?? 0)
   base.uploadSpeed = t.paused ? 0 : (t.uploadSpeed ?? 0)
-  base.downloaded = t.downloaded ?? 0
-  base.totalBytes = t.length ?? 0
-  base.progress = t.progress ?? 0
+  base.downloaded = totals.downloaded
+  base.totalBytes = totals.length
+  base.progress = totals.length > 0 ? totals.downloaded / totals.length : 0
 
   const play =
     rec.playFile != null
@@ -394,11 +411,11 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
       : null
   if (play && play.length > 0) {
     const need = playbackReadyBytes(play)
-    base.canPlay = Boolean(t.done || play.downloaded >= need)
+    base.canPlay = Boolean(done || play.downloaded >= need)
     base.playFileLabel = play.name
   }
 
-  if (t.done) {
+  if (done) {
     base.status = 'complete'
   } else if (t.paused) {
     base.status = 'paused'
@@ -430,12 +447,10 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
   }
   rec.playFile = file
   rec.resumedPlayFilePath = undefined
-  if (typeof file.select === 'function') {
-    file.select(4)
-  }
+  selectWantedFiles(rec, torrent, file)
   const wantPause = Boolean(rec.resumedPaused)
   rec.resumedPaused = undefined
-  if (torrent.done) {
+  if (isWantedDone(rec, torrent)) {
     detachCompletedTorrent(rec)
     return
   }
@@ -445,12 +460,34 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
   } else {
     rec.status = 'downloading'
   }
-  torrent.once('done', () => {
-    if (rec.wt === torrent) {
+  const checkDone = (): void => {
+    if (rec.wt !== torrent) {
+      torrent.removeListener?.('download', checkDone)
+      return
+    }
+    if (isWantedDone(rec, torrent)) {
+      torrent.removeListener?.('download', checkDone)
       detachCompletedTorrent(rec)
     }
-  })
+  }
+  torrent.on('download', checkDone)
+  torrent.once('done', checkDone)
   schedulePersistMovieDownloads()
+}
+
+/** Torrents start with nothing selected; fetch only the video and its sidecar subtitles. */
+function selectWantedFiles(rec: DownloadRecord, torrent: WtTorrent, video: WtFile): void {
+  const subtitles = listTorrentSidecarSubtitles(torrent, video.path)
+  rec.wantedPaths = [video.path, ...subtitles.map((s) => s.path)]
+  for (const f of torrent.files) {
+    if (f.path === video.path) {
+      f.select?.(4)
+    } else if (rec.wantedPaths.includes(f.path)) {
+      f.select?.(2)
+    } else {
+      f.deselect?.()
+    }
+  }
 }
 
 async function attachTorrent(rec: DownloadRecord): Promise<void> {
@@ -463,7 +500,9 @@ async function attachTorrent(rec: DownloadRecord): Promise<void> {
       {
         path: rec.downloadDir,
         destroyStoreOnDestroy: false,
-        strategy: 'sequential'
+        strategy: 'sequential',
+        deselect: true,
+        announce: [...PUBLIC_TRACKERS]
       },
       (rtUnknown) => {
         onTorrentReady(rec, rtUnknown as WtTorrent)
@@ -529,7 +568,8 @@ export function addMovieDownload(payload: AddMovieTorrentPayload): AddMovieTorre
     wt: null,
     playFile: null,
     status: 'pending_metadata',
-    downloadDir: recordDownloadDir(payload.movieId, id)
+    downloadDir: recordDownloadDir(payload.movieId, id),
+    wantedPaths: []
   }
   records.set(id, rec)
   void attachTorrent(rec)

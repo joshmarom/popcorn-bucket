@@ -37,7 +37,7 @@ export function MovieDetailTabs({
         className={cn(tab !== 'vidking' && 'text-muted-foreground')}
         onClick={() => onTabChange('vidking')}
       >
-        Vidking
+        VidSrc
       </Button>
     </div>
   )

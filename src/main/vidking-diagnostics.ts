@@ -14,22 +14,8 @@ const MAX_EVENTS = 200
 const events: VidkingNetEvent[] = []
 let installed = false
 
-function isVidkingDiagnosticsUrl(url: string): boolean {
-  try {
-    const u = new URL(url)
-    if (u.protocol !== 'https:') return false
-    return (
-      u.hostname === 'vidking.net' ||
-      u.hostname.endsWith('.vidking.net') ||
-      u.hostname === 'videasy.net' ||
-      u.hostname.endsWith('.videasy.net') ||
-      u.hostname.endsWith('.dolesdao.com') ||
-      u.hostname.endsWith('.workers.dev')
-    )
-  } catch {
-    return false
-  }
-}
+/** Successful loads of these are noise; their failures are still recorded. */
+const QUIET_RESOURCE_TYPES = new Set(['image', 'font', 'stylesheet'])
 
 function pushEvent(next: VidkingNetEvent): void {
   events.push(next)
@@ -61,20 +47,14 @@ function mapError(d: OnErrorOccurredListenerDetails): VidkingNetEvent {
 export function installVidkingDiagnosticsHooks(ses: Session): void {
   if (installed) return
   installed = true
-  const filter = {
-    urls: [
-      '*://*.vidking.net/*',
-      '*://*.videasy.net/*',
-      '*://*.dolesdao.com/*',
-      '*://*.workers.dev/*'
-    ]
-  }
+  // The session is dedicated to the embed and its stream/CDN hosts rotate, so every
+  // request is in scope rather than a fixed host list.
+  const filter = { urls: ['*://*/*'] }
   ses.webRequest.onCompleted(filter, (d) => {
-    if (!isVidkingDiagnosticsUrl(d.url)) return
+    if (d.statusCode < 400 && QUIET_RESOURCE_TYPES.has(d.resourceType)) return
     pushEvent(mapCompleted(d))
   })
   ses.webRequest.onErrorOccurred(filter, (d) => {
-    if (!isVidkingDiagnosticsUrl(d.url)) return
     pushEvent(mapError(d))
   })
 }
