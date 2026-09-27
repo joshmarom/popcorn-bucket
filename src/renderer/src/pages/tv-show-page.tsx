@@ -62,7 +62,9 @@ export function TvShowPage(): ReactElement {
   const [pendingNotice, setPendingNotice] = useState<(() => void) | null>(null)
   const [lastPlayed, setLastPlayed] = useState<TvEpisode | null>(null)
   const statusRef = useRef(status)
-  statusRef.current = status
+  useEffect(() => {
+    statusRef.current = status
+  }, [status])
 
   const refreshHistory = useCallback(async (): Promise<void> => {
     const rows = await window.api.history.list()

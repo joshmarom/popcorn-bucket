@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc-handlers'
 import { migratePlaintextSecrets } from './settings-store'
+import { startAutoUpdates } from './auto-update'
 import { resetDownloadsBroadcast, startDownloadsBroadcast } from './downloads-broadcast'
 import { guardVidkingWebviews, installVidkingSession } from './vidking-session'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
@@ -96,6 +97,7 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   restoreMovieDownloadsOnStartup()
   startDownloadsBroadcast()
+  void startAutoUpdates()
 
   createWindow()
 
