@@ -26,7 +26,9 @@ import type {
 import type { TorrentStreamStartResponse, TorrentSubtitleTrack } from '@shared/torrent-stream'
 import {
   applyBandwidthLimits,
+  archiveVolumes,
   baseDownloadDir,
+  isArchiveFileName,
   buildStreamUrl,
   defaultDownloadDir,
   ensureHttpServer,
@@ -47,6 +49,7 @@ import {
 import {
   findMpvBinary,
   mpvEvents,
+  mpvNotFoundMessage,
   shutdownCurrentMpvSession,
   startExternalMpvSession,
   type MpvPlaybackState
@@ -67,7 +70,7 @@ import {
 const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
 
 function needsExternalPlayer(fileName: string): boolean {
-  return EXTERNAL_CONTAINER_RE.test(fileName.trim())
+  return EXTERNAL_CONTAINER_RE.test(fileName.trim()) || isArchiveFileName(fileName.trim())
 }
 
 type DownloadRecord = {
@@ -134,6 +137,8 @@ function readFileHead(absPath: string, bytes: number): Uint8Array | null {
  * end, that index too. The index range is fetched with top priority as soon as it is located.
  */
 function isReadyToPlay(rec: DownloadRecord, t: WtTorrent, play: WtFile): boolean {
+  // Archived releases cannot be streamed; they play once every volume is on disk.
+  if (isArchiveFileName(play.name)) return false
   if (!hasFileRange(t, play, 0, headBytesNeeded(play.length))) return false
   if (!isMp4Container(play.name)) return true
   if (rec.mp4Layout == null) {
@@ -631,7 +636,10 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
  */
 function selectWantedFiles(rec: DownloadRecord, torrent: WtTorrent, video: WtFile): void {
   const subtitles = listTorrentSidecarSubtitles(torrent, video.path)
-  rec.wantedPaths = [video.path, ...subtitles.map((s) => s.path)]
+  const volumes = isArchiveFileName(video.name)
+    ? archiveVolumes(torrent).map((f) => f.path)
+    : [video.path]
+  rec.wantedPaths = [...new Set([video.path, ...volumes, ...subtitles.map((s) => s.path)])]
   for (const f of torrent.files) {
     if (f.path === video.path) f.select?.(4)
     else if (rec.wantedPaths.includes(f.path)) f.select?.(2)
@@ -1014,6 +1022,12 @@ type PlaybackTarget = {
  */
 async function launchPlayback(t: PlaybackTarget): Promise<TorrentStreamStartResponse> {
   const startSeconds = resumePosition(getWatchProgress(t.rec.movieId))
+  if (isArchiveFileName(t.label) && !findMpvBinary()) {
+    return {
+      ok: false,
+      error: `This release is packed in an archive, which only mpv can play. ${mpvNotFoundMessage()}`
+    }
+  }
   const inlineCapable = t.inlineUrl != null && !needsExternalPlayer(t.label)
   if (findMpvBinary() || !inlineCapable) {
     const res = await startExternalMpvSession({

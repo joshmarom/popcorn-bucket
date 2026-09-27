@@ -150,12 +150,42 @@ export async function ensureHttpServer(c: WebTorrentClient): Promise<number> {
   return port
 }
 
+const VIDEO_RE = /\.(mp4|mkv|webm|m4v|mov|avi|ts|m2ts|wmv)$/i
+const SAMPLE_RE = /(^|[\\/._\-\s])sample([\\/._\-\s]|$)/i
+/** RAR volumes (`.rar`, `.r00`, `.part01.rar`) and zip archives. */
+const ARCHIVE_RE = /\.(rar|r\d{2}|zip)$/i
+
+export function isArchiveFileName(name: string): boolean {
+  return ARCHIVE_RE.test(name)
+}
+
+/** Archive volumes in play order, first volume first; empty when the torrent has none. */
+export function archiveVolumes(torrent: WtTorrent): WtFile[] {
+  const volumes = (torrent.files ?? []).filter(
+    (f) => ARCHIVE_RE.test(f.name) && !SAMPLE_RE.test(f.path)
+  )
+  const rank = (name: string): number => {
+    const n = name.toLowerCase()
+    const part = /\.part0*(\d+)\.rar$/.exec(n)
+    if (part) return Number(part[1])
+    if (n.endsWith('.rar') || n.endsWith('.zip')) return 0
+    const r = /\.r(\d{2})$/.exec(n)
+    return r ? Number(r[1]) + 1 : 1000
+  }
+  return volumes.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
+}
+
+/**
+ * The largest real video, skipping samples. Scene releases that pack the movie in RAR volumes
+ * (often with a small sample video beside them) yield the first archive volume instead.
+ */
 export function pickPlayableFile(torrent: WtTorrent): WtFile | null {
   if (!torrent.files?.length) return null
-  const videoRe = /\.(mp4|mkv|webm|m4v|mov|avi)$/i
-  const videos = torrent.files.filter((f) => videoRe.test(f.name) || videoRe.test(f.path))
-  const pool = videos.length > 0 ? videos : torrent.files
-  return [...pool].sort((a, b) => b.length - a.length)[0] ?? null
+  const videos = torrent.files.filter(
+    (f) => (VIDEO_RE.test(f.name) || VIDEO_RE.test(f.path)) && !SAMPLE_RE.test(f.path)
+  )
+  if (videos.length > 0) return [...videos].sort((a, b) => b.length - a.length)[0] ?? null
+  return archiveVolumes(torrent)[0] ?? null
 }
 
 const SUBTITLE_FILE_RE = /\.(srt|vtt|ssa|ass)$/i
