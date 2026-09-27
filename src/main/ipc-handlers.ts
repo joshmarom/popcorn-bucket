@@ -26,6 +26,8 @@ import {
 import { searchTorrentSources } from './torrent/orchestrator'
 import { listProviderHealth } from './torrent/scrape-providers'
 import type { ProviderHealth } from '@shared/provider-health'
+import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
+import { getTvSeason, getTvShowDetails, searchTvShows } from './tmdb-tv'
 import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
 import {
@@ -89,9 +91,22 @@ const torrentSearchInput = z.object({
   forceRefresh: z.boolean().optional()
 })
 
+const episodeTargetInput = z.object({
+  showId: z.number().int().positive(),
+  showName: z.string().min(1).max(400),
+  seasonNumber: z.number().int().min(0).max(200),
+  episodeNumber: z.number().int().min(0).max(5000)
+})
+
+const tvSeasonInput = z.object({
+  showId: z.number().int().positive(),
+  seasonNumber: z.number().int().min(0).max(200)
+})
+
 const addMovieTorrentInput = z.object({
   movieId: z.number().int().positive(),
   movieTitle: z.string().max(400).default(''),
+  episode: episodeTargetInput.optional(),
   magnetUri: z.string().min(30).max(50_000),
   title: z.string().min(1).max(800),
   indexerSeeders: z.number().int().nonnegative(),
@@ -459,6 +474,39 @@ export function registerIpcHandlers(): void {
       }
     }
   )
+
+  ipcMain.handle('tv:search', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
+    const parsed = searchInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Enter a search query.' }
+    try {
+      return { ok: true, results: await searchTvShows(getAppSettings(), parsed.data.query) }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('tv:getShow', async (_evt, raw: unknown): Promise<TvShowResponse> => {
+    const parsed = movieInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Invalid show id.' }
+    try {
+      return { ok: true, show: await getTvShowDetails(getAppSettings(), parsed.data.id) }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('tv:getSeason', async (_evt, raw: unknown): Promise<TvSeasonResponse> => {
+    const parsed = tvSeasonInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Invalid season.' }
+    try {
+      return {
+        ok: true,
+        season: await getTvSeason(getAppSettings(), parsed.data.showId, parsed.data.seasonNumber)
+      }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
 
   ipcMain.handle('catalog:getMovie', async (_evt, raw: unknown): Promise<CatalogMovieResponse> => {
     const parsed = movieInput.safeParse(raw)

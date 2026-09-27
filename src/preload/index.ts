@@ -17,6 +17,7 @@ import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
+import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
 
 const api = {
   app: {
@@ -43,6 +44,13 @@ const api = {
     isEncrypted: (): Promise<boolean> => ipcRenderer.invoke('settings:isEncrypted'),
     set: (partial: Partial<AppSettings>): Promise<void> =>
       ipcRenderer.invoke('settings:set', partial)
+  },
+  tv: {
+    search: (query: string): Promise<TvSearchResponse> =>
+      ipcRenderer.invoke('tv:search', { query }),
+    getShow: (id: number): Promise<TvShowResponse> => ipcRenderer.invoke('tv:getShow', { id }),
+    getSeason: (showId: number, seasonNumber: number): Promise<TvSeasonResponse> =>
+      ipcRenderer.invoke('tv:getSeason', { showId, seasonNumber })
   },
   prefs: {
     get: (): Promise<Preferences> => ipcRenderer.invoke('prefs:get'),

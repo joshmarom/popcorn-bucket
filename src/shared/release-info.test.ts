@@ -10,7 +10,10 @@ describe('parseReleaseTitle', () => {
       source: 'web',
       codec: 'x265',
       hdr: true,
-      year: 2024
+      year: 2024,
+      season: null,
+      episode: null,
+      seasonPack: false
     })
   })
 
@@ -42,7 +45,33 @@ describe('parseReleaseTitle', () => {
       source: null,
       codec: null,
       hdr: false,
-      year: null
+      year: null,
+      season: null,
+      episode: null,
+      seasonPack: false
+    })
+  })
+})
+
+describe('episode markers', () => {
+  it('reads SxxEyy and NxNN', () => {
+    expect(parseReleaseTitle('Severance.S02E05.1080p.WEB.h264')).toMatchObject({
+      season: 2,
+      episode: 5,
+      seasonPack: false
+    })
+    expect(parseReleaseTitle('The Office 3x14 720p')).toMatchObject({ season: 3, episode: 14 })
+  })
+
+  it('reads season packs', () => {
+    expect(parseReleaseTitle('Severance S02 1080p WEB-DL')).toMatchObject({
+      season: 2,
+      episode: null,
+      seasonPack: true
+    })
+    expect(parseReleaseTitle('Severance Season 1 Complete 720p')).toMatchObject({
+      season: 1,
+      seasonPack: true
     })
   })
 })

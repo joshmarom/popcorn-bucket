@@ -85,13 +85,22 @@ export async function fetchSubtitle(params: {
   imdbId: string
   language: string
   movieHash: string | null
+  /** For TV: `imdbId` is the show's id and these pick the episode. */
+  episode?: { season: number; episode: number }
 }): Promise<string | null> {
   const dir = join(subtitleCacheRoot(), String(params.movieId))
   const cached = await findCachedSubtitle(dir, params.language)
   if (cached) return cached
 
   const imdbNumeric = params.imdbId.replace(/^tt/i, '').replace(/^0+/, '')
-  const query = new URLSearchParams({ imdb_id: imdbNumeric, languages: params.language })
+  const query = new URLSearchParams({ languages: params.language })
+  if (params.episode) {
+    query.set('parent_imdb_id', imdbNumeric)
+    query.set('season_number', String(params.episode.season))
+    query.set('episode_number', String(params.episode.episode))
+  } else {
+    query.set('imdb_id', imdbNumeric)
+  }
   if (params.movieHash) query.set('moviehash', params.movieHash)
   try {
     const res = await osFetch(params.apiKey, `/subtitles?${query.toString()}`)

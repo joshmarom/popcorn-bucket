@@ -34,7 +34,7 @@ function significantWords(s: string): string[] {
 
 /** Words that may follow a movie title in a release name without making it a different title. */
 const AFTER_TITLE_OK =
-  /^((19|20)\d{2}|\d{3,4}p|4k|uhd|hdr|bluray|blu|brrip|bdrip|bdremux|remux|web|webrip|webdl|dl|hdrip|dvdrip|dvd|hdtv|x264|x265|h264|h265|hevc|avc|av1|remastered|extended|uncut|unrated|directors|imax|proper|repack|multi|dual|complete|yify|yts)$/
+  /^((19|20)\d{2}|\d{3,4}p|4k|uhd|hdr|bluray|blu|brrip|bdrip|bdremux|remux|web|webrip|webdl|dl|hdrip|dvdrip|dvd|hdtv|x264|x265|h264|h265|hevc|avc|av1|remastered|extended|uncut|unrated|directors|imax|proper|repack|multi|dual|complete|yify|yts|s\d{1,2}(e\d{1,3})*|\d{1,2}x\d{2,3}|season)$/
 
 /**
  * True when the release name refers to this movie: the title's words appear in order and are
@@ -100,6 +100,44 @@ export function scoreTorrentSource(row: TorrentSource, prefs: RankingPreferences
     sizeScore(row.sizeBytes, r.resolution) +
     seedScore(row.seeders)
   )
+}
+
+export type EpisodeRankingContext = {
+  showName: string
+  season: number
+  episode: number
+}
+
+/** The exact episode, or a pack of its whole season (only that episode's file is fetched). */
+export function matchesEpisode(row: TorrentSource, ctx: EpisodeRankingContext): boolean {
+  if (!matchesMovie(row, { movieTitle: ctx.showName, movieYear: null })) return false
+  const r = row.release
+  if (r.season !== ctx.season) return false
+  return r.seasonPack || r.episode === ctx.episode
+}
+
+export function rankEpisodeSources(
+  rows: TorrentSource[],
+  ctx: EpisodeRankingContext,
+  prefs: RankingPreferences = defaultRankingPreferences
+): RankedSources {
+  const ranked: RankedTorrentSource[] = []
+  const excluded: TorrentSource[] = []
+  for (const row of rows) {
+    const lowQuality = row.release.source != null && LOW_QUALITY_SOURCES.has(row.release.source)
+    if (lowQuality || !row.magnetUri || !matchesEpisode(row, ctx)) {
+      excluded.push(row)
+      continue
+    }
+    // Packs are large on paper but only one file is downloaded, so size does not count.
+    const base = scoreTorrentSource(
+      row.release.seasonPack ? { ...row, sizeBytes: null } : row,
+      prefs
+    )
+    ranked.push({ ...row, score: base + (row.release.seasonPack ? 0 : 10) })
+  }
+  ranked.sort((a, b) => b.score - a.score || b.seeders - a.seeders)
+  return { ranked, excluded }
 }
 
 export type RankedSources = {

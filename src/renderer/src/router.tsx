@@ -6,6 +6,7 @@ import { GenreBrowsePage } from '@/pages/genre-browse-page'
 import { HomePage } from '@/pages/home-page'
 import { MoviePage } from '@/pages/movie/movie-page'
 import { SettingsPage } from '@/pages/settings-page'
+import { TvShowPage } from '@/pages/tv-show-page'
 
 function MovieRoute(): ReactElement {
   const { movieId } = useParams()
@@ -20,6 +21,7 @@ const router = createHashRouter([
       { index: true, element: <HomePage /> },
       { path: 'genre/:genreId', element: <GenreBrowsePage /> },
       { path: 'movie/:movieId', element: <MovieRoute /> },
+      { path: 'tv/:showId', element: <TvShowPage /> },
       { path: 'downloads', element: <DownloadsPage /> },
       { path: 'settings', element: <SettingsPage /> }
     ]

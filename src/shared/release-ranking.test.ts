@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchesMovie, rankTorrentSources } from './release-ranking'
+import { matchesMovie, rankEpisodeSources, rankTorrentSources } from './release-ranking'
 import { withReleaseInfo, type TorrentSource } from './torrent'
 
 function row(title: string, seeders: number, size = '2 GB'): TorrentSource {
@@ -45,6 +45,27 @@ describe('matchesMovie', () => {
 
   it('accepts rows without a year', () => {
     expect(matchesMovie(row('The Matrix 1080p WEB', 10), ctx)).toBe(true)
+  })
+})
+
+describe('rankEpisodeSources', () => {
+  const ep = { showName: 'Severance', season: 2, episode: 5 }
+
+  it('keeps the exact episode and season packs, prefers the exact episode', () => {
+    const { ranked, excluded } = rankEpisodeSources(
+      [
+        row('Severance S02 1080p WEB-DL', 300, '40 GB'),
+        row('Severance.S02E05.1080p.WEB.h264', 200, '3 GB'),
+        row('Severance.S02E04.1080p.WEB.h264', 900, '3 GB'),
+        row('Severance S01 1080p WEB-DL', 900, '30 GB')
+      ],
+      ep
+    )
+    expect(ranked.map((r) => r.title)).toEqual([
+      'Severance.S02E05.1080p.WEB.h264',
+      'Severance S02 1080p WEB-DL'
+    ])
+    expect(excluded).toHaveLength(2)
   })
 })
 

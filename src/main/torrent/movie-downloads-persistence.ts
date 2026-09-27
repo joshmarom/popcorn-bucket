@@ -1,4 +1,5 @@
 import * as ElectronStoreModule from 'electron-store'
+import type { EpisodeTarget } from '@shared/tv'
 
 type StoreCtor = typeof import('electron-store').default
 
@@ -33,6 +34,7 @@ export type PersistedMovieDownload = {
   magnetUri: string
   displayTitle: string
   movieTitle: string | null
+  episode: EpisodeTarget | null
   indexerSeeders: number
   indexerLeechers: number
   createdAt: number
@@ -57,6 +59,21 @@ const downloadStore = new (getStoreConstructor())({
   name: 'popcorn-bucket-movie-downloads',
   defaults: { list: [] } satisfies StoreShape
 })
+
+function parseEpisodeTarget(raw: unknown): EpisodeTarget | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const { showId, showName, seasonNumber, episodeNumber } = o
+  if (
+    typeof showId !== 'number' ||
+    typeof showName !== 'string' ||
+    typeof seasonNumber !== 'number' ||
+    typeof episodeNumber !== 'number'
+  ) {
+    return null
+  }
+  return { showId, showName, seasonNumber, episodeNumber }
+}
 
 export function loadPersistedMovieDownloads(): PersistedMovieDownload[] {
   const raw = downloadStore.get('list') as unknown
@@ -94,6 +111,7 @@ export function loadPersistedMovieDownloads(): PersistedMovieDownload[] {
       magnetUri: magnetUri.trim(),
       displayTitle: typeof r.displayTitle === 'string' ? r.displayTitle : 'Torrent',
       movieTitle: typeof r.movieTitle === 'string' ? r.movieTitle : null,
+      episode: parseEpisodeTarget(r.episode),
       indexerSeeders:
         typeof r.indexerSeeders === 'number' && r.indexerSeeders >= 0
           ? Math.floor(r.indexerSeeders)

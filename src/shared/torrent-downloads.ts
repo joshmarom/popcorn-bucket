@@ -1,7 +1,11 @@
+import type { EpisodeTarget } from './tv'
+
 export type AddMovieTorrentPayload = {
   movieId: number
   /** Catalog title, stored so lists never need a TMDB lookup. */
   movieTitle: string
+  /** Set for TV episodes (then `movieId` is the episode's media key). */
+  episode?: EpisodeTarget
   magnetUri: string
   /** Row title from search results. */
   title: string
@@ -41,6 +45,7 @@ export type MovieTorrentDownloadSnapshot = {
   movieTitle: string | null
   /** Folder holding this download's files. */
   downloadDir: string
+  episode: EpisodeTarget | null
   magnetUri: string
   displayTitle: string
   status: MovieTorrentDownloadStatus

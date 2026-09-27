@@ -16,6 +16,7 @@ import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
+import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
 
 export type PopcornApi = {
   app: {
@@ -47,6 +48,11 @@ export type PopcornApi = {
     /** False when the OS offers no secure storage and keys are saved as plain text. */
     isEncrypted(): Promise<boolean>
     set(partial: Partial<AppSettings>): Promise<void>
+  }
+  tv: {
+    search(query: string): Promise<TvSearchResponse>
+    getShow(id: number): Promise<TvShowResponse>
+    getSeason(showId: number, seasonNumber: number): Promise<TvSeasonResponse>
   }
   prefs: {
     get(): Promise<Preferences>

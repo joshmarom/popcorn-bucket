@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { Link } from 'react-router-dom'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
+import { isEpisodeMediaKey } from '@shared/tv'
 import { Card, CardFooter, CardTitle } from '@/components/ui/card'
 
 const RAIL_MAX = 15
@@ -82,7 +83,10 @@ export function PersonalRails(): ReactElement | null {
         window.api.history.list(),
         window.api.watchlist.get()
       ])
-      const resumable = history.filter((p) => resumePosition(p) > 0).slice(0, RAIL_MAX)
+      // Episodes resume from their show page, not from movie rails.
+      const resumable = history
+        .filter((p) => resumePosition(p) > 0 && !isEpisodeMediaKey(p.movieId))
+        .slice(0, RAIL_MAX)
       const listIds = watchlist.slice(0, RAIL_MAX)
       const movies = await loadMovies([
         ...new Set([...resumable.map((p) => p.movieId), ...listIds])

@@ -11,9 +11,11 @@ import {
 import { rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import type { Preferences } from '@shared/preferences'
+import type { EpisodeTarget } from '@shared/tv'
 import { getPreferences, preferenceEvents } from '../preferences-store'
 import { getAppSettings } from '../settings-store'
 import { getMovieDetails, hasTmdbCredentials } from '../tmdb'
+import { getTvShowDetails } from '../tmdb-tv'
 import { computeMovieHash, fetchSubtitle, subtitleCacheRoot } from '../subtitles/opensubtitles'
 import { isValidMagnetUri } from '@shared/torrent'
 import type {
@@ -35,6 +37,7 @@ import {
   getClientIfExists,
   getReadyClient,
   listTorrentSidecarSubtitles,
+  pickEpisodeFile,
   pickPlayableFile,
   shutdownWebTorrentCore,
   type WtFile,
@@ -79,6 +82,7 @@ type DownloadRecord = {
   magnetUri: string
   displayTitle: string
   movieTitle: string | null
+  episode?: EpisodeTarget
   indexerSeeders: number
   indexerLeechers: number
   createdAt: number
@@ -269,6 +273,7 @@ function serializeRecord(rec: DownloadRecord): PersistedMovieDownload {
     magnetUri: rec.magnetUri,
     displayTitle: rec.displayTitle,
     movieTitle: rec.movieTitle,
+    episode: rec.episode ?? null,
     indexerSeeders: rec.indexerSeeders,
     indexerLeechers: rec.indexerLeechers,
     createdAt: rec.createdAt,
@@ -327,6 +332,7 @@ export function restoreMovieDownloadsOnStartup(): void {
       magnetUri: row.magnetUri.trim(),
       displayTitle: row.displayTitle.trim() || 'Torrent',
       movieTitle: row.movieTitle,
+      episode: row.episode ?? undefined,
       indexerSeeders: row.indexerSeeders,
       indexerLeechers: row.indexerLeechers,
       createdAt: row.createdAt,
@@ -462,6 +468,7 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
     movieId: rec.movieId,
     movieTitle: rec.movieTitle,
     downloadDir: rec.downloadDir,
+    episode: rec.episode ?? null,
     magnetUri: rec.magnetUri,
     displayTitle: rec.displayTitle,
     status: rec.status,
@@ -586,6 +593,9 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
   const pref = rec.resumedPlayFilePath
   if (pref) {
     file = torrent.files.find((f) => f.path === pref || f.name === pref) ?? null
+  }
+  if (!file && rec.episode) {
+    file = pickEpisodeFile(torrent, rec.episode.seasonNumber, rec.episode.episodeNumber)
   }
   if (!file) {
     file = pickPlayableFile(torrent)
@@ -719,6 +729,7 @@ export function addMovieDownload(payload: AddMovieTorrentPayload): AddMovieTorre
     magnetUri: magnet,
     displayTitle: payload.title.trim() || 'Torrent',
     movieTitle: payload.movieTitle.trim() || null,
+    episode: payload.episode,
     indexerSeeders: Math.max(0, Math.floor(payload.indexerSeeders)),
     indexerLeechers: Math.max(0, Math.floor(payload.indexerLeechers)),
     createdAt: Date.now(),
@@ -1077,13 +1088,17 @@ function inlineTracksForPaths(paths: string[]): TorrentSubtitleTrack[] {
 
 const imdbIdCache = new Map<number, string | null>()
 
-async function imdbIdForMovie(movieId: number): Promise<string | null> {
-  if (imdbIdCache.has(movieId)) return imdbIdCache.get(movieId) ?? null
+/** IMDb id of the movie, or of the show for an episode. */
+async function imdbIdForRecord(rec: DownloadRecord): Promise<string | null> {
+  const key = rec.episode ? -rec.episode.showId : rec.movieId
+  if (imdbIdCache.has(key)) return imdbIdCache.get(key) ?? null
   const settings = getAppSettings()
   if (!hasTmdbCredentials(settings)) return null
   try {
-    const imdbId = (await getMovieDetails(settings, movieId)).imdbId
-    imdbIdCache.set(movieId, imdbId)
+    const imdbId = rec.episode
+      ? (await getTvShowDetails(settings, rec.episode.showId)).imdbId
+      : (await getMovieDetails(settings, rec.movieId)).imdbId
+    imdbIdCache.set(key, imdbId)
     return imdbId
   } catch {
     return null
@@ -1102,7 +1117,7 @@ async function externalSubtitlePaths(
   const apiKey = getAppSettings().openSubtitlesApiKey
   if (!language || !apiKey) return []
   if (existingSubtitleNames.some((n) => guessSubtitleLanguage(n) === language)) return []
-  const imdbId = await imdbIdForMovie(rec.movieId)
+  const imdbId = await imdbIdForRecord(rec)
   if (!imdbId) return []
   const finished = rec.status === 'complete' && rec.playFileAbsPath
   const path = await fetchSubtitle({
@@ -1110,7 +1125,10 @@ async function externalSubtitlePaths(
     movieId: rec.movieId,
     imdbId,
     language,
-    movieHash: finished ? computeMovieHash(rec.playFileAbsPath!) : null
+    movieHash: finished ? computeMovieHash(rec.playFileAbsPath!) : null,
+    ...(rec.episode
+      ? { episode: { season: rec.episode.seasonNumber, episode: rec.episode.episodeNumber } }
+      : {})
   })
   return path ? [path] : []
 }

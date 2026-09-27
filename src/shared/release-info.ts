@@ -19,6 +19,19 @@ export type ReleaseInfo = {
   codec: ReleaseCodec | null
   hdr: boolean
   year: number | null
+  season: number | null
+  /** Null for whole-season packs. */
+  episode: number | null
+  /** A full season (or several) rather than a single episode. */
+  seasonPack: boolean
+}
+
+function parseEpisode(t: string): Pick<ReleaseInfo, 'season' | 'episode' | 'seasonPack'> {
+  const se = /\ss(\d{1,2}) ?e(\d{1,3})(?:e\d{1,3})*\s/.exec(t) ?? /\s(\d{1,2})x(\d{2,3})\s/.exec(t)
+  if (se) return { season: Number(se[1]), episode: Number(se[2]), seasonPack: false }
+  const pack = /\s(?:s|season )(\d{1,2})(?:\s|$)/.exec(t)
+  if (pack) return { season: Number(pack[1]), episode: null, seasonPack: true }
+  return { season: null, episode: null, seasonPack: false }
 }
 
 /** Recorded-in-cinema copies; never offered as the default choice. */
@@ -74,7 +87,8 @@ export function parseReleaseTitle(title: string): ReleaseInfo {
     source: parseSource(t),
     codec: parseCodec(t),
     hdr: /\s(hdr|hdr10|dv|dovi|dolby vision)\s/.test(t),
-    year: parseYear(t)
+    year: parseYear(t),
+    ...parseEpisode(t)
   }
 }
 

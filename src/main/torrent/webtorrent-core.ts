@@ -2,6 +2,7 @@ import { app } from 'electron'
 import type { Readable } from 'node:stream'
 import { isAbsolute, join } from 'node:path'
 import type { Preferences } from '@shared/preferences'
+import { parseReleaseTitle } from '@shared/release-info'
 import { getPreferences } from '../preferences-store'
 
 export const STREAM_PATH = '/popcorn-webtorrent'
@@ -179,6 +180,20 @@ export function archiveVolumes(torrent: WtTorrent): WtFile[] {
  * The largest real video, skipping samples. Scene releases that pack the movie in RAR volumes
  * (often with a small sample video beside them) yield the first archive volume instead.
  */
+/** In a season pack, the video whose name carries this season and episode number. */
+export function pickEpisodeFile(
+  torrent: WtTorrent,
+  season: number,
+  episode: number
+): WtFile | null {
+  const matches = (torrent.files ?? []).filter((f) => {
+    if (!VIDEO_RE.test(f.name) || SAMPLE_RE.test(f.path)) return false
+    const r = parseReleaseTitle(f.path.replace(/[\\/]/g, ' '))
+    return r.season === season && r.episode === episode
+  })
+  return [...matches].sort((a, b) => b.length - a.length)[0] ?? null
+}
+
 export function pickPlayableFile(torrent: WtTorrent): WtFile | null {
   if (!torrent.files?.length) return null
   const videos = torrent.files.filter(
