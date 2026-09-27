@@ -15,6 +15,26 @@ const MAX_TMDB_RESOLVE = 100
 /** OMDb list enrichment only for this many leading rows (avoids long cold rebuilds). */
 const OMDB_ENRICH_HEAD = 20
 
+/** Parallel TMDB lookups during a rebuild; keeps order and stays under TMDB rate limits. */
+const TMDB_CONCURRENCY = 8
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const out = new Array<R>(items.length)
+  let next = 0
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++
+      out[i] = await fn(items[i]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return out
+}
+
 type CachedPayload = {
   generatedAtMs: number
   items: CatalogMovieListItem[]
@@ -75,12 +95,10 @@ export async function getTrendingWatchableMovies(
   try {
     const candidates = await fetchMergedTrendingCandidates()
     const top = candidates.slice(0, MAX_TMDB_RESOLVE)
-    for (const c of top) {
-      const item = await findMovieListItemByImdbId(settings, c.imdbId)
-      if (item) {
-        resolved.push(item)
-      }
-    }
+    const items = await mapWithConcurrency(top, TMDB_CONCURRENCY, (c) =>
+      findMovieListItemByImdbId(settings, c.imdbId).catch(() => null)
+    )
+    resolved = items.filter((item): item is CatalogMovieListItem => item != null)
   } catch {
     resolved = []
   }

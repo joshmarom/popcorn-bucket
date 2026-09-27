@@ -10,26 +10,33 @@ const PROVIDER = 'ThePirateBay'
 const API = 'https://apibay.org/q.php'
 const SITE = 'https://thepiratebay.org'
 
+async function queryApibay(q: string, signal: AbortSignal): Promise<unknown[]> {
+  const res = await limitedFetch(`${API}?q=${encodeURIComponent(q)}&cat=200`, { signal })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json: unknown = await res.json()
+  if (!Array.isArray(json)) return []
+  return json.filter(
+    (o) => o && typeof o === 'object' && (o as { name?: unknown }).name !== 'No results returned'
+  )
+}
+
+/** apibay indexes IMDb ids, so an id search is exact; text search is the fallback. */
 export async function searchPirateBay(
   ctx: TorrentProviderContext,
   signal: AbortSignal
 ): Promise<RawTorrentSource[]> {
   const q = ctx.query.trim()
-  if (!q) return []
+  if (!q && !ctx.imdbId) return []
 
-  const url = `${API}?q=${encodeURIComponent(q)}&cat=200`
-  const res = await limitedFetch(url, { signal })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-  const json: unknown = await res.json()
-  if (!Array.isArray(json)) return []
+  let json: unknown[] = ctx.imdbId ? await queryApibay(ctx.imdbId, signal) : []
+  if (json.length === 0 && q) json = await queryApibay(q, signal)
 
   const out: RawTorrentSource[] = []
   for (const raw of json) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>
     const name = typeof o.name === 'string' ? o.name : null
-    if (!name || name === 'No results returned') continue
+    if (!name) continue
 
     const id = typeof o.id === 'string' ? o.id : null
     const infoHash = typeof o.info_hash === 'string' ? o.info_hash : null

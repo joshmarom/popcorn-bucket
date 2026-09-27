@@ -16,6 +16,7 @@ import type {
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
+import type { ProviderHealth } from '@shared/provider-health'
 
 const api = {
   app: {
@@ -85,6 +86,7 @@ const api = {
     endInlinePlayback: (): Promise<void> => ipcRenderer.invoke('torrent:endInlinePlayback'),
     scanUntracked: (): Promise<UntrackedDownload[]> =>
       ipcRenderer.invoke('downloads:scanUntracked'),
+    providerHealth: (): Promise<ProviderHealth[]> => ipcRenderer.invoke('torrent:providerHealth'),
     recoverUntracked: (
       dir: string,
       movieTitle: string

@@ -1,7 +1,8 @@
 import type { TorrentSearchResponse, TorrentSource } from '@shared/torrent'
 import type { RankedSources } from '@shared/release-ranking'
 import { RefreshCw } from 'lucide-react'
-import type { ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
+import type { ProviderHealth } from '@shared/provider-health'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { MovieTorrentSourcesTable } from './movie-torrent-sources-table'
@@ -29,6 +30,17 @@ export function MovieTorrentSourcesSection({
   onCopyMagnet: (uri: string) => void
   onOpenDetails: (url: string) => void
 }): ReactElement {
+  const [health, setHealth] = useState<ProviderHealth[]>([])
+  useEffect(() => {
+    if (torrentLoading || !torrentData) return
+    // Cached results did not query indexers, so their health would be stale.
+    if (torrentData.ok && torrentData.cached) {
+      setHealth([])
+      return
+    }
+    void window.api.torrent.providerHealth().then(setHealth)
+  }, [torrentLoading, torrentData])
+
   return (
     <div className="space-y-4 border-t border-border pt-4">
       {addFeedback && (
@@ -64,14 +76,29 @@ export function MovieTorrentSourcesSection({
           {torrentData.error}
         </p>
       )}
-      {!torrentLoading && torrentData && torrentData.ok && torrentData.errors.length > 0 && (
-        <ul className="text-amber-700 dark:text-amber-400 border-amber-500/30 bg-amber-500/10 rounded-md border px-3 py-2 text-sm">
-          {torrentData.errors.map((e, i) => (
-            <li key={`${e.provider}-${i}`}>
-              <span className="font-medium">{e.provider}:</span> {e.message}
-            </li>
+      {!torrentLoading && health.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">Indexers:</span>
+          {health.map((h) => (
+            <span
+              key={h.provider}
+              title={h.lastError ?? undefined}
+              className={cn(
+                'rounded-full border px-2 py-0.5',
+                h.state === 'ok'
+                  ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : h.state === 'skipped'
+                    ? 'border-border text-muted-foreground line-through'
+                    : 'border-amber-500/40 text-amber-700 dark:text-amber-400'
+              )}
+            >
+              {h.provider}
+              {h.state === 'ok' && h.lastResultCount != null ? ` · ${h.lastResultCount}` : ''}
+              {h.state === 'failing' ? ` · ${h.lastError ?? 'failed'}` : ''}
+              {h.state === 'skipped' ? ' · paused' : ''}
+            </span>
           ))}
-        </ul>
+        </div>
       )}
       {!torrentLoading &&
         torrentData &&

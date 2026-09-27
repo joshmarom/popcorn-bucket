@@ -15,6 +15,7 @@ import type {
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
+import type { ProviderHealth } from '@shared/provider-health'
 
 export type PopcornApi = {
   app: {
@@ -75,6 +76,8 @@ export type PopcornApi = {
     startMoviePlayback(movieId: number, downloadId: string): Promise<TorrentStreamStartResponse>
     /** The in-app player closed; a download that finished meanwhile can leave the swarm. */
     endInlinePlayback(): Promise<void>
+    /** Per-indexer status from recent searches. */
+    providerHealth(): Promise<ProviderHealth[]>
     /** Download folders on disk that hold a video but are missing from the list. */
     scanUntracked(): Promise<UntrackedDownload[]>
     recoverUntracked(

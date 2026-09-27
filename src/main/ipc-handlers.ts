@@ -24,6 +24,8 @@ import {
   setAppSettings
 } from './settings-store'
 import { searchTorrentSources } from './torrent/orchestrator'
+import { listProviderHealth } from './torrent/scrape-providers'
+import type { ProviderHealth } from '@shared/provider-health'
 import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
 import {
@@ -261,6 +263,8 @@ export function registerIpcHandlers(): void {
     }
     return fresh
   })
+
+  ipcMain.handle('torrent:providerHealth', (): ProviderHealth[] => listProviderHealth())
 
   ipcMain.handle('torrent:addMovieDownload', (_evt, raw: unknown) => {
     const parsed = addMovieTorrentInput.safeParse(raw)
