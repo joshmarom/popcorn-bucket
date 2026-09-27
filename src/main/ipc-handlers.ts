@@ -15,7 +15,7 @@ import {
   type CatalogSearchResponse
 } from '@shared/catalog'
 import { isSafeTorrentDetailsUrl, type TorrentSearchResponse } from '@shared/torrent'
-import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
+import type { MovieTorrentDownloadSnapshot, UntrackedDownload } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import {
   getAppSettings,
@@ -31,6 +31,9 @@ import {
   endStreamingPlayback,
   getAllMovieDownloads,
   getDownloadLocation,
+  deleteUntrackedDownload,
+  recoverUntrackedDownload,
+  scanUntrackedDownloads,
   getMovieDownloads,
   removeMovieDownload,
   setMovieDownloadPaused,
@@ -102,6 +105,11 @@ const movieDownloadPauseInput = z.object({
   movieId: z.number().int().positive(),
   downloadId: z.string().uuid(),
   paused: z.boolean()
+})
+
+const untrackedRecoverInput = z.object({
+  dir: z.string().min(1).max(2000),
+  movieTitle: z.string().max(400).default('')
 })
 
 const historyReportInput = z.object({
@@ -186,6 +194,20 @@ export function registerIpcHandlers(): void {
       throw new Error('Only https:// links may be opened.')
     }
     await shell.openExternal(raw)
+  })
+
+  ipcMain.handle('downloads:scanUntracked', (): UntrackedDownload[] => scanUntrackedDownloads())
+
+  ipcMain.handle('downloads:recoverUntracked', (_evt, raw: unknown) => {
+    const parsed = untrackedRecoverInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Invalid request.' }
+    return recoverUntrackedDownload(parsed.data.dir, parsed.data.movieTitle || null)
+  })
+
+  ipcMain.handle('downloads:deleteUntracked', async (_evt, raw: unknown) => {
+    const parsed = z.string().min(1).max(2000).safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Invalid request.' }
+    return deleteUntrackedDownload(parsed.data)
   })
 
   ipcMain.handle('app:showDownloadInFolder', (_evt, raw: unknown): void => {

@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync
+} from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import type { Preferences } from '@shared/preferences'
 import { getPreferences, preferenceEvents } from '../preferences-store'
 import { getAppSettings } from '../settings-store'
@@ -12,7 +20,8 @@ import type {
   AddMovieTorrentPayload,
   AddMovieTorrentResponse,
   MovieTorrentDownloadSnapshot,
-  MovieTorrentFileProgress
+  MovieTorrentFileProgress,
+  UntrackedDownload
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse, TorrentSubtitleTrack } from '@shared/torrent-stream'
 import {
@@ -300,8 +309,9 @@ export function restoreMovieDownloadsOnStartup(): void {
   const rows = loadPersistedMovieDownloads()
   const seenMagnets = new Set<string>()
   for (const row of rows) {
-    if (!isValidMagnetUri(row.magnetUri)) continue
-    const mKey = `${row.movieId}:${normalizeMagnet(row.magnetUri)}`
+    const hasMagnet = isValidMagnetUri(row.magnetUri)
+    if (!hasMagnet && !row.completed) continue
+    const mKey = hasMagnet ? `${row.movieId}:${normalizeMagnet(row.magnetUri)}` : `id:${row.id}`
     if (seenMagnets.has(mKey)) continue
     seenMagnets.add(mKey)
     if (records.has(row.id)) continue
@@ -686,7 +696,7 @@ export function addMovieDownload(payload: AddMovieTorrentPayload): AddMovieTorre
 
   const key = normalizeMagnet(magnet)
   for (const r of records.values()) {
-    if (normalizeMagnet(r.magnetUri) === key) {
+    if (r.magnetUri && normalizeMagnet(r.magnetUri) === key) {
       if (r.movieId === payload.movieId) {
         return { ok: false, error: 'This torrent is already in the download list for this movie.' }
       }
@@ -721,6 +731,119 @@ export function getMovieDownloads(movieId: number): MovieTorrentDownloadSnapshot
     .filter((r) => r.movieId === movieId)
     .sort((a, b) => b.createdAt - a.createdAt)
     .map(buildSnapshot)
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const VIDEO_FILE_RE = /\.(mp4|mkv|webm|m4v|mov|avi|ts|m2ts|mpg|mpeg|wmv)$/i
+
+function largestVideoUnder(dir: string): { path: string; bytes: number } | null {
+  let best: { path: string; bytes: number } | null = null
+  let entries: string[]
+  try {
+    entries = readdirSync(dir, { recursive: true, encoding: 'utf8' })
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    if (!VIDEO_FILE_RE.test(entry)) continue
+    const abs = join(dir, entry)
+    try {
+      const size = statSync(abs).size
+      if (!best || size > best.bytes) best = { path: abs, bytes: size }
+    } catch {
+      /* unreadable entry */
+    }
+  }
+  return best
+}
+
+/**
+ * Folders shaped `<root>/<movieId>/<downloadId>` that hold a video but are not in the list, e.g.
+ * left behind when an older version lost the list on quit.
+ */
+export function scanUntrackedDownloads(): UntrackedDownload[] {
+  const tracked = new Set([...records.values()].map((r) => resolve(r.downloadDir)))
+  const out: UntrackedDownload[] = []
+  for (const root of new Set([resolve(baseDownloadDir()), resolve(defaultDownloadDir())])) {
+    let movieDirs: string[]
+    try {
+      movieDirs = readdirSync(root)
+    } catch {
+      continue
+    }
+    for (const movieDir of movieDirs) {
+      if (!/^\d+$/.test(movieDir)) continue
+      let ids: string[]
+      try {
+        ids = readdirSync(join(root, movieDir))
+      } catch {
+        continue
+      }
+      for (const id of ids) {
+        const dir = join(root, movieDir, id)
+        if (!UUID_RE.test(id) || tracked.has(dir) || records.has(id)) continue
+        const video = largestVideoUnder(dir)
+        if (!video) continue
+        out.push({
+          movieId: Number(movieDir),
+          downloadId: id,
+          dir,
+          videoPath: video.path,
+          bytes: video.bytes
+        })
+      }
+    }
+  }
+  return out.sort((a, b) => b.bytes - a.bytes)
+}
+
+function findUntracked(dir: string): UntrackedDownload | null {
+  const target = resolve(dir)
+  return scanUntrackedDownloads().find((u) => u.dir === target) ?? null
+}
+
+/** Adds an untracked folder back as a finished download that plays from disk. */
+export function recoverUntrackedDownload(
+  dir: string,
+  movieTitle: string | null
+): { ok: true } | { ok: false; error: string } {
+  const u = findUntracked(dir)
+  if (!u) return { ok: false, error: 'That folder is no longer available to recover.' }
+  const label = basename(u.videoPath)
+  records.set(u.downloadId, {
+    id: u.downloadId,
+    movieId: u.movieId,
+    magnetUri: '',
+    displayTitle: label,
+    movieTitle,
+    indexerSeeders: 0,
+    indexerLeechers: 0,
+    createdAt: Date.now(),
+    wt: null,
+    playFile: null,
+    status: 'complete',
+    completeSnapshot: {
+      totalBytes: u.bytes,
+      downloaded: u.bytes,
+      progress: 1,
+      torrentName: null,
+      playFileLabel: label
+    },
+    downloadDir: u.dir,
+    playFileAbsPath: u.videoPath,
+    wantedPaths: []
+  })
+  schedulePersistMovieDownloads()
+  return { ok: true }
+}
+
+export async function deleteUntrackedDownload(
+  dir: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const u = findUntracked(dir)
+  if (!u) return { ok: false, error: 'That folder is no longer available.' }
+  await rm(u.dir, { recursive: true, force: true })
+  return { ok: true }
 }
 
 /** The finished video if known, else the download's folder; null for unknown ids. */

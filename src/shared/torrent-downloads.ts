@@ -13,6 +13,15 @@ export type AddMovieTorrentResponse =
   | { ok: true; downloadId: string }
   | { ok: false; error: string }
 
+/** A download folder on disk that holds a video but is missing from the download list. */
+export type UntrackedDownload = {
+  movieId: number
+  downloadId: string
+  dir: string
+  videoPath: string
+  bytes: number
+}
+
 export type MovieTorrentFileProgress = {
   path: string
   length: number

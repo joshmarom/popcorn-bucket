@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatBytes, formatSpeed, statusLabel } from '@/lib/torrent-download-format'
 import { cn } from '@/lib/utils'
+import { UntrackedDownloadsSection } from './untracked-downloads-section'
 
 type DeleteTarget = { kind: 'one'; row: MovieTorrentDownloadSnapshot } | { kind: 'watched' }
 
@@ -314,6 +315,8 @@ export function DownloadsPage(): ReactElement {
           {library.map(renderRow)}
         </section>
       )}
+
+      <UntrackedDownloadsSection onRecovered={() => void loadDownloads()} />
 
       <Dialog
         open={deleteTarget != null}

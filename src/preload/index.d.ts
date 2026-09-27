@@ -9,7 +9,8 @@ import type { TorrentSearchInput, TorrentSearchResponse } from '@shared/torrent'
 import type {
   AddMovieTorrentPayload,
   AddMovieTorrentResponse,
-  MovieTorrentDownloadSnapshot
+  MovieTorrentDownloadSnapshot,
+  UntrackedDownload
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
@@ -74,6 +75,13 @@ export type PopcornApi = {
     startMoviePlayback(movieId: number, downloadId: string): Promise<TorrentStreamStartResponse>
     /** The in-app player closed; a download that finished meanwhile can leave the swarm. */
     endInlinePlayback(): Promise<void>
+    /** Download folders on disk that hold a video but are missing from the list. */
+    scanUntracked(): Promise<UntrackedDownload[]>
+    recoverUntracked(
+      dir: string,
+      movieTitle: string
+    ): Promise<{ ok: true } | { ok: false; error: string }>
+    deleteUntracked(dir: string): Promise<{ ok: true } | { ok: false; error: string }>
     /** Pushed by the main process whenever any download changes; returns an unsubscribe. */
     onDownloadsUpdate(cb: (rows: MovieTorrentDownloadSnapshot[]) => void): () => void
     setMovieDownloadPaused(

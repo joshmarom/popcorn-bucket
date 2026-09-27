@@ -68,8 +68,11 @@ export function loadPersistedMovieDownloads(): PersistedMovieDownload[] {
     const id = typeof r.id === 'string' ? r.id : ''
     const movieId = typeof r.movieId === 'number' ? r.movieId : Number.NaN
     const magnetUri = typeof r.magnetUri === 'string' ? r.magnetUri : ''
-    if (!id || !Number.isFinite(movieId) || movieId < 1 || !magnetUri.trim()) continue
     const completed = Boolean(r.completed)
+    // Finished downloads recovered from disk have no magnet; everything else needs one.
+    if (!id || !Number.isFinite(movieId) || movieId < 1 || (!completed && !magnetUri.trim())) {
+      continue
+    }
     let completeSummary: PersistedDownloadCompleteSummary | undefined
     const sum = r.completeSummary
     if (sum && typeof sum === 'object') {

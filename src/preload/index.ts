@@ -10,7 +10,8 @@ import type { TorrentSearchInput, TorrentSearchResponse } from '@shared/torrent'
 import type {
   AddMovieTorrentPayload,
   AddMovieTorrentResponse,
-  MovieTorrentDownloadSnapshot
+  MovieTorrentDownloadSnapshot,
+  UntrackedDownload
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
@@ -82,6 +83,15 @@ const api = {
     ): Promise<TorrentStreamStartResponse> =>
       ipcRenderer.invoke('torrent:startMoviePlayback', { movieId, downloadId }),
     endInlinePlayback: (): Promise<void> => ipcRenderer.invoke('torrent:endInlinePlayback'),
+    scanUntracked: (): Promise<UntrackedDownload[]> =>
+      ipcRenderer.invoke('downloads:scanUntracked'),
+    recoverUntracked: (
+      dir: string,
+      movieTitle: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('downloads:recoverUntracked', { dir, movieTitle }),
+    deleteUntracked: (dir: string): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('downloads:deleteUntracked', dir),
     onDownloadsUpdate: (cb: (rows: MovieTorrentDownloadSnapshot[]) => void): (() => void) => {
       const listener = (_e: unknown, rows: MovieTorrentDownloadSnapshot[]): void => cb(rows)
       ipcRenderer.on('downloads:update', listener)
