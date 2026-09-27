@@ -13,6 +13,7 @@ import type {
   MovieTorrentDownloadSnapshot
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
+import type { WatchProgress } from '@shared/watch-history'
 
 const api = {
   app: {
@@ -75,6 +76,19 @@ const api = {
       paused: boolean
     ): Promise<{ ok: true } | { ok: false; error: string }> =>
       ipcRenderer.invoke('torrent:setMovieDownloadPaused', { movieId, downloadId, paused })
+  },
+  history: {
+    list: (): Promise<WatchProgress[]> => ipcRenderer.invoke('history:list'),
+    get: (movieId: number): Promise<WatchProgress | null> =>
+      ipcRenderer.invoke('history:get', { id: movieId }),
+    report: (movieId: number, position: number, duration: number): Promise<void> =>
+      ipcRenderer.invoke('history:report', { movieId, position, duration }),
+    clear: (movieId: number): Promise<void> => ipcRenderer.invoke('history:clear', { id: movieId })
+  },
+  watchlist: {
+    get: (): Promise<number[]> => ipcRenderer.invoke('watchlist:get'),
+    set: (movieId: number, inList: boolean): Promise<number[]> =>
+      ipcRenderer.invoke('watchlist:set', { movieId, inList })
   },
   mpv: {
     onEnd: (cb: () => void): (() => void) => {

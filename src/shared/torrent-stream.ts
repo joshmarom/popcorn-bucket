@@ -16,6 +16,8 @@ export type TorrentStreamStartResponse =
       streamUrl: string
       fileLabel: string
       subtitles: TorrentSubtitleTrack[]
+      /** Resume position in seconds (0 to start from the beginning). */
+      startSeconds: number
     }
   | {
       ok: true

@@ -42,6 +42,15 @@ import {
   searchMovies
 } from './tmdb'
 import { getTrendingWatchableMovies } from './torrent/trending-watchable'
+import {
+  clearWatchProgress,
+  getWatchProgress,
+  getWatchlist,
+  listWatchProgress,
+  recordWatchProgress,
+  setInWatchlist
+} from './watch-history'
+import type { WatchProgress } from '@shared/watch-history'
 import { readVidkingDiagnostics, type VidkingNetEvent } from './vidking-diagnostics'
 
 const searchInput = z.object({
@@ -86,6 +95,17 @@ const movieDownloadPauseInput = z.object({
   movieId: z.number().int().positive(),
   downloadId: z.string().uuid(),
   paused: z.boolean()
+})
+
+const historyReportInput = z.object({
+  movieId: z.number().int().positive(),
+  position: z.number().nonnegative(),
+  duration: z.number().positive()
+})
+
+const watchlistSetInput = z.object({
+  movieId: z.number().int().positive(),
+  inList: z.boolean()
 })
 
 const catalogNowPlayingInput = z.object({
@@ -222,6 +242,33 @@ export function registerIpcHandlers(): void {
       }
     }
   )
+
+  ipcMain.handle('history:list', (): WatchProgress[] => listWatchProgress())
+
+  ipcMain.handle('history:get', (_evt, raw: unknown): WatchProgress | null => {
+    const parsed = movieInput.safeParse(raw)
+    return parsed.success ? getWatchProgress(parsed.data.id) : null
+  })
+
+  ipcMain.handle('history:report', (_evt, raw: unknown): void => {
+    const parsed = historyReportInput.safeParse(raw)
+    if (parsed.success) {
+      recordWatchProgress(parsed.data.movieId, parsed.data.position, parsed.data.duration)
+    }
+  })
+
+  ipcMain.handle('history:clear', (_evt, raw: unknown): void => {
+    const parsed = movieInput.safeParse(raw)
+    if (parsed.success) clearWatchProgress(parsed.data.id)
+  })
+
+  ipcMain.handle('watchlist:get', (): number[] => getWatchlist())
+
+  ipcMain.handle('watchlist:set', (_evt, raw: unknown): number[] => {
+    const parsed = watchlistSetInput.safeParse(raw)
+    if (!parsed.success) return getWatchlist()
+    return setInWatchlist(parsed.data.movieId, parsed.data.inList)
+  })
 
   ipcMain.handle('torrent:endInlinePlayback', (): void => {
     endStreamingPlayback('inline')

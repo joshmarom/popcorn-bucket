@@ -12,6 +12,7 @@ import type {
   MovieTorrentDownloadSnapshot
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
+import type { WatchProgress } from '@shared/watch-history'
 
 export type PopcornApi = {
   app: {
@@ -66,6 +67,17 @@ export type PopcornApi = {
       downloadId: string,
       paused: boolean
     ): Promise<{ ok: true } | { ok: false; error: string }>
+  }
+  history: {
+    /** Most recently watched first. */
+    list(): Promise<WatchProgress[]>
+    get(movieId: number): Promise<WatchProgress | null>
+    report(movieId: number, position: number, duration: number): Promise<void>
+    clear(movieId: number): Promise<void>
+  }
+  watchlist: {
+    get(): Promise<number[]>
+    set(movieId: number, inList: boolean): Promise<number[]>
   }
   mpv: {
     /** Fires when the current mpv session ends (process exit / EOF). */

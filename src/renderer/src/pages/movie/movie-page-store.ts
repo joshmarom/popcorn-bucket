@@ -54,6 +54,7 @@ type MoviePageState = {
   playUrl: string | null
   playLabel: string
   playSubtitles: TorrentSubtitleTrack[]
+  playStartSeconds: number
   playError: string | null
   playBusyDownloadId: string | null
   playbackDownloadId: string | null
@@ -120,6 +121,7 @@ function initialState(movieId: number): MoviePageState {
     playUrl: null,
     playLabel: '',
     playSubtitles: [],
+    playStartSeconds: 0,
     playError: null,
     playBusyDownloadId: null,
     playbackDownloadId: null,
@@ -382,6 +384,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
           playUrl: res.streamUrl,
           playLabel: res.fileLabel,
           playSubtitles: res.subtitles,
+          playStartSeconds: res.startSeconds,
           playbackDownloadId: downloadId,
           playDialogOpen: true,
           playBusyDownloadId: null

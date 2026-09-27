@@ -29,7 +29,15 @@ import {
   type PersistedDownloadCompleteSummary,
   type PersistedMovieDownload
 } from './movie-downloads-persistence'
-import { mpvEvents, shutdownCurrentMpvSession, startExternalMpvSession } from './mpv-controller'
+import {
+  findMpvBinary,
+  mpvEvents,
+  shutdownCurrentMpvSession,
+  startExternalMpvSession,
+  type MpvPlaybackState
+} from './mpv-controller'
+import { getWatchProgress, recordWatchProgress } from '../watch-history'
+import { resumePosition } from '@shared/watch-history'
 import { localMediaUrl } from '../local-media-protocol'
 import { PUBLIC_TRACKERS } from './public-trackers'
 
@@ -695,32 +703,107 @@ export async function startMoviePlayback(
       }
     })
 
+    // mpv reads the local WebTorrent HTTP URL, so its seeks become range requests that
+    // WebTorrent prioritizes (seek-aware download).
     const streamUrl = buildStreamUrl(torrent.infoHash, live.path, port)
-
-    if (needsExternalPlayer(live.name)) {
-      // Chromium can't play MKV/AVI etc. Hand off to mpv, pointed at the
-      // local WebTorrent HTTP URL so mpv's seeks translate into range
-      // requests that WebTorrent prioritizes (seek-aware download).
-      const res = await startExternalMpvSession({ url: streamUrl, title: live.name })
-      if (!res.ok) return res
-      streamingDownloadId = rec.id
-      streamingVia = 'mpv'
-      return {
-        ok: true,
-        kind: 'external',
-        player: 'mpv',
-        fileLabel: live.name
-      }
-    }
-
-    streamingDownloadId = rec.id
-    streamingVia = 'inline'
-    return { ok: true, kind: 'inline', streamUrl, fileLabel: live.name, subtitles }
+    const external = await externalSubtitlePaths(rec)
+    return await launchPlayback({
+      rec,
+      label: live.name,
+      mpvUrl: streamUrl,
+      mpvSubFiles: [...subtitles.map((s) => s.src), ...external],
+      inlineUrl: streamUrl,
+      inlineSubtitles: [...subtitles, ...inlineTracksForPaths(external)],
+      streaming: true
+    })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return { ok: false, error: msg || 'Could not start playback.' }
   }
 }
+
+type PlaybackTarget = {
+  rec: DownloadRecord
+  label: string
+  /** Stream URL or absolute file path. */
+  mpvUrl: string
+  mpvSubFiles: string[]
+  /** URL the in-app player can load; null when it cannot play this file. */
+  inlineUrl: string | null
+  inlineSubtitles: TorrentSubtitleTrack[]
+  /** True when the file comes from the WebTorrent HTTP server rather than from disk. */
+  streaming: boolean
+}
+
+/**
+ * mpv plays every format and reports position, so it is the player whenever it is installed.
+ * Without mpv, files Chromium can decode fall back to the in-app player.
+ */
+async function launchPlayback(t: PlaybackTarget): Promise<TorrentStreamStartResponse> {
+  const startSeconds = resumePosition(getWatchProgress(t.rec.movieId))
+  const inlineCapable = t.inlineUrl != null && !needsExternalPlayer(t.label)
+  if (findMpvBinary() || !inlineCapable) {
+    const res = await startExternalMpvSession({
+      url: t.mpvUrl,
+      title: t.label,
+      subFiles: t.mpvSubFiles,
+      startSeconds,
+      tag: { movieId: t.rec.movieId, downloadId: t.rec.id }
+    })
+    if (!res.ok) return res
+    if (t.streaming) {
+      streamingDownloadId = t.rec.id
+      streamingVia = 'mpv'
+    }
+    return { ok: true, kind: 'external', player: 'mpv', fileLabel: t.label }
+  }
+  if (t.streaming) {
+    streamingDownloadId = t.rec.id
+    streamingVia = 'inline'
+  }
+  return {
+    ok: true,
+    kind: 'inline',
+    streamUrl: t.inlineUrl!,
+    fileLabel: t.label,
+    subtitles: t.inlineSubtitles,
+    startSeconds
+  }
+}
+
+function inlineTracksForPaths(paths: string[]): TorrentSubtitleTrack[] {
+  const out: TorrentSubtitleTrack[] = []
+  for (const p of paths) {
+    const src = localMediaUrl(p)
+    const m = /\.(srt|vtt|ssa|ass)$/i.exec(p)
+    if (!src || !m) continue
+    const name = basename(p)
+    out.push({
+      src,
+      label: subtitleTrackLabel(name),
+      type: m[1]!.toLowerCase() as TorrentSubtitleTrack['type'],
+      language: guessSubtitleLanguage(name)
+    })
+  }
+  return out
+}
+
+/** Subtitles fetched from an online provider for this download (see subtitle lookup). */
+async function externalSubtitlePaths(_rec: DownloadRecord): Promise<string[]> {
+  return []
+}
+
+mpvEvents.on('progress', (s: MpvPlaybackState) => {
+  if (s.tag && s.position != null && s.duration != null) {
+    recordWatchProgress(s.tag.movieId, s.position, s.duration)
+  }
+})
+
+mpvEvents.on('end', (s: MpvPlaybackState) => {
+  if (s.tag && s.position != null && s.duration != null) {
+    recordWatchProgress(s.tag.movieId, s.position, s.duration)
+  }
+})
 
 function listLocalSubtitleFiles(
   dir: string
@@ -753,35 +836,19 @@ async function startLocalPlayback(rec: DownloadRecord): Promise<TorrentStreamSta
     schedulePersistMovieDownloads()
     return { ok: false, error: rec.errorMessage }
   }
-  const label = basename(abs)
-  const subs = listLocalSubtitleFiles(rec.downloadDir)
-
-  if (needsExternalPlayer(label)) {
-    const res = await startExternalMpvSession({
-      url: abs,
-      title: label,
-      subFiles: subs.map((s) => s.absPath)
-    })
-    if (!res.ok) return res
-    return { ok: true, kind: 'external', player: 'mpv', fileLabel: label }
-  }
-
-  const streamUrl = localMediaUrl(abs)
-  if (!streamUrl) {
-    return { ok: false, error: 'File is outside the download folder.' }
-  }
-  const subtitles: TorrentSubtitleTrack[] = []
-  for (const s of subs) {
-    const src = localMediaUrl(s.absPath)
-    if (!src) continue
-    subtitles.push({
-      src,
-      label: subtitleTrackLabel(s.name),
-      type: s.format,
-      language: guessSubtitleLanguage(s.name)
-    })
-  }
-  return { ok: true, kind: 'inline', streamUrl, fileLabel: label, subtitles }
+  const subPaths = [
+    ...listLocalSubtitleFiles(rec.downloadDir).map((s) => s.absPath),
+    ...(await externalSubtitlePaths(rec))
+  ]
+  return launchPlayback({
+    rec,
+    label: basename(abs),
+    mpvUrl: abs,
+    mpvSubFiles: subPaths,
+    inlineUrl: localMediaUrl(abs),
+    inlineSubtitles: inlineTracksForPaths(subPaths),
+    streaming: false
+  })
 }
 
 export function shutdownMovieDownloads(): void {

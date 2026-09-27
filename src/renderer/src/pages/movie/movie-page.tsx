@@ -175,6 +175,10 @@ function MoviePageContent(): ReactElement {
         playLabel={s.playLabel}
         playSubtitles={s.playSubtitles}
         playError={s.playError}
+        startSeconds={s.playStartSeconds}
+        onProgress={(position, duration) =>
+          void window.api.history.report(s.movieId, position, duration)
+        }
         onOpenChange={s.closePlayDialog}
         onPlayerError={(d: MediaErrorDetail) => {
           const msg = d.message || 'Video playback failed.'
