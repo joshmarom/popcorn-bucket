@@ -1,10 +1,19 @@
 import type { ReactElement } from 'react'
-import { Loader2, Play } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Loader2, Play } from 'lucide-react'
 import type { RankedTorrentSource } from '@shared/release-ranking'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import { Button } from '@/components/ui/button'
 import { releaseSummary } from '@/lib/release-summary'
 import type { QuickPlayState } from './movie-page-store'
+
+function formatClock(seconds: number): string {
+  const s = Math.floor(seconds)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m)
+  return `${h > 0 ? `${h}:` : ''}${mm}:${String(sec).padStart(2, '0')}`
+}
 
 export function QuickPlayBar({
   quickPlay,
@@ -12,11 +21,18 @@ export function QuickPlayBar({
   existingDownload,
   bufferingDownload,
   playBusy,
+  resumeSeconds,
+  inWatchlist,
+  onToggleWatchlist,
   onPlay,
   onShowSources,
   onUseVidking,
   onDismiss
 }: {
+  /** Saved position; > 0 turns the button into "Resume". */
+  resumeSeconds: number
+  inWatchlist: boolean
+  onToggleWatchlist: () => void
   quickPlay: QuickPlayState
   /** Best-ranked copy from the last source search, when one has run. */
   best: RankedTorrentSource | null
@@ -55,7 +71,7 @@ export function QuickPlayBar({
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card/60 px-4 py-3">
       <Button type="button" size="lg" className="gap-2" disabled={busy} onClick={onPlay}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-        Play
+        {resumeSeconds > 0 ? `Resume from ${formatClock(resumeSeconds)}` : 'Play'}
       </Button>
       <div className="min-w-0 flex-1 text-sm">
         <p className="text-muted-foreground truncate">{status ?? subtitle}</p>
@@ -81,6 +97,17 @@ export function QuickPlayBar({
           </p>
         )}
       </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="gap-1.5"
+        aria-pressed={inWatchlist}
+        onClick={onToggleWatchlist}
+      >
+        {inWatchlist ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
+        {inWatchlist ? 'In my list' : 'My list'}
+      </Button>
       <Button type="button" variant="ghost" size="sm" onClick={onShowSources}>
         Other copies
       </Button>

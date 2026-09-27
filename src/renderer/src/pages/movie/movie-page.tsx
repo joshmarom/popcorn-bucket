@@ -1,4 +1,5 @@
-import { useContext, useEffect, useMemo, type ReactElement } from 'react'
+import { useContext, useEffect, useMemo, useState, type ReactElement } from 'react'
+import { resumePosition } from '@shared/watch-history'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { MediaErrorDetail } from '@vidstack/react'
 import { useShallow } from 'zustand/react/shallow'
@@ -31,6 +32,23 @@ function MoviePageContent(): ReactElement {
       if (store.getState().playUrl) void window.api.torrent.endInlinePlayback()
     }
   }, [store])
+
+  const [inWatchlist, setInWatchlist] = useState(false)
+  const [resumeSeconds, setResumeSeconds] = useState(0)
+  useEffect(() => {
+    const refresh = (): void => {
+      void window.api.history.get(s.movieId).then((p) => setResumeSeconds(resumePosition(p)))
+    }
+    void window.api.watchlist.get().then((ids) => setInWatchlist(ids.includes(s.movieId)))
+    refresh()
+    const offEnd = window.api.mpv.onEnd(refresh)
+    return offEnd
+  }, [s.movieId])
+  useEffect(() => {
+    if (!s.playDialogOpen) {
+      void window.api.history.get(s.movieId).then((p) => setResumeSeconds(resumePosition(p)))
+    }
+  }, [s.playDialogOpen, s.movieId])
 
   const buffering = s.quickPlay.phase === 'buffering'
   useEffect(() => {
@@ -105,6 +123,13 @@ function MoviePageContent(): ReactElement {
             existingDownload={existingDownload}
             bufferingDownload={bufferingDownload}
             playBusy={s.playBusyDownloadId != null}
+            resumeSeconds={resumeSeconds}
+            inWatchlist={inWatchlist}
+            onToggleWatchlist={() => {
+              const next = !inWatchlist
+              setInWatchlist(next)
+              void window.api.watchlist.set(s.movieId, next)
+            }}
             onPlay={() => void s.playBest()}
             onShowSources={() => s.setTab('sources')}
             onUseVidking={() => s.setTab('vidking')}

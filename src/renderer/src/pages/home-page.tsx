@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MovieGrid } from '@/components/movie-grid'
+import { PersonalRails } from '@/components/personal-rails'
 import { Card, CardFooter, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
@@ -442,6 +443,7 @@ export function HomePage(): ReactElement {
       </div>
 
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
+        {!showingSearch && <PersonalRails />}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
