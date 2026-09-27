@@ -30,6 +30,7 @@ import {
   addMovieDownload,
   endStreamingPlayback,
   getAllMovieDownloads,
+  getDownloadLocation,
   getMovieDownloads,
   removeMovieDownload,
   setMovieDownloadPaused,
@@ -85,6 +86,7 @@ const torrentSearchInput = z.object({
 
 const addMovieTorrentInput = z.object({
   movieId: z.number().int().positive(),
+  movieTitle: z.string().max(400).default(''),
   magnetUri: z.string().min(30).max(50_000),
   title: z.string().min(1).max(800),
   indexerSeeders: z.number().int().nonnegative(),
@@ -184,6 +186,13 @@ export function registerIpcHandlers(): void {
       throw new Error('Only https:// links may be opened.')
     }
     await shell.openExternal(raw)
+  })
+
+  ipcMain.handle('app:showDownloadInFolder', (_evt, raw: unknown): void => {
+    const parsed = z.string().uuid().safeParse(raw)
+    if (!parsed.success) return
+    const location = getDownloadLocation(parsed.data)
+    if (location) shell.showItemInFolder(location)
   })
 
   ipcMain.handle('app:openVidkingEmbed', (evt, raw: unknown): void => {

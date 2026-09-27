@@ -22,6 +22,8 @@ export type PopcornApi = {
     openVidkingEmbed(url: string): Promise<void>
     /** Clear cookies, storage, and HTTP cache of the isolated VidKing session. */
     clearVidkingData(): Promise<void>
+    /** Reveal a download's video (or folder) in Finder / Explorer. */
+    showDownloadInFolder(downloadId: string): Promise<void>
     /**
      * Recent VidKing/Videasy request outcomes captured by main process hooks.
      * Useful for diagnosing "no servers found" cases.
@@ -72,6 +74,8 @@ export type PopcornApi = {
     startMoviePlayback(movieId: number, downloadId: string): Promise<TorrentStreamStartResponse>
     /** The in-app player closed; a download that finished meanwhile can leave the swarm. */
     endInlinePlayback(): Promise<void>
+    /** Pushed by the main process whenever any download changes; returns an unsubscribe. */
+    onDownloadsUpdate(cb: (rows: MovieTorrentDownloadSnapshot[]) => void): () => void
     setMovieDownloadPaused(
       movieId: number,
       downloadId: string,

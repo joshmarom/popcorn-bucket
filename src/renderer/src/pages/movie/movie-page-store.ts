@@ -334,6 +334,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
       try {
         const res = await window.api.torrent.addMovieDownload({
           movieId: id,
+          movieTitle: get().detail?.title ?? '',
           magnetUri: row.magnetUri,
           title: row.title,
           indexerSeeders: row.seeders,

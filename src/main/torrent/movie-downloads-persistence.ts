@@ -32,6 +32,7 @@ export type PersistedMovieDownload = {
   movieId: number
   magnetUri: string
   displayTitle: string
+  movieTitle: string | null
   indexerSeeders: number
   indexerLeechers: number
   createdAt: number
@@ -89,6 +90,7 @@ export function loadPersistedMovieDownloads(): PersistedMovieDownload[] {
       movieId,
       magnetUri: magnetUri.trim(),
       displayTitle: typeof r.displayTitle === 'string' ? r.displayTitle : 'Torrent',
+      movieTitle: typeof r.movieTitle === 'string' ? r.movieTitle : null,
       indexerSeeders:
         typeof r.indexerSeeders === 'number' && r.indexerSeeders >= 0
           ? Math.floor(r.indexerSeeders)

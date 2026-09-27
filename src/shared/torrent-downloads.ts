@@ -1,5 +1,7 @@
 export type AddMovieTorrentPayload = {
   movieId: number
+  /** Catalog title, stored so lists never need a TMDB lookup. */
+  movieTitle: string
   magnetUri: string
   /** Row title from search results. */
   title: string
@@ -26,6 +28,10 @@ export type MovieTorrentDownloadStatus =
 export type MovieTorrentDownloadSnapshot = {
   downloadId: string
   movieId: number
+  /** Null for downloads saved before titles were recorded. */
+  movieTitle: string | null
+  /** Folder holding this download's files. */
+  downloadDir: string
   magnetUri: string
   displayTitle: string
   status: MovieTorrentDownloadStatus

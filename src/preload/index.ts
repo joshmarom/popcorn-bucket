@@ -22,6 +22,8 @@ const api = {
     openVidkingEmbed: (url: string): Promise<void> =>
       ipcRenderer.invoke('app:openVidkingEmbed', url),
     clearVidkingData: (): Promise<void> => ipcRenderer.invoke('app:clearVidkingData'),
+    showDownloadInFolder: (downloadId: string): Promise<void> =>
+      ipcRenderer.invoke('app:showDownloadInFolder', downloadId),
     getVidkingDiagnostics: (): Promise<
       {
         at: string
@@ -80,6 +82,11 @@ const api = {
     ): Promise<TorrentStreamStartResponse> =>
       ipcRenderer.invoke('torrent:startMoviePlayback', { movieId, downloadId }),
     endInlinePlayback: (): Promise<void> => ipcRenderer.invoke('torrent:endInlinePlayback'),
+    onDownloadsUpdate: (cb: (rows: MovieTorrentDownloadSnapshot[]) => void): (() => void) => {
+      const listener = (_e: unknown, rows: MovieTorrentDownloadSnapshot[]): void => cb(rows)
+      ipcRenderer.on('downloads:update', listener)
+      return () => ipcRenderer.removeListener('downloads:update', listener)
+    },
     setMovieDownloadPaused: (
       movieId: number,
       downloadId: string,

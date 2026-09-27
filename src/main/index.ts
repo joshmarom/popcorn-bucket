@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc-handlers'
 import { migratePlaintextSecrets } from './settings-store'
+import { resetDownloadsBroadcast, startDownloadsBroadcast } from './downloads-broadcast'
 import { guardVidkingWebviews, installVidkingSession } from './vidking-session'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 
@@ -56,6 +57,7 @@ function createWindow(): void {
   })
 
   guardVidkingWebviews(mainWindow.webContents)
+  mainWindow.webContents.on('did-finish-load', resetDownloadsBroadcast)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     if (isSafeTorrentDetailsUrl(details.url)) {
@@ -93,6 +95,7 @@ app.whenReady().then(() => {
   installLocalMediaProtocol()
   registerIpcHandlers()
   restoreMovieDownloadsOnStartup()
+  startDownloadsBroadcast()
 
   createWindow()
 

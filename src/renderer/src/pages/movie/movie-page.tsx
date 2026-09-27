@@ -50,23 +50,12 @@ function MoviePageContent(): ReactElement {
     }
   }, [s.playDialogOpen, s.movieId])
 
-  const buffering = s.quickPlay.phase === 'buffering'
   useEffect(() => {
-    if (s.tab !== 'sources' && !buffering) {
-      return
-    }
-    const tick = (): void => {
-      void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {
-        store.setState({ downloads: rows })
-        store.getState().advanceQuickPlay()
-      })
-    }
-    tick()
-    const interval = setInterval(tick, 1000)
-    return (): void => {
-      clearInterval(interval)
-    }
-  }, [s.tab, buffering, s.movieId, store])
+    return window.api.torrent.onDownloadsUpdate((rows) => {
+      store.setState({ downloads: rows.filter((r) => r.movieId === s.movieId) })
+      store.getState().advanceQuickPlay()
+    })
+  }, [s.movieId, store])
 
   useEffect(() => {
     void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {

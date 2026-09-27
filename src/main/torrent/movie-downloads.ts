@@ -66,6 +66,7 @@ type DownloadRecord = {
   movieId: number
   magnetUri: string
   displayTitle: string
+  movieTitle: string | null
   indexerSeeders: number
   indexerLeechers: number
   createdAt: number
@@ -151,12 +152,20 @@ function wantedFiles(rec: DownloadRecord, t: WtTorrent): WtFile[] {
   return t.files.filter((f) => rec.wantedPaths.includes(f.path))
 }
 
+/**
+ * WebTorrent's `file.downloaded` under-counts a file that ends exactly on a piece boundary, so
+ * completeness comes from the verified-piece bitfield instead.
+ */
+function isFileComplete(t: WtTorrent, f: WtFile): boolean {
+  return f.length === 0 || hasFileRange(t, f, 0, f.length)
+}
+
 function wantedTotals(rec: DownloadRecord, t: WtTorrent): { length: number; downloaded: number } {
   let length = 0
   let downloaded = 0
   for (const f of wantedFiles(rec, t)) {
     length += f.length
-    downloaded += Math.min(f.length, f.downloaded)
+    downloaded += isFileComplete(t, f) ? f.length : Math.min(f.length, f.downloaded)
   }
   return { length, downloaded }
 }
@@ -166,7 +175,7 @@ function isWantedDone(rec: DownloadRecord, t: WtTorrent): boolean {
   if (t.done) return true
   if (!t.ready) return false
   const files = wantedFiles(rec, t)
-  return files.length > 0 && files.every((f) => f.downloaded >= f.length)
+  return files.length > 0 && files.every((f) => isFileComplete(t, f))
 }
 
 const records = new Map<string, DownloadRecord>()
@@ -245,6 +254,7 @@ function serializeRecord(rec: DownloadRecord): PersistedMovieDownload {
     movieId: rec.movieId,
     magnetUri: rec.magnetUri,
     displayTitle: rec.displayTitle,
+    movieTitle: rec.movieTitle,
     indexerSeeders: rec.indexerSeeders,
     indexerLeechers: rec.indexerLeechers,
     createdAt: rec.createdAt,
@@ -257,7 +267,14 @@ function serializeRecord(rec: DownloadRecord): PersistedMovieDownload {
   }
 }
 
+/**
+ * Set once shutdown begins. Tearing down the client fires torrent `close` events whose handlers
+ * schedule saves; without this guard those saves would write the half-torn-down list to disk.
+ */
+let shuttingDown = false
+
 function schedulePersistMovieDownloads(): void {
+  if (shuttingDown) return
   if (persistTimer != null) clearTimeout(persistTimer)
   persistTimer = setTimeout(() => {
     persistTimer = null
@@ -269,6 +286,7 @@ function schedulePersistMovieDownloads(): void {
 
 /** Synchronous save — call before process exit / shutdown. */
 export function flushMovieDownloadsPersistence(): void {
+  if (shuttingDown) return
   if (persistTimer != null) {
     clearTimeout(persistTimer)
     persistTimer = null
@@ -293,6 +311,7 @@ export function restoreMovieDownloadsOnStartup(): void {
       movieId: row.movieId,
       magnetUri: row.magnetUri.trim(),
       displayTitle: row.displayTitle.trim() || 'Torrent',
+      movieTitle: row.movieTitle,
       indexerSeeders: row.indexerSeeders,
       indexerLeechers: row.indexerLeechers,
       createdAt: row.createdAt,
@@ -426,6 +445,8 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
   const base: MovieTorrentDownloadSnapshot = {
     downloadId: rec.id,
     movieId: rec.movieId,
+    movieTitle: rec.movieTitle,
+    downloadDir: rec.downloadDir,
     magnetUri: rec.magnetUri,
     displayTitle: rec.displayTitle,
     status: rec.status,
@@ -593,18 +614,17 @@ function onTorrentReady(rec: DownloadRecord, torrent: WtTorrent): void {
   schedulePersistMovieDownloads()
 }
 
-/** Torrents start with nothing selected; fetch only the video and its sidecar subtitles. */
+/**
+ * Torrents start with nothing selected; fetch only the video and its sidecar subtitles.
+ * Never `deselect()` the other files: WebTorrent removes whole piece ranges, so deselecting a
+ * neighbour also drops the piece it shares with the video, and the download never finishes.
+ */
 function selectWantedFiles(rec: DownloadRecord, torrent: WtTorrent, video: WtFile): void {
   const subtitles = listTorrentSidecarSubtitles(torrent, video.path)
   rec.wantedPaths = [video.path, ...subtitles.map((s) => s.path)]
   for (const f of torrent.files) {
-    if (f.path === video.path) {
-      f.select?.(4)
-    } else if (rec.wantedPaths.includes(f.path)) {
-      f.select?.(2)
-    } else {
-      f.deselect?.()
-    }
+    if (f.path === video.path) f.select?.(4)
+    else if (rec.wantedPaths.includes(f.path)) f.select?.(2)
   }
 }
 
@@ -680,6 +700,7 @@ export function addMovieDownload(payload: AddMovieTorrentPayload): AddMovieTorre
     movieId: payload.movieId,
     magnetUri: magnet,
     displayTitle: payload.title.trim() || 'Torrent',
+    movieTitle: payload.movieTitle.trim() || null,
     indexerSeeders: Math.max(0, Math.floor(payload.indexerSeeders)),
     indexerLeechers: Math.max(0, Math.floor(payload.indexerLeechers)),
     createdAt: Date.now(),
@@ -700,6 +721,14 @@ export function getMovieDownloads(movieId: number): MovieTorrentDownloadSnapshot
     .filter((r) => r.movieId === movieId)
     .sort((a, b) => b.createdAt - a.createdAt)
     .map(buildSnapshot)
+}
+
+/** The finished video if known, else the download's folder; null for unknown ids. */
+export function getDownloadLocation(downloadId: string): string | null {
+  const rec = records.get(downloadId)
+  if (!rec) return null
+  if (rec.playFileAbsPath && existsSync(rec.playFileAbsPath)) return rec.playFileAbsPath
+  return existsSync(rec.downloadDir) ? rec.downloadDir : null
 }
 
 export function getAllMovieDownloads(): MovieTorrentDownloadSnapshot[] {
@@ -1011,8 +1040,12 @@ async function startLocalPlayback(rec: DownloadRecord): Promise<TorrentStreamSta
   })
 }
 
+/** Saves the list, then tears down playback and the client. Nothing is written after this. */
 export function shutdownMovieDownloads(): void {
-  records.clear()
-  shutdownCurrentMpvSession()
+  if (shuttingDown) return
+  flushMovieDownloadsPersistence()
+  shuttingDown = true
+  void shutdownCurrentMpvSession()
   shutdownWebTorrentCore()
+  records.clear()
 }
