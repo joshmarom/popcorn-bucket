@@ -8,6 +8,8 @@ export type WtFile = {
   name: string
   path: string
   length: number
+  /** Byte offset of this file within the whole torrent. */
+  offset?: number
   /** Bytes fetched for this file (WebTorrent computed getter). */
   downloaded: number
   progress: number
@@ -31,6 +33,10 @@ export type WtTorrent = {
   numPeers: number
   progress: number
   files: WtFile[]
+  pieceLength?: number
+  bitfield?: { get: (index: number) => boolean }
+  /** Prioritize a piece range (inclusive). */
+  select?: (start: number, end: number, priority?: number) => void
   pause?: () => void
   resume?: () => void
   once: (ev: string, fn: (err?: Error) => void) => void
@@ -169,15 +175,6 @@ export function buildStreamUrl(infoHash: string, filePath: string, port: number)
   const hash = String(infoHash).toLowerCase()
   const segments = filePath.split('/').map((p) => encodeURIComponent(p))
   return `${streamLoopbackHttpOrigin(port)}${STREAM_PATH}/${hash}/${segments.join('/')}`
-}
-
-/** Bytes needed on the chosen file before we enable Play (start of stream + moov headroom). */
-export function playbackReadyBytes(playFile: WtFile): number {
-  const len = playFile.length || 0
-  if (len <= 0) return 0
-  const minAbs = 3 * 1024 * 1024
-  const minFrac = 0.04 * len
-  return Math.min(len, Math.max(minAbs, minFrac))
 }
 
 export function shutdownWebTorrentCore(): void {

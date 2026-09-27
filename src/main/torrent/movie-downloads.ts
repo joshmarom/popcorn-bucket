@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative } from 'node:path'
 import { isValidMagnetUri } from '@shared/torrent'
@@ -18,7 +18,6 @@ import {
   getReadyClient,
   listTorrentSidecarSubtitles,
   pickPlayableFile,
-  playbackReadyBytes,
   shutdownWebTorrentCore,
   type WtFile,
   type WtTorrent
@@ -40,6 +39,13 @@ import { getWatchProgress, recordWatchProgress } from '../watch-history'
 import { resumePosition } from '@shared/watch-history'
 import { localMediaUrl } from '../local-media-protocol'
 import { PUBLIC_TRACKERS } from './public-trackers'
+import {
+  MP4_HEAD_PROBE_BYTES,
+  headBytesNeeded,
+  isMp4Container,
+  parseMp4Layout,
+  type Mp4Layout
+} from './playback-readiness'
 
 /** Containers Chromium refuses to play inline; we hand these off to mpv. */
 const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
@@ -74,6 +80,62 @@ type DownloadRecord = {
   pendingDetach?: boolean
   /** Paths (within the torrent) of the only files we download: the video and its subtitles. */
   wantedPaths: string[]
+  /** MP4 index location, once the head of the file is on disk. */
+  mp4Layout?: Mp4Layout
+}
+
+/** True when every piece covering bytes [start, end) of `file` is downloaded and verified. */
+function hasFileRange(t: WtTorrent, file: WtFile, start: number, end: number): boolean {
+  if (end <= start) return true
+  const pieceLength = t.pieceLength
+  const bitfield = t.bitfield
+  if (!pieceLength || !bitfield || file.offset == null) return false
+  const first = Math.floor((file.offset + start) / pieceLength)
+  const last = Math.floor((file.offset + end - 1) / pieceLength)
+  for (let i = first; i <= last; i++) {
+    if (!bitfield.get(i)) return false
+  }
+  return true
+}
+
+function readFileHead(absPath: string, bytes: number): Uint8Array | null {
+  let fd: number | null = null
+  try {
+    fd = openSync(absPath, 'r')
+    const buf = Buffer.alloc(bytes)
+    const n = readSync(fd, buf, 0, bytes, 0)
+    return new Uint8Array(buf.buffer, buf.byteOffset, n)
+  } catch {
+    return null
+  } finally {
+    if (fd != null) closeSync(fd)
+  }
+}
+
+/**
+ * Playback can start once the start of the file is on disk and, for MP4s whose index sits at the
+ * end, that index too. The index range is fetched with top priority as soon as it is located.
+ */
+function isReadyToPlay(rec: DownloadRecord, t: WtTorrent, play: WtFile): boolean {
+  if (!hasFileRange(t, play, 0, headBytesNeeded(play.length))) return false
+  if (!isMp4Container(play.name)) return true
+  if (rec.mp4Layout == null) {
+    const head = readFileHead(
+      join(rec.downloadDir, play.path),
+      Math.min(play.length, MP4_HEAD_PROBE_BYTES)
+    )
+    if (!head) return false
+    rec.mp4Layout = parseMp4Layout(head, play.length)
+    if (rec.mp4Layout.kind === 'moov-at-end' && t.pieceLength && play.offset != null) {
+      const first = Math.floor((play.offset + rec.mp4Layout.moovOffset) / t.pieceLength)
+      const last = Math.floor((play.offset + play.length - 1) / t.pieceLength)
+      t.select?.(first, last, 5)
+    }
+  }
+  if (rec.mp4Layout.kind === 'moov-at-end') {
+    return hasFileRange(t, play, rec.mp4Layout.moovOffset, play.length)
+  }
+  return true
 }
 
 function wantedFiles(rec: DownloadRecord, t: WtTorrent): WtFile[] {
@@ -418,8 +480,7 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
       ? (t.files.find((f) => f.path === rec.playFile!.path) ?? rec.playFile)
       : null
   if (play && play.length > 0) {
-    const need = playbackReadyBytes(play)
-    base.canPlay = Boolean(done || play.downloaded >= need)
+    base.canPlay = done || isReadyToPlay(rec, t, play)
     base.playFileLabel = play.name
   }
 
