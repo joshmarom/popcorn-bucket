@@ -34,6 +34,7 @@ const api = {
   },
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
+    isEncrypted: (): Promise<boolean> => ipcRenderer.invoke('settings:isEncrypted'),
     set: (partial: Partial<AppSettings>): Promise<void> =>
       ipcRenderer.invoke('settings:set', partial)
   },

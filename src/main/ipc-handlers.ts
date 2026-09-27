@@ -13,7 +13,12 @@ import {
 import { isSafeTorrentDetailsUrl, type TorrentSearchResponse } from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
-import { getAppSettings, getStoredSettings, setAppSettings } from './settings-store'
+import {
+  getAppSettings,
+  getStoredSettings,
+  isSecretStorageEncrypted,
+  setAppSettings
+} from './settings-store'
 import { searchTorrentSources } from './torrent/orchestrator'
 import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
@@ -111,6 +116,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:get', () => {
     return getStoredSettings()
   })
+
+  ipcMain.handle('settings:isEncrypted', (): boolean => isSecretStorageEncrypted())
 
   ipcMain.handle('settings:set', (_evt, raw: unknown) => {
     const parsed = settingsInput.safeParse(raw)

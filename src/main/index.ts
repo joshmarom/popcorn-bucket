@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc-handlers'
+import { migratePlaintextSecrets } from './settings-store'
 import { guardVidkingWebviews, installVidkingSession } from './vidking-session'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 
@@ -86,6 +87,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  migratePlaintextSecrets()
   lockDownMainSession()
   installVidkingSession()
   installLocalMediaProtocol()

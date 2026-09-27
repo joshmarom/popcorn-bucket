@@ -38,6 +38,8 @@ export type PopcornApi = {
   }
   settings: {
     get(): Promise<AppSettings>
+    /** False when the OS offers no secure storage and keys are saved as plain text. */
+    isEncrypted(): Promise<boolean>
     set(partial: Partial<AppSettings>): Promise<void>
   }
   catalog: {

@@ -9,8 +9,10 @@ export function SettingsPage(): ReactElement {
   const [settingsToken, setSettingsToken] = useState('')
   const [omdbKey, setOmdbKey] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [keysEncrypted, setKeysEncrypted] = useState(true)
 
   const loadSettings = useCallback(async (): Promise<void> => {
+    setKeysEncrypted(await window.api.settings.isEncrypted())
     const s = await window.api.settings.get()
     setSettingsKey(s.tmdbApiKey)
     setSettingsToken(s.tmdbReadAccessToken)
@@ -45,8 +47,15 @@ export function SettingsPage(): ReactElement {
           >
             themoviedb.org/settings/api
           </a>
-          . Keys are stored locally on this machine only.
+          . Keys are stored locally on this machine only
+          {keysEncrypted ? ', encrypted with your system keychain.' : '.'}
         </p>
+        {!keysEncrypted ? (
+          <p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+            This system has no secure storage available, so keys are saved as plain text in the
+            app&apos;s settings file.
+          </p>
+        ) : null}
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium" htmlFor="tmdb-token">
