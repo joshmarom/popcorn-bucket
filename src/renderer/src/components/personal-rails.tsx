@@ -71,9 +71,8 @@ function Rail({ title, items }: { title: string; items: RailItem[] }): ReactElem
   )
 }
 
-/** "Continue watching" and "My list" rails, built from local watch history and the watchlist. */
+/** "My list" rail, built from the local watchlist. Continue watching has its own screen. */
 export function PersonalRails(): ReactElement | null {
-  const [continueItems, setContinueItems] = useState<RailItem[]>([])
   const [listItems, setListItems] = useState<RailItem[]>([])
 
   useEffect(() => {
@@ -83,22 +82,10 @@ export function PersonalRails(): ReactElement | null {
         window.api.history.list(),
         window.api.watchlist.get()
       ])
-      // Episodes resume from their show page, not from movie rails.
-      const resumable = history
-        .filter((p) => resumePosition(p) > 0 && !isEpisodeMediaKey(p.movieId))
-        .slice(0, RAIL_MAX)
-      const listIds = watchlist.slice(0, RAIL_MAX)
-      const movies = await loadMovies([
-        ...new Set([...resumable.map((p) => p.movieId), ...listIds])
-      ])
+      const listIds = watchlist.filter((id) => !isEpisodeMediaKey(id)).slice(0, RAIL_MAX)
+      const movies = await loadMovies(listIds)
       if (cancelled) return
       const byId = new Map(history.map((p) => [p.movieId, p]))
-      setContinueItems(
-        resumable.flatMap((p) => {
-          const movie = movies.get(p.movieId)
-          return movie ? [{ movie, progress: p }] : []
-        })
-      )
       setListItems(
         listIds.flatMap((id) => {
           const movie = movies.get(id)
@@ -112,11 +99,6 @@ export function PersonalRails(): ReactElement | null {
     }
   }, [])
 
-  if (continueItems.length === 0 && listItems.length === 0) return null
-  return (
-    <div className="space-y-6">
-      <Rail title="Continue watching" items={continueItems} />
-      <Rail title="My list" items={listItems} />
-    </div>
-  )
+  if (listItems.length === 0) return null
+  return <Rail title="My list" items={listItems} />
 }

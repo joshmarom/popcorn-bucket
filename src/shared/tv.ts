@@ -44,9 +44,15 @@ export type TvSeasonDetails = {
   episodes: TvEpisode[]
 }
 
-export type TvSearchResponse =
-  | { ok: true; results: TvShowListItem[] }
-  | { ok: false; error: string }
+/** One TMDB page of shows (20 per page). */
+export type TvListPage = {
+  results: TvShowListItem[]
+  page: number
+  totalPages: number
+  totalResults: number
+}
+
+export type TvSearchResponse = ({ ok: true } & TvListPage) | { ok: false; error: string }
 
 export type TvShowResponse = { ok: true; show: TvShowDetails } | { ok: false; error: string }
 

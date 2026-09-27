@@ -27,7 +27,7 @@ import { searchTorrentSources } from './torrent/orchestrator'
 import { listProviderHealth } from './torrent/scrape-providers'
 import type { ProviderHealth } from '@shared/provider-health'
 import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
-import { getTvSeason, getTvShowDetails, searchTvShows } from './tmdb-tv'
+import { getPopularTvShows, getTvSeason, getTvShowDetails, searchTvShows } from './tmdb-tv'
 import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
 import {
@@ -67,6 +67,14 @@ import { readVidkingDiagnostics, type VidkingNetEvent } from './vidking-diagnost
 
 const searchInput = z.object({
   query: z.string().min(1).max(200)
+})
+
+const pageInput = z.object({
+  page: z.number().int().positive().max(500).optional()
+})
+
+const tvSearchInput = searchInput.extend({
+  page: z.number().int().positive().max(500).optional()
 })
 
 const movieInput = z.object({
@@ -475,11 +483,24 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle('tv:popular', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
+    const parsed = pageInput.safeParse(raw ?? {})
+    if (!parsed.success) return { ok: false, error: 'Invalid page.' }
+    try {
+      return { ok: true, ...(await getPopularTvShows(getAppSettings(), parsed.data.page ?? 1)) }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
   ipcMain.handle('tv:search', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
-    const parsed = searchInput.safeParse(raw)
+    const parsed = tvSearchInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Enter a search query.' }
     try {
-      return { ok: true, results: await searchTvShows(getAppSettings(), parsed.data.query) }
+      return {
+        ok: true,
+        ...(await searchTvShows(getAppSettings(), parsed.data.query, parsed.data.page ?? 1))
+      }
     } catch (e) {
       return { ok: false, error: mapCatalogError(e).error }
     }

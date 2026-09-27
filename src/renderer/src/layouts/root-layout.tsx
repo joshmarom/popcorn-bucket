@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Download, Settings } from 'lucide-react'
+import { Download, History, Settings, Tv } from 'lucide-react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useHoverIntent } from '@/hooks/use-hover-intent'
 import { cn } from '@/lib/utils'
@@ -92,6 +92,38 @@ export function RootLayout(): ReactElement {
           className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6"
           aria-label="Main"
         >
+          <SidebarHoverLabel label="Continue watching">
+            {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
+              <NavLink
+                to="/continue"
+                onMouseEnter={onMouseEnter}
+                onMouseLeave={onMouseLeave}
+                onFocus={onFocus}
+                onBlur={onBlur}
+                className={({ isActive }) => navIconClassName(isActive)}
+                aria-label="Continue watching"
+              >
+                <History className="size-5" />
+              </NavLink>
+            )}
+          </SidebarHoverLabel>
+
+          <SidebarHoverLabel label="TV shows">
+            {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
+              <NavLink
+                to="/tv"
+                onMouseEnter={onMouseEnter}
+                onMouseLeave={onMouseLeave}
+                onFocus={onFocus}
+                onBlur={onBlur}
+                className={({ isActive }) => navIconClassName(isActive)}
+                aria-label="TV shows"
+              >
+                <Tv className="size-5" />
+              </NavLink>
+            )}
+          </SidebarHoverLabel>
+
           <SidebarHoverLabel label="Downloads">
             {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
               <NavLink

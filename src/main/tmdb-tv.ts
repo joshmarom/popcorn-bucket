@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { AppSettings } from '@shared/app-settings'
-import type { TvSeasonDetails, TvShowDetails, TvShowListItem } from '@shared/tv'
+import type { TvListPage, TvSeasonDetails, TvShowDetails, TvShowListItem } from '@shared/tv'
 import { backdropUrl, posterUrl, tmdbFetchJson } from './tmdb'
 
 const yearOf = (date: string | null | undefined): number | null => {
@@ -17,28 +17,73 @@ const tvRowSchema = z.object({
   vote_average: z.number().optional()
 })
 
-const tvSearchSchema = z.object({ results: z.array(tvRowSchema) })
+const tvListSchema = z.object({
+  page: z.number().optional(),
+  total_pages: z.number().optional(),
+  total_results: z.number().optional(),
+  results: z.array(tvRowSchema)
+})
+
+/** TMDB refuses pages past this. */
+const TMDB_MAX_PAGE = 500
+
+function clampPage(page: number): number {
+  if (!Number.isFinite(page) || page < 1) return 1
+  return Math.min(TMDB_MAX_PAGE, Math.floor(page))
+}
+
+async function fetchTvList(
+  settings: AppSettings,
+  path: string,
+  params: Record<string, string>,
+  page: number,
+  cacheTtlMs: number
+): Promise<TvListPage> {
+  const json = await tmdbFetchJson(
+    settings,
+    path,
+    { ...params, page: String(clampPage(page)) },
+    { cacheTtlMs }
+  )
+  const parsed = tvListSchema.safeParse(json)
+  if (!parsed.success) throw new Error('BAD_RESPONSE')
+  const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, parsed.data.total_pages ?? 1))
+  return {
+    results: parsed.data.results.map(mapTvRow),
+    page: parsed.data.page ?? clampPage(page),
+    totalPages,
+    totalResults: Math.max(0, parsed.data.total_results ?? parsed.data.results.length)
+  }
+}
 
 export async function searchTvShows(
   settings: AppSettings,
-  query: string
-): Promise<TvShowListItem[]> {
-  const json = await tmdbFetchJson(
+  query: string,
+  page = 1
+): Promise<TvListPage> {
+  return fetchTvList(
     settings,
     '/search/tv',
-    { query: query.trim(), include_adult: 'false', page: '1' },
-    { cacheTtlMs: 1000 * 60 * 30 }
+    { query: query.trim(), include_adult: 'false' },
+    page,
+    1000 * 60 * 30
   )
-  const parsed = tvSearchSchema.safeParse(json)
-  if (!parsed.success) throw new Error('BAD_RESPONSE')
-  return parsed.data.results.map((r) => ({
+}
+
+function mapTvRow(r: z.infer<typeof tvRowSchema>): TvShowListItem {
+  return {
     id: r.id,
     name: r.name,
     firstAirYear: yearOf(r.first_air_date),
     posterUrl: posterUrl(r.poster_path ?? null, 'w185'),
     overview: r.overview ?? '',
     voteAverage: r.vote_average ?? null
-  }))
+  }
+}
+
+/** One page of TMDB's popular TV list. */
+export async function getPopularTvShows(settings: AppSettings, page = 1): Promise<TvListPage> {
+  return fetchTvList(settings, '/tv/popular', {}, page, 1000 * 60 * 60)
 }
 
 const tvDetailsSchema = z.object({

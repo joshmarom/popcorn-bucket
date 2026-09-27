@@ -15,7 +15,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { MovieGrid } from '@/components/movie-grid'
 import { PersonalRails } from '@/components/personal-rails'
-import { TvSearchRail } from '@/components/tv-search-rail'
 import { Card, CardFooter, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
@@ -430,7 +429,7 @@ export function HomePage(): ReactElement {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
           <Input
             className="max-w-md"
-            placeholder="Search movies and TV shows…"
+            placeholder="Search movies…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -445,7 +444,6 @@ export function HomePage(): ReactElement {
 
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
         {!showingSearch && <PersonalRails />}
-        {showingSearch && <TvSearchRail query={debouncedQuery.trim()} />}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">

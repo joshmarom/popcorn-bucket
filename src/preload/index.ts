@@ -46,8 +46,10 @@ const api = {
       ipcRenderer.invoke('settings:set', partial)
   },
   tv: {
-    search: (query: string): Promise<TvSearchResponse> =>
-      ipcRenderer.invoke('tv:search', { query }),
+    popular: (page?: number): Promise<TvSearchResponse> =>
+      ipcRenderer.invoke('tv:popular', { page }),
+    search: (query: string, page?: number): Promise<TvSearchResponse> =>
+      ipcRenderer.invoke('tv:search', { query, page }),
     getShow: (id: number): Promise<TvShowResponse> => ipcRenderer.invoke('tv:getShow', { id }),
     getSeason: (showId: number, seasonNumber: number): Promise<TvSeasonResponse> =>
       ipcRenderer.invoke('tv:getSeason', { showId, seasonNumber })

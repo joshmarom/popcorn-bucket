@@ -50,7 +50,8 @@ export type PopcornApi = {
     set(partial: Partial<AppSettings>): Promise<void>
   }
   tv: {
-    search(query: string): Promise<TvSearchResponse>
+    popular(page?: number): Promise<TvSearchResponse>
+    search(query: string, page?: number): Promise<TvSearchResponse>
     getShow(id: number): Promise<TvShowResponse>
     getSeason(showId: number, seasonNumber: number): Promise<TvSeasonResponse>
   }
