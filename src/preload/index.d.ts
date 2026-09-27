@@ -13,6 +13,7 @@ import type {
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
+import type { Preferences } from '@shared/preferences'
 
 export type PopcornApi = {
   app: {
@@ -42,6 +43,15 @@ export type PopcornApi = {
     /** False when the OS offers no secure storage and keys are saved as plain text. */
     isEncrypted(): Promise<boolean>
     set(partial: Partial<AppSettings>): Promise<void>
+  }
+  prefs: {
+    get(): Promise<Preferences>
+    set(
+      partial: Partial<Preferences>
+    ): Promise<{ ok: true; prefs: Preferences } | { ok: false; error: string }>
+    /** Native folder picker; null when cancelled. */
+    chooseDownloadDir(): Promise<string | null>
+    defaultDownloadDir(): Promise<string>
   }
   catalog: {
     nowPlaying(opts?: { forceRefresh?: boolean }): Promise<CatalogSearchResponse>

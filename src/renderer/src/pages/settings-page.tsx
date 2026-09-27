@@ -3,11 +3,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NETWORK_NOTICE_TEXT } from '@/lib/network-notice'
+import { PreferencesSection } from './preferences-section'
 
 export function SettingsPage(): ReactElement {
   const [settingsKey, setSettingsKey] = useState('')
   const [settingsToken, setSettingsToken] = useState('')
   const [omdbKey, setOmdbKey] = useState('')
+  const [openSubtitlesKey, setOpenSubtitlesKey] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [keysEncrypted, setKeysEncrypted] = useState(true)
 
@@ -17,6 +19,7 @@ export function SettingsPage(): ReactElement {
     setSettingsKey(s.tmdbApiKey)
     setSettingsToken(s.tmdbReadAccessToken)
     setOmdbKey(s.omdbApiKey)
+    setOpenSubtitlesKey(s.openSubtitlesApiKey)
   }, [])
 
   useEffect(() => {
@@ -27,7 +30,8 @@ export function SettingsPage(): ReactElement {
     await window.api.settings.set({
       tmdbApiKey: settingsKey,
       tmdbReadAccessToken: settingsToken,
-      omdbApiKey: omdbKey
+      omdbApiKey: omdbKey,
+      openSubtitlesApiKey: openSubtitlesKey
     })
     setSettingsSaved(true)
   }
@@ -102,6 +106,23 @@ export function SettingsPage(): ReactElement {
           <code className="bg-muted rounded px-1 py-0.5">OMDB_API_KEY</code>.
         </p>
       </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium" htmlFor="opensubtitles-key">
+          OpenSubtitles API key (optional)
+        </label>
+        <Input
+          id="opensubtitles-key"
+          value={openSubtitlesKey}
+          onChange={(e) => setOpenSubtitlesKey(e.target.value)}
+          placeholder="From opensubtitles.com → API consumers"
+          spellCheck={false}
+          className="font-mono text-xs"
+        />
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Fetches subtitles in your preferred language when a torrent has none. Env:{' '}
+          <code className="bg-muted rounded px-1 py-0.5">OPENSUBTITLES_API_KEY</code>.
+        </p>
+      </div>
       <div className="flex items-center gap-3">
         <Button type="button" onClick={() => void saveSettings()}>
           Save
@@ -116,6 +137,7 @@ export function SettingsPage(): ReactElement {
         and <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">TMDB_API_KEY</code>{' '}
         in the environment before launch; they are used only when a field here is left empty.
       </p>
+      <PreferencesSection />
       <section className="space-y-2 border-t border-border pt-6">
         <h2 className="text-lg font-semibold tracking-tight">Network</h2>
         <p className="text-muted-foreground text-sm leading-relaxed">{NETWORK_NOTICE_TEXT}</p>

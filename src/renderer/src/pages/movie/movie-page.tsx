@@ -54,6 +54,9 @@ function MoviePageContent(): ReactElement {
     void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {
       store.setState({ downloads: rows })
     })
+    void window.api.prefs.get().then((p) => {
+      store.getState().setRankingPrefs({ preferredResolution: p.preferredResolution })
+    })
   }, [s.movieId, store])
 
   useEffect(() => {

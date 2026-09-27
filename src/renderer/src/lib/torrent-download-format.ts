@@ -22,6 +22,8 @@ export function formatSpeed(bytesPerSecond: number): string {
 
 export function statusLabel(status: MovieTorrentDownloadSnapshot['status']): string {
   switch (status) {
+    case 'queued':
+      return 'Queued'
     case 'pending_metadata':
       return 'Fetching metadata'
     case 'downloading':

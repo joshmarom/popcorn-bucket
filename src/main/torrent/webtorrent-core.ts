@@ -1,6 +1,8 @@
 import { app } from 'electron'
 import type { Readable } from 'node:stream'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
+import type { Preferences } from '@shared/preferences'
+import { getPreferences } from '../preferences-store'
 
 export const STREAM_PATH = '/popcorn-webtorrent'
 
@@ -51,6 +53,8 @@ export type WebTorrentClient = {
   remove: (id: string | unknown, opts?: Record<string, unknown>) => Promise<void>
   destroy: (cb?: () => void) => void
   createServer: (opts: Record<string, unknown>, force: string) => WtHttpServer
+  throttleDownload?: (rate: number) => void
+  throttleUpload?: (rate: number) => void
 }
 
 export type WtHttpServer = {
@@ -76,19 +80,39 @@ async function getWebTorrentConstructor(): Promise<new (opts?: object) => WebTor
   return Ctor
 }
 
-/** Root folder for torrent payload files (under the OS Downloads directory). */
-export function baseDownloadDir(): string {
+export function defaultDownloadDir(): string {
   return join(app.getPath('downloads'), 'Popcorn Bucket')
+}
+
+/** Root folder for new downloads: the user's chosen folder, else `Downloads/Popcorn Bucket`. */
+export function baseDownloadDir(): string {
+  const chosen = getPreferences().downloadDir.trim()
+  return chosen && isAbsolute(chosen) ? chosen : defaultDownloadDir()
 }
 
 export function getClientIfExists(): WebTorrentClient | null {
   return client
 }
 
+/** WebTorrent takes bytes per second, with -1 meaning unlimited. */
+function rateFromKBps(kbps: number): number {
+  return kbps > 0 ? kbps * 1024 : -1
+}
+
+export function applyBandwidthLimits(prefs: Preferences): void {
+  if (!client) return
+  client.throttleDownload?.(rateFromKBps(prefs.downloadLimitKBps))
+  client.throttleUpload?.(rateFromKBps(prefs.uploadLimitKBps))
+}
+
 export async function getReadyClient(): Promise<WebTorrentClient> {
   const WT = await getWebTorrentConstructor()
   if (!client) {
-    client = new WT()
+    const prefs = getPreferences()
+    client = new WT({
+      downloadLimit: rateFromKBps(prefs.downloadLimitKBps),
+      uploadLimit: rateFromKBps(prefs.uploadLimitKBps)
+    })
   }
   if (client.ready) {
     return client

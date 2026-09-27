@@ -14,6 +14,7 @@ import type {
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
+import type { Preferences } from '@shared/preferences'
 
 const api = {
   app: {
@@ -38,6 +39,15 @@ const api = {
     isEncrypted: (): Promise<boolean> => ipcRenderer.invoke('settings:isEncrypted'),
     set: (partial: Partial<AppSettings>): Promise<void> =>
       ipcRenderer.invoke('settings:set', partial)
+  },
+  prefs: {
+    get: (): Promise<Preferences> => ipcRenderer.invoke('prefs:get'),
+    set: (
+      partial: Partial<Preferences>
+    ): Promise<{ ok: true; prefs: Preferences } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('prefs:set', partial),
+    chooseDownloadDir: (): Promise<string | null> => ipcRenderer.invoke('prefs:chooseDownloadDir'),
+    defaultDownloadDir: (): Promise<string> => ipcRenderer.invoke('prefs:defaultDownloadDir')
   },
   catalog: {
     nowPlaying: (opts?: { forceRefresh?: boolean }): Promise<CatalogSearchResponse> =>

@@ -29,7 +29,12 @@ const store = new (getStoreConstructor())({
   defaults: defaultAppSettings
 })
 
-const SECRET_KEYS = ['tmdbApiKey', 'tmdbReadAccessToken', 'omdbApiKey'] as const
+const SECRET_KEYS = [
+  'tmdbApiKey',
+  'tmdbReadAccessToken',
+  'omdbApiKey',
+  'openSubtitlesApiKey'
+] as const
 type SecretKey = (typeof SECRET_KEYS)[number]
 
 /** Values written by `safeStorage` carry this prefix; anything else is legacy plaintext. */
@@ -78,7 +83,8 @@ function envOverride(): Partial<AppSettings> {
   return {
     tmdbApiKey: process.env.TMDB_API_KEY ?? '',
     tmdbReadAccessToken: process.env.TMDB_READ_ACCESS_TOKEN ?? '',
-    omdbApiKey: process.env.OMDB_API_KEY ?? ''
+    omdbApiKey: process.env.OMDB_API_KEY ?? '',
+    openSubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY ?? ''
   }
 }
 
@@ -89,7 +95,9 @@ export function getAppSettings(): AppSettings {
   const tmdbReadAccessToken =
     readSecret('tmdbReadAccessToken').trim() || env.tmdbReadAccessToken?.trim() || ''
   const omdbApiKey = readSecret('omdbApiKey').trim() || env.omdbApiKey?.trim() || ''
-  return { tmdbApiKey, tmdbReadAccessToken, omdbApiKey }
+  const openSubtitlesApiKey =
+    readSecret('openSubtitlesApiKey').trim() || env.openSubtitlesApiKey?.trim() || ''
+  return { tmdbApiKey, tmdbReadAccessToken, omdbApiKey, openSubtitlesApiKey }
 }
 
 /** Values saved in the app (what the Settings screen should display). */
@@ -97,7 +105,8 @@ export function getStoredSettings(): AppSettings {
   return {
     tmdbApiKey: readSecret('tmdbApiKey'),
     tmdbReadAccessToken: readSecret('tmdbReadAccessToken'),
-    omdbApiKey: readSecret('omdbApiKey')
+    omdbApiKey: readSecret('omdbApiKey'),
+    openSubtitlesApiKey: readSecret('openSubtitlesApiKey')
   }
 }
 

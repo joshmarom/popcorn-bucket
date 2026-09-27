@@ -20,11 +20,8 @@ export type MovieTorrentFileProgress = {
 }
 
 export type MovieTorrentDownloadStatus =
-  | 'pending_metadata'
-  | 'downloading'
-  | 'paused'
-  | 'complete'
-  | 'error'
+  /** Waiting for a free slot (see the active-download cap in preferences). */
+  'queued' | 'pending_metadata' | 'downloading' | 'paused' | 'complete' | 'error'
 
 export type MovieTorrentDownloadSnapshot = {
   downloadId: string

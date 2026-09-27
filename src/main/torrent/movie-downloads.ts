@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { basename, isAbsolute, join, relative } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
+import type { Preferences } from '@shared/preferences'
+import { getPreferences, preferenceEvents } from '../preferences-store'
+import { getAppSettings } from '../settings-store'
+import { getMovieDetails, hasTmdbCredentials } from '../tmdb'
+import { computeMovieHash, fetchSubtitle, subtitleCacheRoot } from '../subtitles/opensubtitles'
 import { isValidMagnetUri } from '@shared/torrent'
 import type {
   AddMovieTorrentPayload,
@@ -11,8 +16,10 @@ import type {
 } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse, TorrentSubtitleTrack } from '@shared/torrent-stream'
 import {
+  applyBandwidthLimits,
   baseDownloadDir,
   buildStreamUrl,
+  defaultDownloadDir,
   ensureHttpServer,
   getClientIfExists,
   getReadyClient,
@@ -37,7 +44,7 @@ import {
 } from './mpv-controller'
 import { getWatchProgress, recordWatchProgress } from '../watch-history'
 import { resumePosition } from '@shared/watch-history'
-import { localMediaUrl } from '../local-media-protocol'
+import { localMediaUrl, setLocalMediaRoots } from '../local-media-protocol'
 import { PUBLIC_TRACKERS } from './public-trackers'
 import {
   MP4_HEAD_PROBE_BYTES,
@@ -197,6 +204,7 @@ function detachCompletedTorrent(rec: DownloadRecord): void {
     void c.remove(t, { destroyStore: false }).catch(() => {})
   }
   schedulePersistMovieDownloads()
+  startQueuedDownloads()
 }
 
 /** Called when a stream through the WebTorrent HTTP server stops (player closed or mpv exited). */
@@ -242,6 +250,7 @@ function serializeRecord(rec: DownloadRecord): PersistedMovieDownload {
     createdAt: rec.createdAt,
     playFilePath: rec.playFile?.path ?? rec.resumedPlayFilePath ?? null,
     playFileAbsPath: rec.playFileAbsPath ?? null,
+    downloadDir: rec.downloadDir,
     paused,
     completed: rec.status === 'complete',
     completeSummary
@@ -278,7 +287,7 @@ export function restoreMovieDownloadsOnStartup(): void {
     if (seenMagnets.has(mKey)) continue
     seenMagnets.add(mKey)
     if (records.has(row.id)) continue
-    const downloadDir = recordDownloadDir(row.movieId, row.id)
+    const downloadDir = row.downloadDir ?? join(defaultDownloadDir(), String(row.movieId), row.id)
     const rec: DownloadRecord = {
       id: row.id,
       movieId: row.movieId,
@@ -301,9 +310,46 @@ export function restoreMovieDownloadsOnStartup(): void {
       restoreCompletedFromDisk(rec, row.playFileAbsPath)
       continue
     }
+    if (!row.paused) rec.status = 'queued'
+    if (row.paused) void attachTorrent(rec)
+  }
+  startQueuedDownloads()
+}
+
+/** Downloads using a slot: attached to the swarm and not paused or finished. */
+function activeDownloadCount(): number {
+  let n = 0
+  for (const r of records.values()) {
+    if (r.status === 'pending_metadata' || r.status === 'downloading') n++
+  }
+  return n
+}
+
+/** Start queued downloads, oldest first, until the active-download cap is reached. */
+function startQueuedDownloads(): void {
+  const cap = getPreferences().maxActiveDownloads
+  const queued = [...records.values()]
+    .filter((r) => r.status === 'queued')
+    .sort((a, b) => a.createdAt - b.createdAt)
+  for (const rec of queued) {
+    if (activeDownloadCount() >= cap) break
+    rec.status = 'pending_metadata'
     void attachTorrent(rec)
   }
 }
+
+preferenceEvents.on('change', (prefs: Preferences) => {
+  applyBandwidthLimits(prefs)
+  startQueuedDownloads()
+})
+
+/** Every folder that holds downloaded files, for the local media protocol. */
+setLocalMediaRoots(() => [
+  subtitleCacheRoot(),
+  baseDownloadDir(),
+  defaultDownloadDir(),
+  ...[...records.values()].map((r) => r.downloadDir)
+])
 
 /** Completed downloads are never re-added to the swarm; only confirm the file is still there. */
 function restoreCompletedFromDisk(rec: DownloadRecord, savedAbsPath: string | null): void {
@@ -409,6 +455,9 @@ function buildSnapshot(rec: DownloadRecord): MovieTorrentDownloadSnapshot {
 
   const t = rec.wt
   if (!t) {
+    if (rec.status === 'queued') {
+      return base
+    }
     if (rec.status === 'pending_metadata') {
       return { ...base, status: 'pending_metadata' }
     }
@@ -636,12 +685,12 @@ export function addMovieDownload(payload: AddMovieTorrentPayload): AddMovieTorre
     createdAt: Date.now(),
     wt: null,
     playFile: null,
-    status: 'pending_metadata',
+    status: 'queued',
     downloadDir: recordDownloadDir(payload.movieId, id),
     wantedPaths: []
   }
   records.set(id, rec)
-  void attachTorrent(rec)
+  startQueuedDownloads()
   schedulePersistMovieDownloads()
   return { ok: true, downloadId: id }
 }
@@ -676,11 +725,16 @@ export async function removeMovieDownload(
       await c.remove(rec.wt, { destroyStore: true }).catch(() => {})
     }
   }
-  const rel = relative(baseDownloadDir(), rec.downloadDir)
-  if (rel && !rel.startsWith('..') && !isAbsolute(rel)) {
+  // Only ever delete the per-download folder `<root>/<movieId>/<downloadId>` this app created.
+  const owned =
+    basename(rec.downloadDir) === rec.id &&
+    basename(dirname(rec.downloadDir)) === String(rec.movieId) &&
+    isAbsolute(rec.downloadDir)
+  if (owned) {
     await rm(rec.downloadDir, { recursive: true, force: true }).catch(() => {})
   }
   schedulePersistMovieDownloads()
+  startQueuedDownloads()
   return { ok: true }
 }
 
@@ -696,6 +750,9 @@ export async function setMovieDownloadPaused(
   const torrent = rec.wt
   if (rec.status === 'complete' || torrent?.done) {
     return { ok: false, error: 'Cannot pause a completed download.' }
+  }
+  if (rec.status === 'queued') {
+    return { ok: false, error: 'Queued downloads start on their own when a slot frees up.' }
   }
   if (!torrent || torrent.destroyed) {
     return { ok: false, error: 'Torrent is not active yet.' }
@@ -767,7 +824,10 @@ export async function startMoviePlayback(
     // mpv reads the local WebTorrent HTTP URL, so its seeks become range requests that
     // WebTorrent prioritizes (seek-aware download).
     const streamUrl = buildStreamUrl(torrent.infoHash, live.path, port)
-    const external = await externalSubtitlePaths(rec)
+    const external = await externalSubtitlePaths(
+      rec,
+      sidecars.map((s) => s.displayName)
+    )
     return await launchPlayback({
       rec,
       label: live.name,
@@ -849,9 +909,44 @@ function inlineTracksForPaths(paths: string[]): TorrentSubtitleTrack[] {
   return out
 }
 
-/** Subtitles fetched from an online provider for this download (see subtitle lookup). */
-async function externalSubtitlePaths(_rec: DownloadRecord): Promise<string[]> {
-  return []
+const imdbIdCache = new Map<number, string | null>()
+
+async function imdbIdForMovie(movieId: number): Promise<string | null> {
+  if (imdbIdCache.has(movieId)) return imdbIdCache.get(movieId) ?? null
+  const settings = getAppSettings()
+  if (!hasTmdbCredentials(settings)) return null
+  try {
+    const imdbId = (await getMovieDetails(settings, movieId)).imdbId
+    imdbIdCache.set(movieId, imdbId)
+    return imdbId
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Downloads a subtitle in the preferred language from OpenSubtitles when the torrent has none
+ * in that language. Finished files are matched by hash; partial ones by IMDb id only.
+ */
+async function externalSubtitlePaths(
+  rec: DownloadRecord,
+  existingSubtitleNames: string[]
+): Promise<string[]> {
+  const language = getPreferences().subtitleLanguage
+  const apiKey = getAppSettings().openSubtitlesApiKey
+  if (!language || !apiKey) return []
+  if (existingSubtitleNames.some((n) => guessSubtitleLanguage(n) === language)) return []
+  const imdbId = await imdbIdForMovie(rec.movieId)
+  if (!imdbId) return []
+  const finished = rec.status === 'complete' && rec.playFileAbsPath
+  const path = await fetchSubtitle({
+    apiKey,
+    movieId: rec.movieId,
+    imdbId,
+    language,
+    movieHash: finished ? computeMovieHash(rec.playFileAbsPath!) : null
+  })
+  return path ? [path] : []
 }
 
 mpvEvents.on('progress', (s: MpvPlaybackState) => {
@@ -897,9 +992,13 @@ async function startLocalPlayback(rec: DownloadRecord): Promise<TorrentStreamSta
     schedulePersistMovieDownloads()
     return { ok: false, error: rec.errorMessage }
   }
+  const local = listLocalSubtitleFiles(rec.downloadDir)
   const subPaths = [
-    ...listLocalSubtitleFiles(rec.downloadDir).map((s) => s.absPath),
-    ...(await externalSubtitlePaths(rec))
+    ...local.map((s) => s.absPath),
+    ...(await externalSubtitlePaths(
+      rec,
+      local.map((s) => s.name)
+    ))
   ]
   return launchPlayback({
     rec,

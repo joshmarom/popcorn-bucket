@@ -39,6 +39,8 @@ export type PersistedMovieDownload = {
   playFilePath: string | null
   /** Absolute path of the finished video on disk; null until the download completes. */
   playFileAbsPath: string | null
+  /** Folder holding this download's files; null for rows saved before it was recorded. */
+  downloadDir: string | null
   paused: boolean
   /** True when the download had fully finished (kept in the list until the user deletes it). */
   completed: boolean
@@ -98,6 +100,7 @@ export function loadPersistedMovieDownloads(): PersistedMovieDownload[] {
       createdAt: typeof r.createdAt === 'number' ? r.createdAt : Date.now(),
       playFilePath: typeof r.playFilePath === 'string' ? r.playFilePath : null,
       playFileAbsPath: typeof r.playFileAbsPath === 'string' ? r.playFileAbsPath : null,
+      downloadDir: typeof r.downloadDir === 'string' ? r.downloadDir : null,
       paused: Boolean(r.paused),
       completed,
       completeSummary

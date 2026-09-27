@@ -1,4 +1,8 @@
-import { BrowserWindow, ipcMain, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { isAbsolute } from 'node:path'
+import type { Preferences } from '@shared/preferences'
+import { getPreferences, preferencesSchema, setPreferences } from './preferences-store'
+import { baseDownloadDir, defaultDownloadDir } from './torrent/webtorrent-core'
 import { isVidkingEmbedUrl, openOrFocusVidkingEmbed } from './vidking-embed-window'
 import { clearVidkingSessionData } from './vidking-session'
 import { z } from 'zod'
@@ -68,7 +72,8 @@ const discoverGenreInput = z.object({
 const settingsInput = z.object({
   tmdbApiKey: z.string().optional(),
   tmdbReadAccessToken: z.string().optional(),
-  omdbApiKey: z.string().optional()
+  omdbApiKey: z.string().optional(),
+  openSubtitlesApiKey: z.string().optional()
 })
 
 const torrentSearchInput = z.object({
@@ -138,6 +143,33 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('settings:isEncrypted', (): boolean => isSecretStorageEncrypted())
+
+  ipcMain.handle('prefs:get', (): Preferences => getPreferences())
+
+  ipcMain.handle(
+    'prefs:set',
+    (_evt, raw: unknown): { ok: true; prefs: Preferences } | { ok: false; error: string } => {
+      const parsed = preferencesSchema.partial().safeParse(raw)
+      if (!parsed.success) return { ok: false, error: 'Invalid preferences.' }
+      if (parsed.data.downloadDir && !isAbsolute(parsed.data.downloadDir)) {
+        return { ok: false, error: 'Download folder must be an absolute path.' }
+      }
+      return { ok: true, prefs: setPreferences(parsed.data) }
+    }
+  )
+
+  ipcMain.handle('prefs:chooseDownloadDir', async (evt): Promise<string | null> => {
+    const win = BrowserWindow.fromWebContents(evt.sender)
+    const opts = {
+      title: 'Choose download folder',
+      defaultPath: baseDownloadDir(),
+      properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[]
+    }
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return res.canceled ? null : (res.filePaths[0] ?? null)
+  })
+
+  ipcMain.handle('prefs:defaultDownloadDir', (): string => defaultDownloadDir())
 
   ipcMain.handle('settings:set', (_evt, raw: unknown) => {
     const parsed = settingsInput.safeParse(raw)

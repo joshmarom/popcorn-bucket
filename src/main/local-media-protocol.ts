@@ -1,8 +1,7 @@
 import { protocol } from 'electron'
 import { createReadStream, statSync } from 'node:fs'
-import { extname, isAbsolute, join, relative, sep } from 'node:path'
+import { basename, extname, isAbsolute, relative, resolve } from 'node:path'
 import { Readable } from 'node:stream'
-import { baseDownloadDir } from './torrent/webtorrent-core'
 
 export const LOCAL_MEDIA_SCHEME = 'pb-media'
 const HOST = 'local'
@@ -17,6 +16,20 @@ const MIME_BY_EXT: Record<string, string> = {
   '.vtt': 'text/vtt; charset=utf-8',
   '.ass': 'text/plain; charset=utf-8',
   '.ssa': 'text/plain; charset=utf-8'
+}
+
+/** Folders the protocol may serve from (download folders, subtitle cache). */
+let allowedRoots: () => string[] = () => []
+
+export function setLocalMediaRoots(roots: () => string[]): void {
+  allowedRoots = roots
+}
+
+function isUnderAllowedRoot(abs: string): boolean {
+  return allowedRoots().some((root) => {
+    const rel = relative(resolve(root), abs)
+    return rel.length > 0 && !rel.startsWith('..') && !isAbsolute(rel)
+  })
 }
 
 /** Must run before `app.whenReady()`. */
@@ -35,12 +48,15 @@ export function registerLocalMediaScheme(): void {
   ])
 }
 
-/** URL for a file under the download folder, or null when the path is outside it. */
+/**
+ * URL for a file under an allowed root, or null otherwise. The path travels base64url-encoded;
+ * the file name is repeated at the end so players can infer the type from the extension.
+ */
 export function localMediaUrl(absPath: string): string | null {
-  const rel = relative(baseDownloadDir(), absPath)
-  if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null
-  const segments = rel.split(sep).map((p) => encodeURIComponent(p))
-  return `${LOCAL_MEDIA_SCHEME}://${HOST}/${segments.join('/')}`
+  const abs = resolve(absPath)
+  if (!isUnderAllowedRoot(abs)) return null
+  const token = Buffer.from(abs, 'utf8').toString('base64url')
+  return `${LOCAL_MEDIA_SCHEME}://${HOST}/${token}/${encodeURIComponent(basename(abs))}`
 }
 
 function resolveRequestPath(url: string): string | null {
@@ -51,16 +67,16 @@ function resolveRequestPath(url: string): string | null {
     return null
   }
   if (u.hostname !== HOST) return null
-  const segments = u.pathname
-    .split('/')
-    .filter(Boolean)
-    .map((s) => decodeURIComponent(s))
-  if (segments.length === 0 || segments.some((s) => s === '..' || s.includes(sep))) return null
-  const base = baseDownloadDir()
-  const abs = join(base, ...segments)
-  const rel = relative(base, abs)
-  if (!rel || rel.startsWith('..') || isAbsolute(rel)) return null
-  return abs
+  const [token, name] = u.pathname.split('/').filter(Boolean)
+  if (!token || !name) return null
+  let abs: string
+  try {
+    abs = resolve(Buffer.from(token, 'base64url').toString('utf8'))
+  } catch {
+    return null
+  }
+  if (basename(abs) !== decodeURIComponent(name)) return null
+  return isUnderAllowedRoot(abs) ? abs : null
 }
 
 function parseRange(header: string | null, size: number): { start: number; end: number } | null {
