@@ -3,8 +3,8 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc-handlers'
-import { installVidkingDiagnosticsHooks } from './vidking-diagnostics'
-import { isVidkingRelatedUrl } from './vidking-embed-window'
+import { guardVidkingWebviews, installVidkingSession } from './vidking-session'
+import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 
 /**
  * VidKing and similar embeds often discover "servers" via LAN / permission APIs.
@@ -24,52 +24,14 @@ import { installLocalMediaProtocol, registerLocalMediaScheme } from './local-med
 
 registerLocalMediaScheme()
 
-function installVidkingNetworkCompatibilityShim(): void {
+/** The main app session grants only what the app itself uses. */
+const MAIN_ALLOWED_PERMISSIONS = new Set<string>(['fullscreen', 'clipboard-sanitized-write'])
+
+function lockDownMainSession(): void {
   const ses = session.defaultSession
-  const chromeLikeUa = ses.getUserAgent().replace(/\sElectron\/[^\s]+/, '')
-  if (chromeLikeUa === ses.getUserAgent()) return
-
-  // Make runtime UA checks inside embedded pages (navigator.userAgent) align
-  // with request headers by removing the Electron token globally for this app
-  // session. This helps providers that gate source availability for Electron.
-  ses.setUserAgent(chromeLikeUa)
-
-  // Some upstream providers serve empty source lists to Electron-branded UA
-  // strings. Rewriting only VidKing/Videasy traffic keeps app-wide behavior
-  // untouched while restoring server discovery in both iframe + popup flows.
-  ses.webRequest.onBeforeSendHeaders(
-    {
-      urls: [
-        '*://*.vidking.net/*',
-        '*://*.videasy.net/*',
-        '*://*.dolesdao.com/*',
-        '*://*.workers.dev/*'
-      ]
-    },
-    (details, callback) => {
-      callback({
-        requestHeaders: {
-          ...details.requestHeaders,
-          'User-Agent': chromeLikeUa
-        }
-      })
-    }
-  )
-
-  // Allow VidKing/Videasy to request storage access in iframe flows.
-  ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-    if (permission === 'storage-access' || permission === 'top-level-storage-access') {
-      return isVidkingRelatedUrl(requestingOrigin)
-    }
-    return true
-  })
-
-  ses.setPermissionRequestHandler((_webContents, permission, callback, details) => {
-    if (permission === 'storage-access' || permission === 'top-level-storage-access') {
-      callback(isVidkingRelatedUrl(details.requestingUrl))
-      return
-    }
-    callback(true)
+  ses.setPermissionCheckHandler((_wc, permission) => MAIN_ALLOWED_PERMISSIONS.has(permission))
+  ses.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(MAIN_ALLOWED_PERMISSIONS.has(permission))
   })
 }
 
@@ -83,7 +45,8 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true,
+      webviewTag: true
     }
   })
 
@@ -91,11 +54,12 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  guardVidkingWebviews(mainWindow.webContents)
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    if (isVidkingRelatedUrl(details.url)) {
-      return { action: 'allow' }
+    if (isSafeTorrentDetailsUrl(details.url)) {
+      void shell.openExternal(details.url)
     }
-    shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
@@ -122,8 +86,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  installVidkingNetworkCompatibilityShim()
-  installVidkingDiagnosticsHooks(session.defaultSession)
+  lockDownMainSession()
+  installVidkingSession()
   installLocalMediaProtocol()
   registerIpcHandlers()
   restoreMovieDownloadsOnStartup()

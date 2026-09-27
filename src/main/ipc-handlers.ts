@@ -1,5 +1,6 @@
-import { BrowserWindow, ipcMain, session, shell } from 'electron'
+import { BrowserWindow, ipcMain, shell } from 'electron'
 import { isVidkingEmbedUrl, openOrFocusVidkingEmbed } from './vidking-embed-window'
+import { clearVidkingSessionData } from './vidking-session'
 import { z } from 'zod'
 import {
   shouldIncludeCatalogListItem,
@@ -135,15 +136,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('app:clearVidkingData', async (): Promise<void> => {
-    const origins = [
-      'https://www.vidking.net',
-      'https://vidking.net',
-      'https://users.videasy.net'
-    ]
-    await session.defaultSession.clearStorageData({ origin: origins[0] })
-    await session.defaultSession.clearStorageData({ origin: origins[1] })
-    await session.defaultSession.clearStorageData({ origin: origins[2] })
-    await session.defaultSession.clearCache()
+    await clearVidkingSessionData()
   })
 
   ipcMain.handle('app:getVidkingDiagnostics', (): VidkingNetEvent[] => {

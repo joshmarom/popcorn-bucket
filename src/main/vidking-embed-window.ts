@@ -1,4 +1,5 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow } from 'electron'
+import { VIDKING_PARTITION, restrictVidkingPopups } from './vidking-session'
 
 let vidkingWindow: BrowserWindow | null = null
 
@@ -71,19 +72,14 @@ export function openOrFocusVidkingEmbed(url: string, parent: BrowserWindow | nul
     autoHideMenuBar: true,
     ...(parent && !parent.isDestroyed() ? { parent } : {}),
     webPreferences: {
+      partition: VIDKING_PARTITION,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
-  vidkingWindow.webContents.setWindowOpenHandler((details) => {
-    if (isVidkingRelatedUrl(details.url)) {
-      return { action: 'allow' }
-    }
-    void shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+  restrictVidkingPopups(vidkingWindow.webContents)
 
   vidkingWindow.on('closed', () => {
     vidkingWindow = null

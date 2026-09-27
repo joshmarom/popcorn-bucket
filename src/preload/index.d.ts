@@ -18,7 +18,7 @@ export type PopcornApi = {
     openExternal(url: string): Promise<void>
     /** Open (or focus) VidKing in a dedicated top-level Electron window. */
     openVidkingEmbed(url: string): Promise<void>
-    /** Nuke cookies, LocalStorage, IndexedDB, and HTTP cache for VidKing/Videasy origins. */
+    /** Clear cookies, storage, and HTTP cache of the isolated VidKing session. */
     clearVidkingData(): Promise<void>
     /**
      * Recent VidKing/Videasy request outcomes captured by main process hooks.

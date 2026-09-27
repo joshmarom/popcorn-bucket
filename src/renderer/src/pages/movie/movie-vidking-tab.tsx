@@ -46,13 +46,13 @@ export function MovieVidkingTab({ detail }: { detail: CatalogMovieDetails }): Re
   return (
     <div className="space-y-4">
       <div className="overflow-hidden rounded-lg border border-border bg-black shadow-sm">
-        <iframe
+        <webview
           key={iframeKey}
           title={`Vidking — ${detail.title}`}
           src={embedUrl}
-          className="aspect-video w-full min-h-[420px] border-0"
-          allow="fullscreen; encrypted-media; autoplay; local-network-access *"
-          allowFullScreen
+          partition="persist:vidking"
+          allowpopups
+          className="flex aspect-video w-full min-h-[420px] border-0"
         />
       </div>
       <div className="flex flex-wrap gap-2">

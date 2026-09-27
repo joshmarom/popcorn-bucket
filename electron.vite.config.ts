@@ -22,6 +22,10 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      /** Sandboxed preloads cannot `require()` from node_modules, so bundle everything. */
+      externalizeDeps: false
     }
   },
   renderer: {
