@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import { episodeCode, isEpisodeMediaKey } from '@shared/tv'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
+import { MovieCardMeta, MovieRatingBadge } from '@/components/movie-card-meta'
 import { Card, CardFooter, CardTitle } from '@/components/ui/card'
+import { releaseYearFromDate } from '@/lib/movie-meta'
 
 type ContinueItem = {
   key: string
@@ -12,6 +14,10 @@ type ContinueItem = {
   detail: string | null
   posterUrl: string | null
   progress: WatchProgress
+  releaseYear: number | null
+  voteAverage: number | null
+  runtime: number | null
+  genres: string[]
 }
 
 function formatRemaining(p: WatchProgress): string {
@@ -49,7 +55,11 @@ export function ContinuePage(): ReactElement {
             title: episode.showName,
             detail: `${episodeCode(episode.seasonNumber, episode.episodeNumber)} · ${formatRemaining(progress)}`,
             posterUrl: null,
-            progress
+            progress,
+            releaseYear: null,
+            voteAverage: null,
+            runtime: null,
+            genres: []
           })
           continue
         }
@@ -61,7 +71,11 @@ export function ContinuePage(): ReactElement {
           title: movie.title,
           detail: formatRemaining(progress),
           posterUrl: movie.posterUrl,
-          progress
+          progress,
+          releaseYear: releaseYearFromDate(movie.releaseDate),
+          voteAverage: movie.voteAverage,
+          runtime: movie.runtime,
+          genres: movie.genres
         })
       }
       setItems(next)
@@ -110,11 +124,17 @@ export function ContinuePage(): ReactElement {
                         />
                       </div>
                     ) : null}
+                    <MovieRatingBadge voteAverage={item.voteAverage} />
                   </div>
                   <CardFooter className="flex flex-col items-start gap-0.5 px-3 py-2">
                     <CardTitle className="line-clamp-2 text-sm leading-tight">
                       {item.title}
                     </CardTitle>
+                    <MovieCardMeta
+                      releaseYear={item.releaseYear}
+                      runtime={item.runtime}
+                      genres={item.genres}
+                    />
                     {item.detail ? (
                       <span className="text-muted-foreground text-xs">{item.detail}</span>
                     ) : null}

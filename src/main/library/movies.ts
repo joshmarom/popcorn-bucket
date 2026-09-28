@@ -204,3 +204,112 @@ export function upsertMovieListRows(
   })
   run()
 }
+
+export function genreNameById(db: LibraryDb): Map<number, string> {
+  const rows = db.prepare('SELECT tmdb_id, name FROM genres').all() as {
+    tmdb_id: number
+    name: string
+  }[]
+  return new Map(rows.map((row) => [row.tmdb_id, row.name]))
+}
+
+function movieIdPlaceholders(ids: number[]): { unique: number[]; clause: string } | null {
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return null
+  return { unique, clause: unique.map(() => '?').join(',') }
+}
+
+export function runtimesByMovieId(db: LibraryDb, movieIds: number[]): Map<number, number | null> {
+  const params = movieIdPlaceholders(movieIds)
+  const out = new Map<number, number | null>()
+  if (!params) return out
+  const rows = db
+    .prepare(`SELECT tmdb_id, runtime FROM movies WHERE tmdb_id IN (${params.clause})`)
+    .all(...params.unique) as { tmdb_id: number; runtime: number | null }[]
+  for (const row of rows) out.set(row.tmdb_id, row.runtime)
+  return out
+}
+
+export function genresByMovieId(db: LibraryDb, movieIds: number[]): Map<number, string[]> {
+  const params = movieIdPlaceholders(movieIds)
+  const out = new Map<number, string[]>()
+  if (!params) return out
+  const rows = db
+    .prepare(
+      `SELECT mg.movie_id, g.name
+       FROM movie_genres mg
+       JOIN genres g ON g.tmdb_id = mg.genre_id
+       WHERE mg.movie_id IN (${params.clause})
+       ORDER BY g.name`
+    )
+    .all(...params.unique) as { movie_id: number; name: string }[]
+  for (const row of rows) {
+    const names = out.get(row.movie_id) ?? []
+    names.push(row.name)
+    out.set(row.movie_id, names)
+  }
+  return out
+}
+
+export type StoredMovieListFacts = {
+  runtime: number | null
+  voteAverage: number | null
+  genres: string[]
+}
+
+export function readMovieListFacts(
+  db: LibraryDb,
+  movieIds: number[]
+): Map<number, StoredMovieListFacts> {
+  const params = movieIdPlaceholders(movieIds)
+  const out = new Map<number, StoredMovieListFacts>()
+  if (!params) return out
+  const rows = db
+    .prepare(`SELECT tmdb_id, runtime, rating FROM movies WHERE tmdb_id IN (${params.clause})`)
+    .all(...params.unique) as { tmdb_id: number; runtime: number | null; rating: number | null }[]
+  const genres = genresByMovieId(db, params.unique)
+  for (const row of rows) {
+    out.set(row.tmdb_id, {
+      runtime: row.runtime,
+      voteAverage: row.rating,
+      genres: genres.get(row.tmdb_id) ?? []
+    })
+  }
+  return out
+}
+
+/** Fills runtime and genre links on a movie already stored from a list row. */
+export function saveMovieListCore(
+  db: LibraryDb,
+  tmdbId: number,
+  core: { runtime: number | null; voteAverage: number | null; genres: LibraryGenre[] }
+): void {
+  const exists = db.prepare('SELECT 1 AS ok FROM movies WHERE tmdb_id = ?').get(tmdbId)
+  if (!exists) return
+  const runtime = core.runtime != null && core.runtime > 0 ? core.runtime : null
+  const rating = core.voteAverage != null && core.voteAverage > 0 ? core.voteAverage : null
+  const genres = uniqueById(core.genres).flatMap((genre) => {
+    const name = genre.name.trim()
+    return name ? [{ id: genre.id, name }] : []
+  })
+  const run = db.transaction(() => {
+    db.prepare(
+      `UPDATE movies SET
+         runtime = COALESCE(runtime, ?),
+         rating = COALESCE(rating, ?)
+       WHERE tmdb_id = ?`
+    ).run(runtime, rating, tmdbId)
+    const upsertGenre = db.prepare(
+      `INSERT INTO genres (tmdb_id, name) VALUES (?, ?)
+       ON CONFLICT(tmdb_id) DO UPDATE SET name = excluded.name`
+    )
+    const linkGenre = db.prepare(
+      'INSERT OR IGNORE INTO movie_genres (movie_id, genre_id) VALUES (?, ?)'
+    )
+    for (const genre of genres) {
+      upsertGenre.run(genre.id, genre.name)
+      linkGenre.run(tmdbId, genre.id)
+    }
+  })
+  run()
+}

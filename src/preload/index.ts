@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type { AppSettings } from '@shared/app-settings'
 import type {
   CatalogGenreRailsResponse,
+  CatalogMovieListFactsResponse,
   CatalogMovieResponse,
   CatalogSearchResponse
 } from '@shared/catalog'
@@ -70,6 +71,8 @@ const api = {
       ipcRenderer.invoke('catalog:search', { query }),
     getMovie: (id: number): Promise<CatalogMovieResponse> =>
       ipcRenderer.invoke('catalog:getMovie', { id }),
+    listFacts: (ids: number[]): Promise<CatalogMovieListFactsResponse> =>
+      ipcRenderer.invoke('catalog:listFacts', { ids }),
     genreRails: (): Promise<CatalogGenreRailsResponse> => ipcRenderer.invoke('catalog:genreRails'),
     discoverGenre: (genreId: number): Promise<CatalogSearchResponse> =>
       ipcRenderer.invoke('catalog:discoverGenre', { genreId })

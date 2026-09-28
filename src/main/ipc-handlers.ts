@@ -11,6 +11,7 @@ import {
   type CatalogErrorCode,
   type CatalogGenreRail,
   type CatalogGenreRailsResponse,
+  type CatalogMovieListFactsResponse,
   type CatalogMovieResponse,
   type CatalogSearchResponse
 } from '@shared/catalog'
@@ -45,6 +46,7 @@ import {
   startMoviePlayback
 } from './torrent/movie-downloads'
 import { mpvEvents } from './torrent/mpv-controller'
+import { fillCatalogMovieListFacts } from './catalog-list-facts'
 import { enrichCatalogListWithOmdb, enrichMovieDetailsWithOmdb } from './omdb'
 import {
   discoverMoviesByGenre,
@@ -82,6 +84,10 @@ const tvSearchInput = searchInput.extend({
 
 const movieInput = z.object({
   id: z.number().int().positive()
+})
+
+const listFactsInput = z.object({
+  ids: z.array(z.number().int().positive()).max(40)
 })
 
 const discoverGenreInput = z.object({
@@ -535,6 +541,23 @@ export function registerIpcHandlers(): void {
       return { ok: false, error: mapCatalogError(e).error }
     }
   })
+
+  ipcMain.handle(
+    'catalog:listFacts',
+    async (_evt, raw: unknown): Promise<CatalogMovieListFactsResponse> => {
+      const parsed = listFactsInput.safeParse(raw)
+      if (!parsed.success) {
+        return { ok: false, error: 'Invalid movie ids.', code: 'VALIDATION' }
+      }
+      try {
+        const facts = await fillCatalogMovieListFacts(getAppSettings(), parsed.data.ids)
+        return { ok: true, facts }
+      } catch (e) {
+        const m = mapCatalogError(e)
+        return { ok: false, error: m.error, code: m.code }
+      }
+    }
+  )
 
   ipcMain.handle('catalog:getMovie', async (_evt, raw: unknown): Promise<CatalogMovieResponse> => {
     const parsed = movieInput.safeParse(raw)

@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
 import { isEpisodeMediaKey } from '@shared/tv'
+import { MovieCardMeta, MovieRatingBadge } from '@/components/movie-card-meta'
 import { Card, CardFooter, CardTitle } from '@/components/ui/card'
+import { releaseYearFromDate } from '@/lib/movie-meta'
 
 const RAIL_MAX = 15
 
@@ -51,11 +53,18 @@ function Rail({ title, items }: { title: string; items: RailItem[] }): ReactElem
                       />
                     </div>
                   ) : null}
+                  <MovieRatingBadge voteAverage={movie.voteAverage} />
                 </div>
                 <CardFooter className="flex flex-col items-start gap-0.5 px-2 py-1.5">
                   <CardTitle className="line-clamp-2 text-xs leading-tight">
                     {movie.title}
                   </CardTitle>
+                  <MovieCardMeta
+                    compact
+                    releaseYear={releaseYearFromDate(movie.releaseDate)}
+                    runtime={movie.runtime}
+                    genres={movie.genres}
+                  />
                   {progress ? (
                     <span className="text-muted-foreground text-[10px]">
                       {formatRemaining(progress)}

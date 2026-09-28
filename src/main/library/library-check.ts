@@ -252,6 +252,13 @@ function run(): void {
       all.findIndex((m) => m.id === 800) < all.findIndex((m) => m.id === 700),
       'seeded comedy should outrank the unseeded drama'
     )
+    const fightClub = all.find((m) => m.id === 550)
+    assert.equal(fightClub?.runtime, 139)
+    assert.equal(fightClub?.voteAverage, 8.4)
+    assert.deepEqual(fightClub?.genres, ['Drama', 'Thriller'])
+    const quiet = all.find((m) => m.id === 700)
+    assert.equal(quiet?.runtime, null)
+    assert.deepEqual(quiet?.genres, ['Drama'])
     assert.deepEqual(
       rankMovies(db, { limit: 10, now: now + 40 * DAY_MS }).map((m) => m.id),
       []

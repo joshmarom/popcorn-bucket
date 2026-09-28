@@ -9,7 +9,22 @@ export type CatalogMovieListItem = {
   popularity: number | null
   posterUrl: string | null
   overview: string
+  genres: string[]
+  /** Runtime in minutes, when known. */
+  runtime: number | null
 }
+
+/** Rating, genres, and runtime for list cards. Filled from the library, then TMDB when missing. */
+export type CatalogMovieListFacts = {
+  id: number
+  genres: string[]
+  runtime: number | null
+  voteAverage: number | null
+}
+
+export type CatalogMovieListFactsResponse =
+  | { ok: true; facts: CatalogMovieListFacts[] }
+  | { ok: false; error: string; code: CatalogErrorCode }
 
 /** Strip characters that TMDB/APIs sometimes use as “empty” body text. */
 function normalizedListOverview(s: string): string {

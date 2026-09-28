@@ -262,7 +262,10 @@ function mergeListItem(item: CatalogMovieListItem, o: OmdbParsed): CatalogMovieL
       : o.plot && hasMeaningfulListOverview(o.plot)
         ? o.plot
         : item.overview,
-    releaseYear: item.releaseYear ?? o.releaseYear
+    releaseYear: item.releaseYear ?? o.releaseYear,
+    runtime: item.runtime ?? o.runtimeMinutes,
+    genres: item.genres.length > 0 ? item.genres : o.genres,
+    voteAverage: item.voteAverage ?? o.imdbRating
   }
 }
 

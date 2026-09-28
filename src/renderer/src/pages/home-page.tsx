@@ -13,7 +13,9 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { MovieCardMeta, MovieRatingBadge } from '@/components/movie-card-meta'
 import { MovieGrid } from '@/components/movie-grid'
+import { useMovieListFacts } from '@/components/use-movie-list-facts'
 import { PersonalRails } from '@/components/personal-rails'
 import { Card, CardFooter, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -123,6 +125,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
+  const movies = useMovieListFacts(rail.movies)
   const nameQ = encodeURIComponent(rail.genre.name)
   return (
     <section className="space-y-2" aria-labelledby={`genre-rail-${rail.genre.id}`}>
@@ -145,11 +148,11 @@ function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
         </Button>
       </div>
       <ul className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5">
-        {rail.movies.map((m) => (
+        {movies.map((m) => (
           <li key={m.id} className="w-[118px] shrink-0 snap-start sm:w-[128px]">
             <Link to={`/movie/${m.id}`} className="block text-left" state={{ from: 'home' }}>
               <Card className="cursor-pointer overflow-hidden pt-0 transition-shadow hover:shadow-md">
-                <div className="bg-muted aspect-[2/3] w-full overflow-hidden">
+                <div className="bg-muted relative aspect-[2/3] w-full overflow-hidden">
                   {m.posterUrl ? (
                     <img className="size-full object-cover" src={m.posterUrl} alt="" />
                   ) : (
@@ -157,12 +160,16 @@ function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
                       No poster
                     </div>
                   )}
+                  <MovieRatingBadge voteAverage={m.voteAverage} />
                 </div>
                 <CardFooter className="flex flex-col items-start gap-0.5 px-2 py-1.5">
                   <CardTitle className="line-clamp-2 text-xs leading-tight">{m.title}</CardTitle>
-                  {m.releaseYear != null && (
-                    <span className="text-muted-foreground text-[10px]">{m.releaseYear}</span>
-                  )}
+                  <MovieCardMeta
+                    compact
+                    releaseYear={m.releaseYear}
+                    runtime={m.runtime}
+                    genres={m.genres}
+                  />
                 </CardFooter>
               </Card>
             </Link>

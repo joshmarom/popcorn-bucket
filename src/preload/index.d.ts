@@ -2,6 +2,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 import type { AppSettings } from '@shared/app-settings'
 import type {
   CatalogGenreRailsResponse,
+  CatalogMovieListFactsResponse,
   CatalogMovieResponse,
   CatalogSearchResponse
 } from '@shared/catalog'
@@ -68,6 +69,8 @@ export type PopcornApi = {
     nowPlaying(opts?: { forceRefresh?: boolean }): Promise<CatalogSearchResponse>
     search(query: string): Promise<CatalogSearchResponse>
     getMovie(id: number): Promise<CatalogMovieResponse>
+    /** Rating, genres, and runtime for the movies currently on screen. */
+    listFacts(ids: number[]): Promise<CatalogMovieListFactsResponse>
     genreRails(): Promise<CatalogGenreRailsResponse>
     discoverGenre(genreId: number): Promise<CatalogSearchResponse>
   }

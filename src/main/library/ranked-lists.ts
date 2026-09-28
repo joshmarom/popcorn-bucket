@@ -1,6 +1,7 @@
 import type { CatalogMovieListItem } from '@shared/catalog'
 import { movieScore, swarmScore } from '@shared/movie-score'
 import type { LibraryDb } from './db'
+import { genresByMovieId } from './movies'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 export const RANK_POOL_WINDOW_MS = 30 * DAY_MS
@@ -22,6 +23,7 @@ type PoolRow = {
   rating: number | null
   vote_count: number | null
   tmdb_popularity: number | null
+  runtime: number | null
   swarm_seeders: number | null
   swarm_seen_at: number | null
   copy_seeders: number | null
@@ -66,7 +68,7 @@ function loadPool(db: LibraryDb, genreId: number | undefined, cutoff: number): P
          GROUP BY movie_id
        )
        SELECT m.tmdb_id, m.title, m.year, m.release_date, m.overview, m.poster_url,
-              m.rating, m.vote_count, m.tmdb_popularity,
+              m.rating, m.vote_count, m.tmdb_popularity, m.runtime,
               s.seeders AS swarm_seeders, s.seen_at AS swarm_seen_at,
               c.seeders AS copy_seeders, c.fetched_at AS copy_seen_at
        FROM movies m
@@ -93,7 +95,7 @@ export function pickSwarmEvidence(
       : copy
 }
 
-function toListItem(row: PoolRow): CatalogMovieListItem {
+function toListItem(row: PoolRow, genres: string[]): CatalogMovieListItem {
   const releaseDate =
     row.release_date && /^\d{4}-\d{2}-\d{2}$/.test(row.release_date) ? row.release_date : null
   return {
@@ -104,7 +106,9 @@ function toListItem(row: PoolRow): CatalogMovieListItem {
     voteAverage: row.rating,
     popularity: row.tmdb_popularity,
     posterUrl: row.poster_url,
-    overview: row.overview
+    overview: row.overview,
+    genres,
+    runtime: row.runtime
   }
 }
 
@@ -133,5 +137,10 @@ export function rankMovies(
     return { row, score }
   })
   scored.sort((a, b) => b.score - a.score || a.row.tmdb_id - b.row.tmdb_id)
-  return scored.slice(0, opts.limit).map(({ row }) => toListItem(row))
+  const top = scored.slice(0, opts.limit)
+  const genres = genresByMovieId(
+    db,
+    top.map(({ row }) => row.tmdb_id)
+  )
+  return top.map(({ row }) => toListItem(row, genres.get(row.tmdb_id) ?? []))
 }

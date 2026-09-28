@@ -11,7 +11,13 @@ import type {
   CatalogTrailer
 } from '@shared/catalog'
 import { getLibrary } from './library/db'
-import { upsertGenres, upsertMovie, upsertMovieListRows } from './library/movies'
+import {
+  genreNameById,
+  runtimesByMovieId,
+  upsertGenres,
+  upsertMovie,
+  upsertMovieListRows
+} from './library/movies'
 
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const IMAGE_BASE = 'https://image.tmdb.org/t/p'
@@ -320,8 +326,39 @@ export async function tmdbFetchJson<T>(
   return json
 }
 
+function namesForGenreIds(ids: number[] | undefined, names: Map<number, string>): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const id of ids ?? []) {
+    const name = names.get(id)?.trim()
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    out.push(name)
+  }
+  return out
+}
+
+let genreNamesInflight: Promise<void> | null = null
+
+/** Genre names are a separate TMDB list; list rows only carry ids. */
+function ensureGenreNames(settings: AppSettings): Promise<void> {
+  if (genreNamesInflight) return genreNamesInflight
+  genreNamesInflight = (async (): Promise<void> => {
+    try {
+      await getMovieGenres(settings)
+    } catch (error) {
+      console.error('Could not load TMDB genre names', error)
+    } finally {
+      genreNamesInflight = null
+    }
+  })()
+  return genreNamesInflight
+}
+
 function mapSearchRowToCatalogItem(
-  r: z.infer<typeof searchMovieResultRowSchema>
+  r: z.infer<typeof searchMovieResultRowSchema>,
+  genreNames: Map<number, string>,
+  runtime: number | null
 ): CatalogMovieListItem {
   const rd = r.release_date?.trim() ?? ''
   const releaseDate = rd.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(rd) ? rd.slice(0, 10) : null
@@ -335,7 +372,9 @@ function mapSearchRowToCatalogItem(
     voteAverage: r.vote_average ?? null,
     popularity: r.popularity ?? null,
     posterUrl: posterUrl(r.poster_path ?? null, 'w185'),
-    overview: r.overview ?? ''
+    overview: r.overview ?? '',
+    genres: namesForGenreIds(r.genre_ids, genreNames),
+    runtime
   }
 }
 
@@ -344,10 +383,11 @@ function rememberListRows(
   imdbId?: string
 ): void {
   try {
+    const genreNames = new Map<number, string>()
     upsertMovieListRows(
       getLibrary(),
       results.map((r) => {
-        const item = mapSearchRowToCatalogItem(r)
+        const item = mapSearchRowToCatalogItem(r, genreNames, null)
         return {
           tmdbId: item.id,
           title: item.title,
@@ -368,10 +408,19 @@ function rememberListRows(
 }
 
 function mapTmdbResultsToCatalog(
-  results: z.infer<typeof searchMovieResultRowSchema>[]
+  results: z.infer<typeof searchMovieResultRowSchema>[],
+  imdbId?: string
 ): CatalogMovieListItem[] {
-  rememberListRows(results)
-  return results.map(mapSearchRowToCatalogItem)
+  rememberListRows(results, imdbId)
+  const db = getLibrary()
+  const genreNames = genreNameById(db)
+  const runtimes = runtimesByMovieId(
+    db,
+    results.map((row) => row.id)
+  )
+  return results.map((row) =>
+    mapSearchRowToCatalogItem(row, genreNames, runtimes.get(row.id) ?? null)
+  )
 }
 
 const findByExternalIdResponseSchema = z.object({
@@ -404,8 +453,8 @@ export async function findMovieListItemByImdbId(
   if (!first) {
     return null
   }
-  rememberListRows([first], raw)
-  return mapSearchRowToCatalogItem(first)
+  await ensureGenreNames(settings)
+  return mapTmdbResultsToCatalog([first], raw)[0] ?? null
 }
 
 export async function searchMovies(
@@ -413,6 +462,7 @@ export async function searchMovies(
   query: string
 ): Promise<CatalogMovieListItem[]> {
   const q = query.trim()
+  const genresReady = ensureGenreNames(settings)
   const rows: z.infer<typeof searchMovieResultRowSchema>[] = []
   let page = 1
   let totalPages = 1
@@ -437,6 +487,7 @@ export async function searchMovies(
     page += 1
   }
 
+  await genresReady
   return mapTmdbResultsToCatalog(rows)
 }
 
@@ -466,6 +517,7 @@ export async function discoverMoviesByGenreFirstPage(
   settings: AppSettings,
   genreId: number
 ): Promise<CatalogMovieListItem[]> {
+  const genresReady = ensureGenreNames(settings)
   const json = await tmdbFetchJson(
     settings,
     '/discover/movie',
@@ -481,6 +533,7 @@ export async function discoverMoviesByGenreFirstPage(
   if (!parsed.success) {
     throw new Error('BAD_RESPONSE')
   }
+  await genresReady
   return mapTmdbResultsToCatalog(parsed.data.results)
 }
 
@@ -489,6 +542,7 @@ export async function discoverMoviesByGenre(
   settings: AppSettings,
   genreId: number
 ): Promise<CatalogMovieListItem[]> {
+  const genresReady = ensureGenreNames(settings)
   const rows: z.infer<typeof searchMovieResultRowSchema>[] = []
   let page = 1
   let totalPages = 1
@@ -518,11 +572,13 @@ export async function discoverMoviesByGenre(
     page += 1
   }
 
+  await genresReady
   return mapTmdbResultsToCatalog(rows)
 }
 
 /** Currently in theaters (TMDB “now playing”). */
 export async function getNowPlayingMovies(settings: AppSettings): Promise<CatalogMovieListItem[]> {
+  const genresReady = ensureGenreNames(settings)
   const json = await tmdbFetchJson(
     settings,
     '/movie/now_playing',
@@ -533,6 +589,7 @@ export async function getNowPlayingMovies(settings: AppSettings): Promise<Catalo
   if (!parsed.success) {
     throw new Error('BAD_RESPONSE')
   }
+  await genresReady
   return mapTmdbResultsToCatalog(parsed.data.results)
 }
 
