@@ -1,15 +1,17 @@
 import type { CatalogMovieListItem } from '@shared/catalog'
 
-export type TrendingPageSource = {
+type Keyed = { id: number }
+
+export type TrendingPageSource<T extends Keyed = CatalogMovieListItem> = {
   name: string
   /** First page number to request from this source. */
   firstPage: number
   /** One page of rows; `done` means the source has nothing after this page. */
-  load: (page: number) => Promise<{ items: CatalogMovieListItem[]; done: boolean }>
+  load: (page: number) => Promise<{ items: T[]; done: boolean }>
 }
 
-export type TrendingPageResult = {
-  results: CatalogMovieListItem[]
+export type TrendingPageResult<T extends Keyed = CatalogMovieListItem> = {
+  results: T[]
   page: number
   hasMore: boolean
 }
@@ -21,8 +23,8 @@ const MAX_EMPTY_STREAK = 3
  * An endless list: a fixed ranked head, then rows pulled from each source in turn as deeper
  * pages are requested. A source that throws or runs dry hands over to the next one.
  */
-export class TrendingPager {
-  private readonly items: CatalogMovieListItem[] = []
+export class TrendingPager<T extends Keyed = CatalogMovieListItem> {
+  private readonly items: T[] = []
   private readonly seen = new Set<number>()
   private sourceIndex = 0
   private nextPage: number
@@ -30,15 +32,15 @@ export class TrendingPager {
   private filling: Promise<void> = Promise.resolve()
 
   constructor(
-    head: CatalogMovieListItem[],
-    private readonly sources: TrendingPageSource[],
+    head: T[],
+    private readonly sources: TrendingPageSource<T>[],
     private readonly pageSize: number
   ) {
     this.add(head)
     this.nextPage = sources[0]?.firstPage ?? 1
   }
 
-  private add(rows: CatalogMovieListItem[]): number {
+  private add(rows: T[]): number {
     let added = 0
     for (const row of rows) {
       if (this.seen.has(row.id)) continue
@@ -58,7 +60,7 @@ export class TrendingPager {
   private async fill(target: number): Promise<void> {
     while (this.items.length < target && this.sourceIndex < this.sources.length) {
       const source = this.sources[this.sourceIndex]!
-      let page: Awaited<ReturnType<TrendingPageSource['load']>>
+      let page: Awaited<ReturnType<TrendingPageSource<T>['load']>>
       try {
         page = await source.load(this.nextPage)
       } catch (error) {
@@ -74,7 +76,7 @@ export class TrendingPager {
   }
 
   /** 1-based page. Concurrent calls are serialized so sources are read in order. */
-  async page(page: number): Promise<TrendingPageResult> {
+  async page(page: number): Promise<TrendingPageResult<T>> {
     const p = Math.max(1, Math.floor(page))
     const end = p * this.pageSize
     // One extra row tells whether a next page exists.

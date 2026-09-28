@@ -33,6 +33,8 @@ export function MovieCard({
   progress,
   note,
   rank,
+  facts: factsOverride,
+  statusBadge,
   size = 'md'
 }: {
   href: string
@@ -48,11 +50,17 @@ export function MovieCard({
   note?: string | null
   /** Chart position (e.g. streaming Top 10), shown in the poster corner. */
   rank?: number | null
+  /** Replaces the year · runtime line (e.g. "2019–2024 · 4 seasons" for shows). */
+  facts?: string[]
+  /** Pill in the poster's bottom corner; `muted` for low-key states such as "Ended". */
+  statusBadge?: { label: string; muted?: boolean } | null
   size?: 'md' | 'sm'
 }): ReactElement {
-  const facts: string[] = []
-  if (releaseYear != null) facts.push(String(releaseYear))
-  if (runtime != null && runtime > 0) facts.push(formatRuntime(runtime))
+  const facts: string[] = factsOverride ? factsOverride.filter(Boolean) : []
+  if (!factsOverride) {
+    if (releaseYear != null) facts.push(String(releaseYear))
+    if (runtime != null && runtime > 0) facts.push(formatRuntime(runtime))
+  }
   const genreLine = genres
     .filter((name) => name.trim().length > 0)
     .slice(0, 3)
@@ -88,6 +96,16 @@ export function MovieCard({
           <span className="absolute top-2 left-2 inline-flex min-w-6 items-center justify-center rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-bold text-white tabular-nums shadow-sm backdrop-blur-sm">
             <span className="sr-only">Rank </span>
             {rank}
+          </span>
+        ) : null}
+        {statusBadge ? (
+          <span
+            className={cn(
+              'absolute bottom-2 left-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase shadow-sm backdrop-blur-sm',
+              statusBadge.muted ? 'bg-black/60 text-white/75' : 'bg-primary text-primary-foreground'
+            )}
+          >
+            {statusBadge.label}
           </span>
         ) : null}
         {progress != null && progress > 0 ? (

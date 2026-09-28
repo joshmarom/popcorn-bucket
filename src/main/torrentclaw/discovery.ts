@@ -1,8 +1,10 @@
 import { app } from 'electron'
+import type { z } from 'zod'
 import type {
   AutocompleteSuggestion,
   DiscoverCollection,
   DiscoverMovieItem,
+  DiscoverShowItem,
   StreamingService
 } from '@shared/discovery'
 import type { LibraryDb } from '../library/db'
@@ -58,6 +60,36 @@ function toMovieItem(
   }
 }
 
+function toShowItem(
+  item: Omit<TcListItem, 'id'>,
+  rank: number | null = null
+): DiscoverShowItem | null {
+  const tmdbId = numericId(item.tmdbId)
+  if (tmdbId == null) return null
+  return {
+    id: tmdbId,
+    name: item.title,
+    firstAirYear: item.year ?? null,
+    posterUrl: item.posterUrl ?? null,
+    overview: item.overview ?? '',
+    voteAverage: parseRating(item.rating),
+    genres: item.genres ?? [],
+    rank,
+    maxSeeders: item.maxSeeders ?? null
+  }
+}
+
+function uniqueById<T extends { id: number }>(items: (T | null)[]): T[] {
+  const seen = new Set<number>()
+  const out: T[] = []
+  for (const item of items) {
+    if (!item || seen.has(item.id)) continue
+    seen.add(item.id)
+    out.push(item)
+  }
+  return out
+}
+
 function uniqueMovies(items: (DiscoverMovieItem | null)[]): DiscoverMovieItem[] {
   const seen = new Set<number>()
   const out: DiscoverMovieItem[] = []
@@ -97,6 +129,12 @@ export async function getPopularMovies(): Promise<DiscoverMovieItem[]> {
   return uniqueMovies((await fetchPopular('movie')).map((i) => toMovieItem(i)))
 }
 
+export async function getPopularShows(): Promise<DiscoverShowItem[]> {
+  return uniqueById(
+    (await fetchPopular('show')).filter((i) => i.contentType === 'show').map((i) => toShowItem(i))
+  )
+}
+
 export async function getUpcomingMovies(): Promise<DiscoverMovieItem[]> {
   const items = await fetchListPages('/upcoming', { type: 'movie' }, 1)
   return uniqueMovies(items.map((i) => toMovieItem(i)))
@@ -107,25 +145,34 @@ function localeCountry(): string {
   return /^[A-Z]{2}$/.test(code) ? code : 'US'
 }
 
-export async function getStreamingTop(service: StreamingService): Promise<DiscoverMovieItem[]> {
-  const load = async (country: string): Promise<DiscoverMovieItem[]> => {
+async function streamingTopRows(
+  service: StreamingService,
+  showType: 'movie' | 'series'
+): Promise<z.infer<typeof tcStreamingTopSchema>> {
+  const load = async (country: string): Promise<z.infer<typeof tcStreamingTopSchema>> => {
     const rows = await tcFetchJson(
       '/streaming-top',
-      { service, country, show_type: 'movie' },
+      { service, country, show_type: showType },
       { schema: tcStreamingTopSchema, ttlMs: STREAMING_TOP_TTL_MS }
     )
-    return uniqueMovies(
-      rows
-        .filter((r) => r.hasTorrents !== false)
-        .sort((a, b) => a.rank - b.rank)
-        .map((r) =>
-          toMovieItem({ ...r, posterUrl: r.localPosterUrl ?? r.posterUrl ?? null }, r.rank)
-        )
-    )
+    return rows
+      .filter((r) => r.hasTorrents !== false && r.tmdbId != null)
+      .sort((a, b) => a.rank - b.rank)
+      .map((r) => ({ ...r, posterUrl: r.localPosterUrl ?? r.posterUrl ?? null }))
   }
   const country = localeCountry()
-  const items = await load(country)
-  return items.length > 0 || country === 'US' ? items : load('US')
+  const rows = await load(country)
+  return rows.length > 0 || country === 'US' ? rows : load('US')
+}
+
+export async function getStreamingTop(service: StreamingService): Promise<DiscoverMovieItem[]> {
+  const rows = await streamingTopRows(service, 'movie')
+  return uniqueMovies(rows.map((r) => toMovieItem(r, r.rank)))
+}
+
+export async function getStreamingTopShows(service: StreamingService): Promise<DiscoverShowItem[]> {
+  const rows = await streamingTopRows(service, 'series')
+  return uniqueById(rows.map((r) => toShowItem(r, r.rank)))
 }
 
 function toCollection(c: {
@@ -259,6 +306,23 @@ export async function getPopularMoviesPage(
   saveNewListRows(db, 'movie', withTmdbIds(res.items, 'movie'), Date.now())
   return {
     items: uniqueMovies(res.items.map((i) => toMovieItem(i))),
+    done: res.items.length === 0
+  }
+}
+
+/** One page of TorrentClaw's popular shows for the endless TV Trending list. */
+export async function getPopularShowsPage(
+  db: LibraryDb,
+  page: number
+): Promise<{ items: DiscoverShowItem[]; done: boolean }> {
+  const res = await tcFetchJson(
+    '/popular',
+    { type: 'show', page, limit: PAGE_LIMIT },
+    { schema: tcListResponseSchema, ttlMs: LIST_TTL_MS }
+  )
+  saveNewListRows(db, 'show', withTmdbIds(res.items, 'show'), Date.now())
+  return {
+    items: uniqueById(res.items.filter((i) => i.contentType === 'show').map((i) => toShowItem(i))),
     done: res.items.length === 0
   }
 }

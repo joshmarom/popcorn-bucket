@@ -18,13 +18,22 @@ import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
-import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
+import type {
+  TvGenreRailsResponse,
+  TvListPageResponse,
+  TvSearchResponse,
+  TvSeasonResponse,
+  TvShowListFactsResponse,
+  TvShowListResponse,
+  TvShowResponse
+} from '@shared/tv'
 import type {
   AutocompleteResponse,
   AutocompleteSuggestion,
   DiscoverCollectionResponse,
   DiscoverCollectionsResponse,
   DiscoverListResponse,
+  DiscoverShowListResponse,
   ResolveSuggestionResponse,
   StreamingService
 } from '@shared/discovery'
@@ -63,9 +72,18 @@ export type PopcornApi = {
     set(partial: Partial<AppSettings>): Promise<void>
   }
   tv: {
-    popular(page?: number): Promise<TvSearchResponse>
+    /** One page (24 shows) of the endless Trending list. */
+    trendingPage(opts: { page: number; forceRefresh?: boolean }): Promise<TvListPageResponse>
+    /** Every TMDB result for a query (paged in the browser). */
+    searchAll(query: string): Promise<TvShowListResponse>
+    onTheAir(): Promise<TvShowListResponse>
+    genres(): Promise<{ id: number; name: string }[]>
+    genreRails(): Promise<TvGenreRailsResponse>
+    discoverGenre(genreId: number, page: number): Promise<TvListPageResponse>
     search(query: string, page?: number): Promise<TvSearchResponse>
     getShow(id: number): Promise<TvShowResponse>
+    /** Genres, season count, and status for the show cards on screen. */
+    listFacts(ids: number[]): Promise<TvShowListFactsResponse>
     getSeason(showId: number, seasonNumber: number): Promise<TvSeasonResponse>
   }
   prefs: {
@@ -93,6 +111,8 @@ export type PopcornApi = {
   /** TorrentClaw discovery; every call can fail independently of TMDB. */
   discover: {
     popular(): Promise<DiscoverListResponse>
+    popularShows(): Promise<DiscoverShowListResponse>
+    streamingTopShows(service: StreamingService): Promise<DiscoverShowListResponse>
     upcoming(): Promise<DiscoverListResponse>
     streamingTop(service: StreamingService): Promise<DiscoverListResponse>
     collections(): Promise<DiscoverCollectionsResponse>
@@ -140,6 +160,11 @@ export type PopcornApi = {
   watchlist: {
     get(): Promise<number[]>
     set(movieId: number, inList: boolean): Promise<number[]>
+  }
+  /** "My shows": TMDB show ids, kept apart from the movie watchlist. */
+  showWatchlist: {
+    get(): Promise<number[]>
+    set(showId: number, inList: boolean): Promise<number[]>
   }
   mpv: {
     /** Fires when the current mpv session ends (process exit / EOF). */

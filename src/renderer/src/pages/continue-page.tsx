@@ -5,6 +5,7 @@ import { resumePosition, type WatchProgress } from '@shared/watch-history'
 import { MovieCard } from '@/components/movie-card'
 import { MOVIE_GRID_CLASS } from '@/lib/movie-layout'
 import { releaseYearFromDate } from '@/lib/movie-meta'
+import { loadShows } from '@/lib/show-progress'
 
 type ContinueItem = {
   key: string
@@ -37,7 +38,19 @@ export function ContinuePage(): ReactElement {
       const resumable = history.filter((p) => resumePosition(p) > 0)
       const movieIds = resumable.filter((p) => !isEpisodeMediaKey(p.movieId)).map((p) => p.movieId)
       const movies = new Map<number, CatalogMovieDetails>()
-      const loaded = await Promise.all(movieIds.map((id) => window.api.catalog.getMovie(id)))
+      const showIds = [
+        ...new Set(
+          resumable.flatMap((p) => {
+            if (!isEpisodeMediaKey(p.movieId)) return []
+            const showId = downloads.find((d) => d.movieId === p.movieId)?.episode?.showId
+            return showId != null ? [showId] : []
+          })
+        )
+      ]
+      const [loaded, shows] = await Promise.all([
+        Promise.all(movieIds.map((id) => window.api.catalog.getMovie(id))),
+        loadShows(showIds)
+      ])
       loaded.forEach((res, i) => {
         if (res.ok) movies.set(movieIds[i]!, res.movie)
       })
@@ -48,14 +61,15 @@ export function ContinuePage(): ReactElement {
         if (isEpisodeMediaKey(progress.movieId)) {
           const episode = downloads.find((d) => d.movieId === progress.movieId)?.episode
           if (!episode) continue
+          const show = shows.get(episode.showId)
           next.push({
             key: `ep-${progress.movieId}`,
             href: `/tv/${episode.showId}`,
             title: episode.showName,
             detail: `${episodeCode(episode.seasonNumber, episode.episodeNumber)} · ${formatRemaining(progress)}`,
-            posterUrl: null,
+            posterUrl: show?.posterUrl ?? null,
             progress,
-            releaseYear: null,
+            releaseYear: show?.firstAirYear ?? null,
             voteAverage: null,
             runtime: null,
             genres: []

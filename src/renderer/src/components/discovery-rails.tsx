@@ -14,39 +14,11 @@ import { useMovieListFacts } from '@/components/use-movie-list-facts'
 import { Button } from '@/components/ui/button'
 import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
 import { cn } from '@/lib/utils'
+import { useDiscoverList, type ListResponse } from '@/hooks/use-discover-list'
 
 const RAIL_MAX = 20
 
-/** Loads one TorrentClaw list; any failure leaves it empty so the rail stays hidden. */
-function useDiscoverList(
-  load: () => Promise<DiscoverListResponse>,
-  key: string
-): { items: DiscoverMovieItem[]; loading: boolean } {
-  const [state, setState] = useState<{ key: string; items: DiscoverMovieItem[] } | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    load()
-      .then((res) => {
-        if (cancelled) return
-        const items = res.ok ? res.items.filter(shouldIncludeCatalogListItem) : []
-        setState({ key, items: items.slice(0, RAIL_MAX) })
-      })
-      .catch(() => {
-        if (!cancelled) setState({ key, items: [] })
-      })
-    return (): void => {
-      cancelled = true
-    }
-    // `load` is recreated each render; `key` identifies the request.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  return {
-    items: state?.key === key ? state.items : [],
-    loading: state?.key !== key
-  }
-}
-
-function RailHeading({
+export function RailHeading({
   id,
   title,
   subtitle,
@@ -105,7 +77,7 @@ function ListRail({
   subtitle?: string
   load: () => Promise<DiscoverListResponse>
 }): ReactElement | null {
-  const { items } = useDiscoverList(load, id)
+  const { items } = useDiscoverList(load, id, shouldIncludeCatalogListItem)
   if (items.length === 0) return null
   return (
     <section className="space-y-2" aria-labelledby={id}>
@@ -115,7 +87,24 @@ function ListRail({
   )
 }
 
-function StreamingTopRail(): ReactElement | null {
+/**
+ * A streaming service Top 10 with service tabs. Until one chart loads it moves on to the next
+ * service, and it hides entirely if none have a chart.
+ */
+export function StreamingTopRail<T>({
+  id,
+  titleSuffix = '',
+  load,
+  include,
+  renderItems
+}: {
+  id: string
+  /** Appended to "Top 10 on {service}", e.g. " · series". */
+  titleSuffix?: string
+  load: (service: StreamingService) => Promise<ListResponse<T>>
+  include: (item: T) => boolean
+  renderItems: (items: T[]) => ReactElement
+}): ReactElement | null {
   const [service, setService] = useState<StreamingService>('netflix')
   const [unavailable, setUnavailable] = useState<Set<StreamingService>>(() => new Set())
   const [everLoaded, setEverLoaded] = useState(false)
@@ -123,7 +112,7 @@ function StreamingTopRail(): ReactElement | null {
   const emptyRef = useRef(new Set<StreamingService>())
   const { items, loading } = useDiscoverList(
     () =>
-      window.api.discover.streamingTop(service).then((res) => {
+      load(service).then((res) => {
         if (res.ok && res.items.length > 0) {
           everLoadedRef.current = true
           setEverLoaded(true)
@@ -138,7 +127,8 @@ function StreamingTopRail(): ReactElement | null {
         }
         return res
       }),
-    `streaming-top-${service}`
+    `${id}-${service}`,
+    include
   )
 
   if (!everLoaded && (loading || items.length === 0)) return null
@@ -146,8 +136,8 @@ function StreamingTopRail(): ReactElement | null {
   const label = STREAMING_SERVICES.find((s) => s.id === service)?.label ?? ''
 
   return (
-    <section className="space-y-2" aria-labelledby="discover-streaming-top">
-      <RailHeading id="discover-streaming-top" title={`Top 10 on ${label}`}>
+    <section className="space-y-2" aria-labelledby={id}>
+      <RailHeading id={id} title={`Top 10 on ${label}${titleSuffix}`}>
         <div role="tablist" aria-label="Streaming service" className="flex flex-wrap gap-1">
           {services.map((s) => (
             <Button
@@ -166,7 +156,7 @@ function StreamingTopRail(): ReactElement | null {
         </div>
       </RailHeading>
       {items.length > 0 ? (
-        <MovieRail items={items} />
+        renderItems(items)
       ) : (
         <p className="text-muted-foreground py-8 text-sm">
           {loading ? 'Loading…' : `No ${label} chart right now.`}
@@ -247,7 +237,12 @@ export function DiscoveryRails({ className }: { className?: string }): ReactElem
         subtitle="Biggest swarms right now"
         load={() => window.api.discover.popular()}
       />
-      <StreamingTopRail />
+      <StreamingTopRail<DiscoverMovieItem>
+        id="discover-streaming-top"
+        load={(service) => window.api.discover.streamingTop(service)}
+        include={shouldIncludeCatalogListItem}
+        renderItems={(items) => <MovieRail items={items} />}
+      />
       <ListRail
         id="discover-upcoming"
         title="Upcoming"

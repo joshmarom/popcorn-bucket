@@ -91,6 +91,20 @@ describe('TrendingPager', () => {
     expect(loads).toBe(3)
   })
 
+  it('pages a single source with no head (genre pages)', async () => {
+    const source: TrendingPageSource<{ id: number }> = {
+      name: 'discover',
+      firstPage: 1,
+      load: async (page) => ({ items: range(page * 100, 5).map((id) => ({ id })), done: page >= 3 })
+    }
+    const pager = new TrendingPager([], [source], 4)
+    const p1 = await pager.page(1)
+    expect(p1.results.map((r) => r.id)).toEqual([100, 101, 102, 103])
+    const p4 = await pager.page(4)
+    expect(p4.results.map((r) => r.id)).toEqual([302, 303, 304])
+    expect(p4.hasMore).toBe(false)
+  })
+
   it('serializes concurrent requests', async () => {
     const calls: number[] = []
     const source: TrendingPageSource = {

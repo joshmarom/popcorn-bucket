@@ -5,7 +5,40 @@ export type TvShowListItem = {
   posterUrl: string | null
   overview: string
   voteAverage: number | null
+  genres: string[]
 }
+
+/** Card facts for a show; filled from the library, then TMDB show details when missing. */
+export type TvShowListFacts = {
+  id: number
+  genres: string[]
+  seasonCount: number | null
+  firstAirYear: number | null
+  lastAirYear: number | null
+  /** TMDB status, e.g. "Returning Series", "Ended", "Canceled". */
+  tmdbStatus: string | null
+  lastEpisodeAirDate: string | null
+  voteAverage: number | null
+}
+
+export type TvShowListFactsResponse =
+  | { ok: true; facts: TvShowListFacts[] }
+  | { ok: false; error: string }
+
+/** One page of an endless show list (Trending, genre pages). */
+export type TvListPageResponse =
+  | { ok: true; results: TvShowListItem[]; page: number; hasMore: boolean }
+  | { ok: false; error: string }
+
+export type TvGenre = { id: number; name: string }
+
+export type TvGenreRail = { genre: TvGenre; shows: TvShowListItem[] }
+
+export type TvGenreRailsResponse = { ok: true; rails: TvGenreRail[] } | { ok: false; error: string }
+
+export type TvShowListResponse =
+  | { ok: true; results: TvShowListItem[] }
+  | { ok: false; error: string }
 
 export type TvSeasonSummary = {
   seasonNumber: number

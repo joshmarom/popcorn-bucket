@@ -165,7 +165,22 @@ const SCHEMA_V4 = `
 ALTER TABLE torrents ADD COLUMN extras_json TEXT;
 `
 
-const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4]
+/** TV card facts from TMDB show details, and the show watchlist ("My shows"). */
+const SCHEMA_V5 = `
+ALTER TABLE shows ADD COLUMN genres_json TEXT;
+ALTER TABLE shows ADD COLUMN season_count INTEGER;
+ALTER TABLE shows ADD COLUMN tmdb_status TEXT;
+ALTER TABLE shows ADD COLUMN last_air_date TEXT;
+ALTER TABLE shows ADD COLUMN last_episode_air_date TEXT;
+ALTER TABLE shows ADD COLUMN facts_at INTEGER;
+
+CREATE TABLE show_watchlist (
+  show_id INTEGER PRIMARY KEY,
+  added_at INTEGER NOT NULL
+);
+`
+
+const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5]
 
 let singleton: LibraryDb | null = null
 

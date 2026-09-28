@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Loader2, Play } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Loader2, Play } from 'lucide-react'
+import { seasonLabel } from '@shared/tv-meta'
 import { rankEpisodeSources } from '@shared/release-ranking'
 import type { TorrentSource } from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
@@ -61,6 +62,11 @@ export function TvShowPage(): ReactElement {
   const [inline, setInline] = useState<InlinePlayback | null>(null)
   const [pendingNotice, setPendingNotice] = useState<(() => void) | null>(null)
   const [lastPlayed, setLastPlayed] = useState<TvEpisode | null>(null)
+  const [inMyShows, setInMyShows] = useState(false)
+  useEffect(() => {
+    if (!Number.isFinite(showId)) return
+    void window.api.showWatchlist.get().then((ids) => setInMyShows(ids.includes(showId)))
+  }, [showId])
   const statusRef = useRef(status)
   useEffect(() => {
     statusRef.current = status
@@ -248,9 +254,28 @@ export function TvShowPage(): ReactElement {
             <div className="min-w-0 space-y-2">
               <h1 className="text-3xl font-semibold tracking-tight">{show.name}</h1>
               <p className="text-muted-foreground text-sm">
-                {[show.firstAirYear, `${show.seasons.length} seasons`].filter(Boolean).join(' · ')}
+                {[show.firstAirYear, seasonLabel(show.seasons.length)].filter(Boolean).join(' · ')}
               </p>
               <p className="max-w-prose text-sm leading-relaxed">{show.overview}</p>
+              <Button
+                type="button"
+                variant={inMyShows ? 'secondary' : 'outline'}
+                size="sm"
+                className="gap-1.5"
+                aria-pressed={inMyShows}
+                onClick={() => {
+                  const next = !inMyShows
+                  setInMyShows(next)
+                  void window.api.showWatchlist.set(show.id, next)
+                }}
+              >
+                {inMyShows ? (
+                  <BookmarkCheck className="size-3.5" />
+                ) : (
+                  <Bookmark className="size-3.5" />
+                )}
+                {inMyShows ? 'In My shows' : 'Add to My shows'}
+              </Button>
             </div>
           </div>
 

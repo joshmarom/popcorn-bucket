@@ -1,4 +1,5 @@
 import type { CatalogMovieListItem } from './catalog'
+import type { TvShowListItem } from './tv'
 
 /** A TorrentClaw list row mapped onto our TMDB-keyed movie card. */
 export type DiscoverMovieItem = CatalogMovieListItem & {
@@ -10,6 +11,16 @@ export type DiscoverMovieItem = CatalogMovieListItem & {
 
 export type DiscoverListResponse =
   | { ok: true; items: DiscoverMovieItem[] }
+  | { ok: false; error: string }
+
+/** A TorrentClaw show row mapped onto our TMDB-keyed show card. */
+export type DiscoverShowItem = TvShowListItem & {
+  rank: number | null
+  maxSeeders: number | null
+}
+
+export type DiscoverShowListResponse =
+  | { ok: true; items: DiscoverShowItem[] }
   | { ok: false; error: string }
 
 export const STREAMING_SERVICES = [

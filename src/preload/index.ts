@@ -19,13 +19,22 @@ import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
-import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
+import type {
+  TvGenreRailsResponse,
+  TvListPageResponse,
+  TvSearchResponse,
+  TvSeasonResponse,
+  TvShowListFactsResponse,
+  TvShowListResponse,
+  TvShowResponse
+} from '@shared/tv'
 import type {
   AutocompleteResponse,
   AutocompleteSuggestion,
   DiscoverCollectionResponse,
   DiscoverCollectionsResponse,
   DiscoverListResponse,
+  DiscoverShowListResponse,
   ResolveSuggestionResponse,
   StreamingService
 } from '@shared/discovery'
@@ -59,11 +68,20 @@ const api = {
       ipcRenderer.invoke('settings:set', partial)
   },
   tv: {
-    popular: (page?: number): Promise<TvSearchResponse> =>
-      ipcRenderer.invoke('tv:popular', { page }),
+    trendingPage: (opts: { page: number; forceRefresh?: boolean }): Promise<TvListPageResponse> =>
+      ipcRenderer.invoke('tv:trendingPage', opts),
+    searchAll: (query: string): Promise<TvShowListResponse> =>
+      ipcRenderer.invoke('tv:searchAll', { query }),
+    onTheAir: (): Promise<TvShowListResponse> => ipcRenderer.invoke('tv:onTheAir'),
+    genres: (): Promise<{ id: number; name: string }[]> => ipcRenderer.invoke('tv:genres'),
+    genreRails: (): Promise<TvGenreRailsResponse> => ipcRenderer.invoke('tv:genreRails'),
+    discoverGenre: (genreId: number, page: number): Promise<TvListPageResponse> =>
+      ipcRenderer.invoke('tv:discoverGenre', { genreId, page }),
     search: (query: string, page?: number): Promise<TvSearchResponse> =>
       ipcRenderer.invoke('tv:search', { query, page }),
     getShow: (id: number): Promise<TvShowResponse> => ipcRenderer.invoke('tv:getShow', { id }),
+    listFacts: (ids: number[]): Promise<TvShowListFactsResponse> =>
+      ipcRenderer.invoke('tv:listFacts', { ids }),
     getSeason: (showId: number, seasonNumber: number): Promise<TvSeasonResponse> =>
       ipcRenderer.invoke('tv:getSeason', { showId, seasonNumber })
   },
@@ -93,6 +111,10 @@ const api = {
   },
   discover: {
     popular: (): Promise<DiscoverListResponse> => ipcRenderer.invoke('discover:popular'),
+    popularShows: (): Promise<DiscoverShowListResponse> =>
+      ipcRenderer.invoke('discover:popularShows'),
+    streamingTopShows: (service: StreamingService): Promise<DiscoverShowListResponse> =>
+      ipcRenderer.invoke('discover:streamingTopShows', { service }),
     upcoming: (): Promise<DiscoverListResponse> => ipcRenderer.invoke('discover:upcoming'),
     streamingTop: (service: StreamingService): Promise<DiscoverListResponse> =>
       ipcRenderer.invoke('discover:streamingTop', { service }),
@@ -164,6 +186,11 @@ const api = {
     get: (): Promise<number[]> => ipcRenderer.invoke('watchlist:get'),
     set: (movieId: number, inList: boolean): Promise<number[]> =>
       ipcRenderer.invoke('watchlist:set', { movieId, inList })
+  },
+  showWatchlist: {
+    get: (): Promise<number[]> => ipcRenderer.invoke('tvWatchlist:get'),
+    set: (showId: number, inList: boolean): Promise<number[]> =>
+      ipcRenderer.invoke('tvWatchlist:set', { showId, inList })
   },
   mpv: {
     onEnd: (cb: () => void): (() => void) => {

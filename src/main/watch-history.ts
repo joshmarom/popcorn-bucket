@@ -1,6 +1,10 @@
 import type { WatchProgress } from '@shared/watch-history'
 import { getLibrary } from './library/db'
 import {
+  getShowWatchlist as readShowWatchlist,
+  setShowInWatchlist as writeShowWatchlist
+} from './library/shows'
+import {
   clearWatchProgress as clearStoredWatchProgress,
   getWatchProgress as readStoredWatchProgress,
   getWatchlist as readStoredWatchlist,
@@ -31,4 +35,13 @@ export function getWatchlist(): number[] {
 
 export function setInWatchlist(movieId: number, inList: boolean): number[] {
   return setStoredWatchlist(getLibrary(), movieId, inList)
+}
+
+/** "My shows": TMDB show ids, most recently added first. */
+export function getShowWatchlist(): number[] {
+  return readShowWatchlist(getLibrary())
+}
+
+export function setShowInWatchlist(showId: number, inList: boolean): number[] {
+  return writeShowWatchlist(getLibrary(), showId, inList)
 }

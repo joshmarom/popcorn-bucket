@@ -8,7 +8,15 @@ import { openLibraryAt } from './db'
 import { importLegacySnapshot } from './migrate'
 import { upsertGenres, upsertMovie, upsertMovieListRows } from './movies'
 import { rankMovies, recordTrendingSwarm } from './ranked-lists'
-import { rankShows, recordShowSwarm, upsertShowDetails, upsertShowListRows } from './shows'
+import {
+  getShowWatchlist,
+  rankShows,
+  readShowListFacts,
+  recordShowSwarm,
+  setShowInWatchlist,
+  upsertShowDetails,
+  upsertShowListRows
+} from './shows'
 import { TORRENT_SEARCH_FRESH_MS, readTorrentSearch, writeTorrentSearch } from './torrents'
 import { MY_LIST, getWatchProgress, getWatchlist } from './watch'
 
@@ -39,7 +47,7 @@ function run(): void {
           version: number
         }[]
       ).map((row) => row.version),
-      [1, 2, 3, 4]
+      [1, 2, 3, 4, 5]
     )
 
     upsertMovie(db, {
@@ -336,6 +344,48 @@ function run(): void {
       'swarm and searched copies should outrank a popular show with no torrents'
     )
     assert.equal(shows[1]?.posterUrl, 'https://image.tmdb.org/t/p/w342/comedy.jpg')
+
+    upsertShowListRows(
+      db,
+      [{ ...showRow, tmdbId: 1, name: 'Popular Soap', firstAirDate: null, genres: ['Soap'] }],
+      now
+    )
+    upsertShowDetails(db, {
+      tmdbId: 2,
+      name: 'Seeded Drama',
+      firstAirDate: '2019-05-01',
+      overview: 'A show.',
+      posterUrl: null,
+      imdbId: null,
+      voteAverage: 7.5,
+      voteCount: 800,
+      popularity: 150,
+      facts: {
+        genres: ['Drama', 'Crime'],
+        seasonCount: 3,
+        tmdbStatus: 'Ended',
+        lastAirDate: '2023-06-01',
+        lastEpisodeAirDate: '2023-06-01'
+      }
+    })
+    const facts = readShowListFacts(db, [1, 2, 99])
+    assert.deepEqual(facts.get(1)?.genres, ['Soap'])
+    assert.equal(facts.get(1)?.factsAt, null)
+    assert.deepEqual(facts.get(2)?.genres, ['Drama', 'Crime'])
+    assert.equal(facts.get(2)?.seasonCount, 3)
+    assert.equal(facts.get(2)?.tmdbStatus, 'Ended')
+    assert.ok((facts.get(2)?.factsAt ?? 0) > 0)
+    assert.equal(facts.has(99), false)
+    assert.deepEqual(rankShows(db, { limit: 10, now }).find((s) => s.id === 2)?.genres, [
+      'Drama',
+      'Crime'
+    ])
+
+    assert.deepEqual(getShowWatchlist(db), [])
+    setShowInWatchlist(db, 2, true, now)
+    assert.deepEqual(setShowInWatchlist(db, 3, true, now + 1), [3, 2])
+    assert.deepEqual(setShowInWatchlist(db, 2, false), [3])
+    assert.deepEqual(getWatchlist(db), [550, 680], 'the movie watchlist is untouched')
   } finally {
     db.close()
     rmSync(dir, { recursive: true, force: true })

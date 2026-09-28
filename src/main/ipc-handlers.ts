@@ -8,7 +8,9 @@ import {
   getCollection,
   getCollections,
   getPopularMovies,
+  getPopularShows,
   getStreamingTop,
+  getStreamingTopShows,
   getUpcomingMovies,
   resolveSuggestionTmdbId
 } from './torrentclaw/discovery'
@@ -18,6 +20,7 @@ import {
   type DiscoverCollectionResponse,
   type DiscoverCollectionsResponse,
   type DiscoverListResponse,
+  type DiscoverShowListResponse,
   type ResolveSuggestionResponse,
   type StreamingService
 } from '@shared/discovery'
@@ -48,8 +51,25 @@ import {
 import { searchTorrentSources } from './torrent/orchestrator'
 import { listProviderHealth } from './torrent/scrape-providers'
 import type { ProviderHealth } from '@shared/provider-health'
-import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
-import { getTvSeason, getTvShowDetails, searchTvShows } from './tmdb-tv'
+import type {
+  TvSearchResponse,
+  TvSeasonResponse,
+  TvGenreRailsResponse,
+  TvListPageResponse,
+  TvShowListFactsResponse,
+  TvShowListResponse,
+  TvShowResponse
+} from '@shared/tv'
+import { fillTvShowListFacts } from './tv-list-facts'
+import {
+  getOnTheAirShows,
+  getTvGenres,
+  getTvSeason,
+  getTvShowDetails,
+  searchTvShows,
+  searchTvShowsAll
+} from './tmdb-tv'
+import { getTvGenrePage, getTvGenreRails } from './tv-genres'
 import { getTrendingTvPage } from './torrent/trending-tv'
 import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
@@ -83,7 +103,9 @@ import { rankMovies } from './library/ranked-lists'
 import {
   clearWatchProgress,
   getWatchProgress,
+  getShowWatchlist,
   getWatchlist,
+  setShowInWatchlist,
   listWatchProgress,
   recordWatchProgress,
   setInWatchlist
@@ -93,10 +115,6 @@ import { readVidkingDiagnostics, type VidkingNetEvent } from './vidking-diagnost
 
 const searchInput = z.object({
   query: z.string().min(1).max(200)
-})
-
-const pageInput = z.object({
-  page: z.number().int().positive().max(500).optional()
 })
 
 const tvSearchInput = searchInput.extend({
@@ -182,6 +200,16 @@ const watchlistSetInput = z.object({
 const catalogTrendingPageInput = z.object({
   page: z.number().int().positive().max(5000).optional(),
   forceRefresh: z.boolean().optional()
+})
+
+const tvDiscoverGenreInput = z.object({
+  genreId: z.number().int().positive(),
+  page: z.number().int().positive().max(5000).default(1)
+})
+
+const showWatchlistSetInput = z.object({
+  showId: z.number().int().positive(),
+  inList: z.boolean()
 })
 
 const streamingTopInput = z.object({
@@ -628,14 +656,91 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle('tv:popular', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
-    const parsed = pageInput.safeParse(raw ?? {})
+  ipcMain.handle('tv:trendingPage', async (_evt, raw: unknown): Promise<TvListPageResponse> => {
+    const parsed = catalogTrendingPageInput.safeParse(raw ?? {})
     if (!parsed.success) return { ok: false, error: 'Invalid page.' }
     try {
-      return { ok: true, ...(await getTrendingTvPage(getAppSettings(), parsed.data.page ?? 1)) }
+      const page = await getTrendingTvPage(getAppSettings(), parsed.data.page ?? 1, {
+        forceRefresh: parsed.data.forceRefresh === true
+      })
+      return { ok: true, ...page }
     } catch (e) {
       return { ok: false, error: mapCatalogError(e).error }
     }
+  })
+
+  ipcMain.handle('tv:searchAll', async (_evt, raw: unknown): Promise<TvShowListResponse> => {
+    const parsed = searchInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Enter a search query.' }
+    try {
+      return { ok: true, results: await searchTvShowsAll(getAppSettings(), parsed.data.query) }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('tv:onTheAir', async (): Promise<TvShowListResponse> => {
+    try {
+      return { ok: true, results: await getOnTheAirShows(getAppSettings()) }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('tv:genreRails', async (): Promise<TvGenreRailsResponse> => {
+    try {
+      return { ok: true, rails: await getTvGenreRails(getAppSettings()) }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('tv:genres', async (): Promise<{ id: number; name: string }[]> => {
+    try {
+      return await getTvGenres(getAppSettings())
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle('tv:discoverGenre', async (_evt, raw: unknown): Promise<TvListPageResponse> => {
+    const parsed = tvDiscoverGenreInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Invalid genre.' }
+    try {
+      const page = await getTvGenrePage(getAppSettings(), parsed.data.genreId, parsed.data.page)
+      return { ok: true, ...page }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('discover:popularShows', async (): Promise<DiscoverShowListResponse> => {
+    try {
+      return { ok: true, items: await getPopularShows() }
+    } catch (e) {
+      return { ok: false, error: discoverError(e) }
+    }
+  })
+
+  ipcMain.handle(
+    'discover:streamingTopShows',
+    async (_evt, raw: unknown): Promise<DiscoverShowListResponse> => {
+      const parsed = streamingTopInput.safeParse(raw)
+      if (!parsed.success) return { ok: false, error: 'Unknown streaming service.' }
+      try {
+        return { ok: true, items: await getStreamingTopShows(parsed.data.service) }
+      } catch (e) {
+        return { ok: false, error: discoverError(e) }
+      }
+    }
+  )
+
+  ipcMain.handle('tvWatchlist:get', (): number[] => getShowWatchlist())
+
+  ipcMain.handle('tvWatchlist:set', (_evt, raw: unknown): number[] => {
+    const parsed = showWatchlistSetInput.safeParse(raw)
+    if (!parsed.success) return getShowWatchlist()
+    return setShowInWatchlist(parsed.data.showId, parsed.data.inList)
   })
 
   ipcMain.handle('tv:search', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
@@ -646,6 +751,16 @@ export function registerIpcHandlers(): void {
         ok: true,
         ...(await searchTvShows(getAppSettings(), parsed.data.query, parsed.data.page ?? 1))
       }
+    } catch (e) {
+      return { ok: false, error: mapCatalogError(e).error }
+    }
+  })
+
+  ipcMain.handle('tv:listFacts', async (_evt, raw: unknown): Promise<TvShowListFactsResponse> => {
+    const parsed = listFactsInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Invalid show ids.' }
+    try {
+      return { ok: true, facts: await fillTvShowListFacts(getAppSettings(), parsed.data.ids) }
     } catch (e) {
       return { ok: false, error: mapCatalogError(e).error }
     }

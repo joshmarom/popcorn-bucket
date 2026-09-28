@@ -14,6 +14,8 @@ export type LibraryShowListRow = {
   voteCount: number | null
   popularity: number | null
   imdbId?: string | null
+  /** Genre names; empty keeps what the library already has. */
+  genres?: string[]
 }
 
 export type LibraryShowDetails = {
@@ -26,6 +28,27 @@ export type LibraryShowDetails = {
   voteAverage: number | null
   voteCount: number | null
   popularity: number | null
+  /** Card facts from the full TMDB record; written together with `facts_at`. */
+  facts?: {
+    genres: string[]
+    seasonCount: number | null
+    tmdbStatus: string | null
+    lastAirDate: string | null
+    lastEpisodeAirDate: string | null
+  }
+}
+
+export type StoredShowListFacts = {
+  id: number
+  genres: string[]
+  seasonCount: number | null
+  firstAirYear: number | null
+  tmdbStatus: string | null
+  lastAirDate: string | null
+  lastEpisodeAirDate: string | null
+  voteAverage: number | null
+  /** When the facts were last written from show details; null if never. */
+  factsAt: number | null
 }
 
 type ShowPoolRow = {
@@ -38,6 +61,7 @@ type ShowPoolRow = {
   rating: number | null
   vote_count: number | null
   tmdb_popularity: number | null
+  genres_json: string | null
   swarm_seeders: number | null
   swarm_seen_at: number | null
   swarm_upload_unix: number | null
@@ -57,6 +81,21 @@ function storedImdbId(raw: string | null | undefined): string | null {
   return /^tt\d+$/i.test(trimmed) ? trimmed.toLowerCase() : null
 }
 
+function genresJson(genres: string[] | undefined): string | null {
+  const clean = [...new Set((genres ?? []).map((g) => g.trim()).filter(Boolean))]
+  return clean.length > 0 ? JSON.stringify(clean) : null
+}
+
+function parseGenres(json: string | null): string[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json) as unknown
+    return Array.isArray(parsed) ? parsed.filter((g): g is string => typeof g === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 /** Records TMDB list rows without overwriting what the show page saved. */
 export function upsertShowListRows(
   db: LibraryDb,
@@ -66,8 +105,8 @@ export function upsertShowListRows(
   const upsert = db.prepare(
     `INSERT INTO shows (
        tmdb_id, name, first_air_date, year, imdb_id, overview, poster_url,
-       rating, vote_count, tmdb_popularity, list_seen_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       rating, vote_count, tmdb_popularity, list_seen_at, updated_at, genres_json
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(tmdb_id) DO UPDATE SET
        name = excluded.name,
        first_air_date = COALESCE(excluded.first_air_date, shows.first_air_date),
@@ -78,7 +117,8 @@ export function upsertShowListRows(
        rating = COALESCE(excluded.rating, shows.rating),
        vote_count = COALESCE(excluded.vote_count, shows.vote_count),
        tmdb_popularity = COALESCE(excluded.tmdb_popularity, shows.tmdb_popularity),
-       list_seen_at = excluded.list_seen_at`
+       list_seen_at = excluded.list_seen_at,
+       genres_json = COALESCE(shows.genres_json, excluded.genres_json)`
   )
   const run = db.transaction(() => {
     for (const row of rows) {
@@ -94,7 +134,8 @@ export function upsertShowListRows(
         row.voteCount,
         row.popularity,
         seenAt,
-        seenAt
+        seenAt,
+        genresJson(row.genres)
       )
     }
   })
@@ -131,6 +172,90 @@ export function upsertShowDetails(db: LibraryDb, show: LibraryShowDetails): void
     show.popularity,
     Date.now()
   )
+  const f = show.facts
+  if (f) {
+    db.prepare(
+      `UPDATE shows SET
+         genres_json = COALESCE(?, genres_json),
+         season_count = ?,
+         tmdb_status = ?,
+         last_air_date = ?,
+         last_episode_air_date = ?,
+         facts_at = ?
+       WHERE tmdb_id = ?`
+    ).run(
+      genresJson(f.genres),
+      f.seasonCount,
+      f.tmdbStatus,
+      f.lastAirDate,
+      f.lastEpisodeAirDate,
+      Date.now(),
+      show.tmdbId
+    )
+  }
+}
+
+type ShowFactsRow = {
+  tmdb_id: number
+  genres_json: string | null
+  season_count: number | null
+  year: number | null
+  tmdb_status: string | null
+  last_air_date: string | null
+  last_episode_air_date: string | null
+  rating: number | null
+  facts_at: number | null
+}
+
+export function readShowListFacts(db: LibraryDb, ids: number[]): Map<number, StoredShowListFacts> {
+  const out = new Map<number, StoredShowListFacts>()
+  if (ids.length === 0) return out
+  const rows = db
+    .prepare(
+      `SELECT tmdb_id, genres_json, season_count, year, tmdb_status, last_air_date,
+              last_episode_air_date, rating, facts_at
+       FROM shows WHERE tmdb_id IN (${ids.map(() => '?').join(',')})`
+    )
+    .all(...ids) as ShowFactsRow[]
+  for (const r of rows) {
+    out.set(r.tmdb_id, {
+      id: r.tmdb_id,
+      genres: parseGenres(r.genres_json),
+      seasonCount: r.season_count,
+      firstAirYear: r.year,
+      tmdbStatus: r.tmdb_status,
+      lastAirDate: r.last_air_date,
+      lastEpisodeAirDate: r.last_episode_air_date,
+      voteAverage: r.rating,
+      factsAt: r.facts_at
+    })
+  }
+  return out
+}
+
+/** Show ids in "My shows", most recently added first. */
+export function getShowWatchlist(db: LibraryDb): number[] {
+  const rows = db
+    .prepare('SELECT show_id FROM show_watchlist ORDER BY added_at DESC, show_id DESC')
+    .all() as { show_id: number }[]
+  return rows.map((r) => r.show_id)
+}
+
+export function setShowInWatchlist(
+  db: LibraryDb,
+  showId: number,
+  inList: boolean,
+  now = Date.now()
+): number[] {
+  if (inList) {
+    db.prepare(
+      `INSERT INTO show_watchlist (show_id, added_at) VALUES (?, ?)
+       ON CONFLICT(show_id) DO UPDATE SET added_at = excluded.added_at`
+    ).run(showId, now)
+  } else {
+    db.prepare('DELETE FROM show_watchlist WHERE show_id = ?').run(showId)
+  }
+  return getShowWatchlist(db)
 }
 
 export function recordShowSwarm(
@@ -173,7 +298,7 @@ function loadShowPool(db: LibraryDb, cutoff: number): ShowPoolRow[] {
          GROUP BY s.tmdb_id
        )
        SELECT s.tmdb_id, s.name, s.year, s.first_air_date, s.overview, s.poster_url,
-              s.rating, s.vote_count, s.tmdb_popularity,
+              s.rating, s.vote_count, s.tmdb_popularity, s.genres_json,
               w.seeders AS swarm_seeders, w.seen_at AS swarm_seen_at,
               w.latest_upload_unix AS swarm_upload_unix,
               c.seeders AS copy_seeders, c.fetched_at AS copy_seen_at
@@ -222,6 +347,7 @@ export function rankShows(db: LibraryDb, opts: { limit: number; now?: number }):
     firstAirYear: row.year,
     posterUrl: row.poster_url,
     overview: row.overview,
-    voteAverage: row.rating
+    voteAverage: row.rating,
+    genres: parseGenres(row.genres_json)
   }))
 }
