@@ -1,11 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppSettings } from '@shared/app-settings'
+import type { AppSettings, TorrentClawKeyStatus } from '@shared/app-settings'
 import type {
   CatalogGenreRailsResponse,
   CatalogMovieListFactsResponse,
   CatalogMovieResponse,
-  CatalogSearchResponse
+  CatalogSearchResponse,
+  CatalogTrendingPageResponse
 } from '@shared/catalog'
 import type { TorrentSearchInput, TorrentSearchResponse } from '@shared/torrent'
 import type {
@@ -19,6 +20,15 @@ import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
 import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
+import type {
+  AutocompleteResponse,
+  AutocompleteSuggestion,
+  DiscoverCollectionResponse,
+  DiscoverCollectionsResponse,
+  DiscoverListResponse,
+  ResolveSuggestionResponse,
+  StreamingService
+} from '@shared/discovery'
 
 const api = {
   app: {
@@ -43,6 +53,8 @@ const api = {
   settings: {
     get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
     isEncrypted: (): Promise<boolean> => ipcRenderer.invoke('settings:isEncrypted'),
+    torrentClawKeyStatus: (): Promise<TorrentClawKeyStatus> =>
+      ipcRenderer.invoke('settings:torrentClawKeyStatus'),
     set: (partial: Partial<AppSettings>): Promise<void> =>
       ipcRenderer.invoke('settings:set', partial)
   },
@@ -65,8 +77,10 @@ const api = {
     defaultDownloadDir: (): Promise<string> => ipcRenderer.invoke('prefs:defaultDownloadDir')
   },
   catalog: {
-    nowPlaying: (opts?: { forceRefresh?: boolean }): Promise<CatalogSearchResponse> =>
-      ipcRenderer.invoke('catalog:nowPlaying', opts ?? {}),
+    trendingPage: (opts: {
+      page: number
+      forceRefresh?: boolean
+    }): Promise<CatalogTrendingPageResponse> => ipcRenderer.invoke('catalog:trendingPage', opts),
     search: (query: string): Promise<CatalogSearchResponse> =>
       ipcRenderer.invoke('catalog:search', { query }),
     getMovie: (id: number): Promise<CatalogMovieResponse> =>
@@ -76,6 +90,25 @@ const api = {
     genreRails: (): Promise<CatalogGenreRailsResponse> => ipcRenderer.invoke('catalog:genreRails'),
     discoverGenre: (genreId: number): Promise<CatalogSearchResponse> =>
       ipcRenderer.invoke('catalog:discoverGenre', { genreId })
+  },
+  discover: {
+    popular: (): Promise<DiscoverListResponse> => ipcRenderer.invoke('discover:popular'),
+    upcoming: (): Promise<DiscoverListResponse> => ipcRenderer.invoke('discover:upcoming'),
+    streamingTop: (service: StreamingService): Promise<DiscoverListResponse> =>
+      ipcRenderer.invoke('discover:streamingTop', { service }),
+    collections: (): Promise<DiscoverCollectionsResponse> =>
+      ipcRenderer.invoke('discover:collections'),
+    collection: (id: number): Promise<DiscoverCollectionResponse> =>
+      ipcRenderer.invoke('discover:collection', { id }),
+    autocomplete: (q: string): Promise<AutocompleteResponse> =>
+      ipcRenderer.invoke('discover:autocomplete', { q }),
+    resolveSuggestion: (s: AutocompleteSuggestion): Promise<ResolveSuggestionResponse> =>
+      ipcRenderer.invoke('discover:resolveSuggestion', {
+        id: s.id,
+        title: s.title,
+        year: s.year,
+        contentType: s.contentType
+      })
   },
   torrent: {
     search: (input: TorrentSearchInput): Promise<TorrentSearchResponse> =>

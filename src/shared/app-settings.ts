@@ -5,11 +5,17 @@ export type AppSettings = {
   omdbApiKey: string
   /** Optional: enables subtitle lookup on opensubtitles.com. */
   openSubtitlesApiKey: string
+  /** Optional: unlocks magnets from torrentclaw.com. Discovery works without it. */
+  torrentClawApiKey: string
 }
 
 export const defaultAppSettings: AppSettings = {
   tmdbApiKey: '',
   tmdbReadAccessToken: '',
   omdbApiKey: '',
-  openSubtitlesApiKey: ''
+  openSubtitlesApiKey: '',
+  torrentClawApiKey: ''
 }
+
+/** How TorrentClaw treated the configured key on the most recent request. */
+export type TorrentClawKeyStatus = 'active' | 'rejected' | 'anonymous'

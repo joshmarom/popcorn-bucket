@@ -35,7 +35,8 @@ const SECRET_KEYS = [
   'tmdbApiKey',
   'tmdbReadAccessToken',
   'omdbApiKey',
-  'openSubtitlesApiKey'
+  'openSubtitlesApiKey',
+  'torrentClawApiKey'
 ] as const
 type SecretKey = (typeof SECRET_KEYS)[number]
 
@@ -85,7 +86,8 @@ const DEV_ENV_KEYS = [
   'TMDB_API_KEY',
   'TMDB_READ_ACCESS_TOKEN',
   'OMDB_API_KEY',
-  'OPENSUBTITLES_API_KEY'
+  'OPENSUBTITLES_API_KEY',
+  'TORRENTCLAW_API_KEY'
 ] as const
 
 /** electron-vite only injects prefixed vars, so read the project `.env` for these keys in dev. */
@@ -119,7 +121,8 @@ function envOverride(): Partial<AppSettings> {
     tmdbApiKey: process.env.TMDB_API_KEY ?? '',
     tmdbReadAccessToken: process.env.TMDB_READ_ACCESS_TOKEN ?? '',
     omdbApiKey: process.env.OMDB_API_KEY ?? '',
-    openSubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY ?? ''
+    openSubtitlesApiKey: process.env.OPENSUBTITLES_API_KEY ?? '',
+    torrentClawApiKey: process.env.TORRENTCLAW_API_KEY ?? ''
   }
 }
 
@@ -132,7 +135,9 @@ export function getAppSettings(): AppSettings {
   const omdbApiKey = readSecret('omdbApiKey').trim() || env.omdbApiKey?.trim() || ''
   const openSubtitlesApiKey =
     readSecret('openSubtitlesApiKey').trim() || env.openSubtitlesApiKey?.trim() || ''
-  return { tmdbApiKey, tmdbReadAccessToken, omdbApiKey, openSubtitlesApiKey }
+  const torrentClawApiKey =
+    readSecret('torrentClawApiKey').trim() || env.torrentClawApiKey?.trim() || ''
+  return { tmdbApiKey, tmdbReadAccessToken, omdbApiKey, openSubtitlesApiKey, torrentClawApiKey }
 }
 
 /** Values saved in the app (what the Settings screen should display). */
@@ -141,7 +146,8 @@ export function getStoredSettings(): AppSettings {
     tmdbApiKey: readSecret('tmdbApiKey'),
     tmdbReadAccessToken: readSecret('tmdbReadAccessToken'),
     omdbApiKey: readSecret('omdbApiKey'),
-    openSubtitlesApiKey: readSecret('openSubtitlesApiKey')
+    openSubtitlesApiKey: readSecret('openSubtitlesApiKey'),
+    torrentClawApiKey: readSecret('torrentClawApiKey')
   }
 }
 

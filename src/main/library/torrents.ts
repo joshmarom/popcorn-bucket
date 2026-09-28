@@ -22,6 +22,32 @@ type TorrentRow = {
   torrent_file_url: string | null
   details_url: string | null
   upload_date: string | null
+  extras_json: string | null
+}
+
+type TorrentExtras = Pick<RawTorrentSource, 'quality' | 'tvEpisode'>
+
+function extrasJson(source: RawTorrentSource): string | null {
+  if (!source.quality && !source.tvEpisode) return null
+  const extras: TorrentExtras = {}
+  if (source.quality) extras.quality = source.quality
+  if (source.tvEpisode) extras.tvEpisode = source.tvEpisode
+  return JSON.stringify(extras)
+}
+
+function parseExtras(json: string | null): TorrentExtras {
+  if (!json) return {}
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!parsed || typeof parsed !== 'object') return {}
+    const { quality, tvEpisode } = parsed as TorrentExtras
+    return {
+      ...(quality && typeof quality === 'object' ? { quality } : {}),
+      ...(tvEpisode && typeof tvEpisode.season === 'number' ? { tvEpisode } : {})
+    }
+  } catch {
+    return {}
+  }
 }
 
 type SearchRow = {
@@ -89,12 +115,12 @@ export function writeTorrentSearch(
          info_hash, provider, title, magnet, size, seeders, leechers,
          torrent_file_url, details_url, upload_date,
          resolution, source, codec, hdr, release_year, season, episode, season_pack,
-         movie_id, fetched_at
+         movie_id, fetched_at, extras_json
        ) VALUES (
          @infoHash, @provider, @title, @magnet, @size, @seeders, @leechers,
          @torrentFileUrl, @detailsUrl, @uploadDate,
          @resolution, @source, @codec, @hdr, @releaseYear, @season, @episode, @seasonPack,
-         @movieId, @fetchedAt
+         @movieId, @fetchedAt, @extrasJson
        )
        ON CONFLICT(info_hash) DO UPDATE SET
          provider = excluded.provider,
@@ -115,7 +141,8 @@ export function writeTorrentSearch(
          episode = excluded.episode,
          season_pack = excluded.season_pack,
          movie_id = COALESCE(excluded.movie_id, torrents.movie_id),
-         fetched_at = excluded.fetched_at`
+         fetched_at = excluded.fetched_at,
+         extras_json = COALESCE(excluded.extras_json, torrents.extras_json)`
     )
     for (const row of rows) {
       const release = row.source.release ?? parseReleaseTitle(row.source.title)
@@ -139,7 +166,8 @@ export function writeTorrentSearch(
         episode: release.episode,
         seasonPack: release.seasonPack ? 1 : 0,
         movieId,
-        fetchedAt
+        fetchedAt,
+        extrasJson: extrasJson(row.source)
       })
     }
 
@@ -177,7 +205,7 @@ export function readTorrentSearch(
   const torrents = db
     .prepare(
       `SELECT t.info_hash, t.provider, t.title, t.magnet, t.size, t.seeders, t.leechers,
-              t.torrent_file_url, t.details_url, t.upload_date
+              t.torrent_file_url, t.details_url, t.upload_date, t.extras_json
        FROM torrent_search_hits h
        JOIN torrents t ON t.info_hash = h.info_hash
        WHERE h.cache_key = ?
@@ -195,7 +223,8 @@ export function readTorrentSearch(
       magnetUri: row.magnet,
       torrentFileUrl: row.torrent_file_url,
       detailsUrl: row.details_url,
-      uploadDate: row.upload_date
+      uploadDate: row.upload_date,
+      ...parseExtras(row.extras_json)
     })
   )
 

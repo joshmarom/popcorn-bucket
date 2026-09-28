@@ -1,6 +1,26 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { isAbsolute } from 'node:path'
+import type { TorrentClawKeyStatus } from '@shared/app-settings'
 import type { Preferences } from '@shared/preferences'
+import { configureTorrentClaw, getTorrentClawKeyStatus } from './torrentclaw/client'
+import {
+  autocomplete,
+  getCollection,
+  getCollections,
+  getPopularMovies,
+  getStreamingTop,
+  getUpcomingMovies,
+  resolveSuggestionTmdbId
+} from './torrentclaw/discovery'
+import {
+  STREAMING_SERVICES,
+  type AutocompleteResponse,
+  type DiscoverCollectionResponse,
+  type DiscoverCollectionsResponse,
+  type DiscoverListResponse,
+  type ResolveSuggestionResponse,
+  type StreamingService
+} from '@shared/discovery'
 import { getPreferences, preferencesSchema, setPreferences } from './preferences-store'
 import { baseDownloadDir, defaultDownloadDir } from './torrent/webtorrent-core'
 import { isVidkingEmbedUrl, openOrFocusVidkingEmbed } from './vidking-embed-window'
@@ -13,7 +33,8 @@ import {
   type CatalogGenreRailsResponse,
   type CatalogMovieListFactsResponse,
   type CatalogMovieResponse,
-  type CatalogSearchResponse
+  type CatalogSearchResponse,
+  type CatalogTrendingPageResponse
 } from '@shared/catalog'
 import { isSafeTorrentDetailsUrl, type TorrentSearchResponse } from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot, UntrackedDownload } from '@shared/torrent-downloads'
@@ -56,7 +77,7 @@ import {
   hasTmdbCredentials,
   searchMovies
 } from './tmdb'
-import { getTrendingWatchableMovies } from './torrent/trending-watchable'
+import { getTrendingPage } from './torrent/trending-watchable'
 import { getLibrary } from './library/db'
 import { rankMovies } from './library/ranked-lists'
 import {
@@ -98,7 +119,8 @@ const settingsInput = z.object({
   tmdbApiKey: z.string().optional(),
   tmdbReadAccessToken: z.string().optional(),
   omdbApiKey: z.string().optional(),
-  openSubtitlesApiKey: z.string().optional()
+  openSubtitlesApiKey: z.string().optional(),
+  torrentClawApiKey: z.string().optional()
 })
 
 const torrentSearchInput = z.object({
@@ -157,9 +179,29 @@ const watchlistSetInput = z.object({
   inList: z.boolean()
 })
 
-const catalogNowPlayingInput = z.object({
+const catalogTrendingPageInput = z.object({
+  page: z.number().int().positive().max(5000).optional(),
   forceRefresh: z.boolean().optional()
 })
+
+const streamingTopInput = z.object({
+  service: z.enum(STREAMING_SERVICES.map((s) => s.id) as [StreamingService, ...StreamingService[]])
+})
+
+const autocompleteInput = z.object({
+  q: z.string().trim().min(2).max(100)
+})
+
+const resolveSuggestionInput = z.object({
+  id: z.number().int().positive(),
+  title: z.string().min(1).max(400),
+  year: z.number().int().nullable(),
+  contentType: z.enum(['movie', 'show', 'collection'])
+})
+
+function discoverError(e: unknown): string {
+  return e instanceof Error && e.message ? e.message : 'TorrentClaw is unavailable.'
+}
 
 function mapCatalogError(err: unknown): { error: string; code: CatalogErrorCode } {
   if (err instanceof z.ZodError) {
@@ -182,11 +224,18 @@ function mapCatalogError(err: unknown): { error: string; code: CatalogErrorCode 
 }
 
 export function registerIpcHandlers(): void {
+  configureTorrentClaw({ getApiKey: () => getAppSettings().torrentClawApiKey })
+
   ipcMain.handle('settings:get', () => {
     return getStoredSettings()
   })
 
   ipcMain.handle('settings:isEncrypted', (): boolean => isSecretStorageEncrypted())
+
+  ipcMain.handle(
+    'settings:torrentClawKeyStatus',
+    (): TorrentClawKeyStatus => getTorrentClawKeyStatus()
+  )
 
   ipcMain.handle('prefs:get', (): Preferences => getPreferences())
 
@@ -393,10 +442,13 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(
-    'catalog:nowPlaying',
-    async (_evt, raw: unknown): Promise<CatalogSearchResponse> => {
-      const parsed = catalogNowPlayingInput.safeParse(raw ?? {})
-      const forceRefresh = parsed.success ? parsed.data.forceRefresh === true : false
+    'catalog:trendingPage',
+    async (_evt, raw: unknown): Promise<CatalogTrendingPageResponse> => {
+      const parsed = catalogTrendingPageInput.safeParse(raw ?? {})
+      if (!parsed.success) {
+        return { ok: false, error: 'Invalid page.', code: 'VALIDATION' }
+      }
+      const forceRefresh = parsed.data.forceRefresh === true
       const settings = getAppSettings()
       if (!hasTmdbCredentials(settings)) {
         return {
@@ -406,11 +458,91 @@ export function registerIpcHandlers(): void {
         }
       }
       try {
-        const results = await getTrendingWatchableMovies(settings, { forceRefresh })
-        return { ok: true, results }
+        const page = await getTrendingPage(settings, parsed.data.page ?? 1, { forceRefresh })
+        return { ok: true, ...page }
       } catch (e) {
         const m = mapCatalogError(e)
         return { ok: false, error: m.error, code: m.code }
+      }
+    }
+  )
+
+  ipcMain.handle('discover:popular', async (): Promise<DiscoverListResponse> => {
+    try {
+      return { ok: true, items: await getPopularMovies() }
+    } catch (e) {
+      return { ok: false, error: discoverError(e) }
+    }
+  })
+
+  ipcMain.handle('discover:upcoming', async (): Promise<DiscoverListResponse> => {
+    try {
+      return { ok: true, items: await getUpcomingMovies() }
+    } catch (e) {
+      return { ok: false, error: discoverError(e) }
+    }
+  })
+
+  ipcMain.handle(
+    'discover:streamingTop',
+    async (_evt, raw: unknown): Promise<DiscoverListResponse> => {
+      const parsed = streamingTopInput.safeParse(raw)
+      if (!parsed.success) return { ok: false, error: 'Unknown streaming service.' }
+      try {
+        return { ok: true, items: await getStreamingTop(parsed.data.service) }
+      } catch (e) {
+        return { ok: false, error: discoverError(e) }
+      }
+    }
+  )
+
+  ipcMain.handle('discover:collections', async (): Promise<DiscoverCollectionsResponse> => {
+    try {
+      return { ok: true, collections: await getCollections() }
+    } catch (e) {
+      return { ok: false, error: discoverError(e) }
+    }
+  })
+
+  ipcMain.handle(
+    'discover:collection',
+    async (_evt, raw: unknown): Promise<DiscoverCollectionResponse> => {
+      const parsed = movieInput.safeParse(raw)
+      if (!parsed.success) return { ok: false, error: 'Invalid collection id.' }
+      try {
+        return { ok: true, ...(await getCollection(parsed.data.id)) }
+      } catch (e) {
+        return { ok: false, error: discoverError(e) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'discover:autocomplete',
+    async (_evt, raw: unknown): Promise<AutocompleteResponse> => {
+      const parsed = autocompleteInput.safeParse(raw)
+      if (!parsed.success) return { ok: true, suggestions: [] }
+      try {
+        return { ok: true, suggestions: await autocomplete(parsed.data.q) }
+      } catch (e) {
+        return { ok: false, error: discoverError(e) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'discover:resolveSuggestion',
+    async (_evt, raw: unknown): Promise<ResolveSuggestionResponse> => {
+      const parsed = resolveSuggestionInput.safeParse(raw)
+      if (!parsed.success) return { ok: false, error: 'Invalid suggestion.' }
+      const s = parsed.data
+      if (s.contentType === 'collection') return { ok: true, route: `/collection/${s.id}` }
+      try {
+        const tmdbId = await resolveSuggestionTmdbId({ ...s, contentType: s.contentType })
+        if (tmdbId == null) return { ok: false, error: 'No TMDB match.' }
+        return { ok: true, route: s.contentType === 'show' ? `/tv/${tmdbId}` : `/movie/${tmdbId}` }
+      } catch (e) {
+        return { ok: false, error: discoverError(e) }
       }
     }
   )

@@ -1,2 +1,2 @@
-/** Matches TMDB default page size; used for client-side catalog pagination. */
-export const CATALOG_LIST_PAGE_SIZE = 20
+/** Divides evenly into 2, 3, 4, 6, and 8 grid columns; must match `TRENDING_PAGE_SIZE` in main. */
+export const CATALOG_LIST_PAGE_SIZE = 24

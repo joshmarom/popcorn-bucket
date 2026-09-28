@@ -70,7 +70,7 @@ function requestFacts(ids: number[]): Promise<CatalogMovieListFacts[]> {
 }
 
 /** Merges runtime and genres fetched for the cards on screen into the list rows. */
-export function useMovieListFacts(items: CatalogMovieListItem[]): CatalogMovieListItem[] {
+export function useMovieListFacts<T extends CatalogMovieListItem>(items: T[]): T[] {
   const [facts, setFacts] = useState<Map<number, CatalogMovieListFacts>>(() => new Map())
 
   const missingKey = [

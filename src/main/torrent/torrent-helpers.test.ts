@@ -47,6 +47,28 @@ describe('dedupeTorrentSources', () => {
     expect(out).toHaveLength(2)
     expect(out.find((r) => r.magnetUri?.toLowerCase().includes('bbbb'))?.providerName).toBe('B')
   })
+
+  it('carries TorrentClaw quality onto the better-seeded copy', () => {
+    const magnetUri = `magnet:?xt=urn:btih:${'d'.repeat(40)}`
+    const quality = {
+      score: 90,
+      verified: true,
+      hdr: 'HDR10',
+      videoCodec: 'hevc',
+      videoHeight: 2160,
+      audioTracks: [],
+      subtitleLangs: ['en'],
+      languages: ['en'],
+      releaseGroup: 'X'
+    }
+    const out = dedupeTorrentSources([
+      { ...base, providerName: 'TorrentClaw', seeders: 3, magnetUri, quality },
+      { ...base, providerName: 'Knaben', seeders: 30, magnetUri }
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0]!.providerName).toBe('Knaben')
+    expect(out[0]!.quality).toEqual(quality)
+  })
 })
 
 describe('resolveTorrentSearchInput', () => {

@@ -4,12 +4,21 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { NETWORK_NOTICE_TEXT } from '@/lib/network-notice'
 import { PreferencesSection } from './preferences-section'
+import type { TorrentClawKeyStatus } from '@shared/app-settings'
+
+const TORRENTCLAW_STATUS_LABEL: Record<TorrentClawKeyStatus, string> = {
+  active: 'Key active',
+  rejected: 'Key rejected (using anonymous access)',
+  anonymous: 'Anonymous'
+}
 
 export function SettingsPage(): ReactElement {
   const [settingsKey, setSettingsKey] = useState('')
   const [settingsToken, setSettingsToken] = useState('')
   const [omdbKey, setOmdbKey] = useState('')
   const [openSubtitlesKey, setOpenSubtitlesKey] = useState('')
+  const [torrentClawKey, setTorrentClawKey] = useState('')
+  const [torrentClawStatus, setTorrentClawStatus] = useState<TorrentClawKeyStatus>('anonymous')
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [keysEncrypted, setKeysEncrypted] = useState(true)
 
@@ -20,6 +29,8 @@ export function SettingsPage(): ReactElement {
     setSettingsToken(s.tmdbReadAccessToken)
     setOmdbKey(s.omdbApiKey)
     setOpenSubtitlesKey(s.openSubtitlesApiKey)
+    setTorrentClawKey(s.torrentClawApiKey)
+    setTorrentClawStatus(await window.api.settings.torrentClawKeyStatus())
   }, [])
 
   useEffect(() => {
@@ -31,8 +42,10 @@ export function SettingsPage(): ReactElement {
       tmdbApiKey: settingsKey,
       tmdbReadAccessToken: settingsToken,
       omdbApiKey: omdbKey,
-      openSubtitlesApiKey: openSubtitlesKey
+      openSubtitlesApiKey: openSubtitlesKey,
+      torrentClawApiKey: torrentClawKey
     })
+    setTorrentClawStatus(await window.api.settings.torrentClawKeyStatus())
     setSettingsSaved(true)
   }
 
@@ -121,6 +134,36 @@ export function SettingsPage(): ReactElement {
         <p className="text-muted-foreground text-xs leading-relaxed">
           Fetches subtitles in your preferred language when a torrent has none. Env:{' '}
           <code className="bg-muted rounded px-1 py-0.5">OPENSUBTITLES_API_KEY</code>.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium" htmlFor="torrentclaw-key">
+          TorrentClaw API key (optional)
+        </label>
+        <Input
+          id="torrentclaw-key"
+          value={torrentClawKey}
+          onChange={(e) => setTorrentClawKey(e.target.value)}
+          placeholder="Free key from torrentclaw.com → Profile → API key"
+          spellCheck={false}
+          className="font-mono text-xs"
+        />
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Adds TorrentClaw as a torrent source with quality scores and verified file details.
+          Popular, Top 10, Upcoming, Collections, and search suggestions work without a key. Env:{' '}
+          <code className="bg-muted rounded px-1 py-0.5">TORRENTCLAW_API_KEY</code>.
+        </p>
+        <p className="text-xs">
+          Status:{' '}
+          <span
+            className={
+              torrentClawStatus === 'rejected'
+                ? 'text-destructive font-medium'
+                : 'text-foreground font-medium'
+            }
+          >
+            {TORRENTCLAW_STATUS_LABEL[torrentClawStatus]}
+          </span>
         </p>
       </div>
       <div className="flex items-center gap-3">

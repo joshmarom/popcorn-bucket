@@ -11,7 +11,10 @@ import { resolveTorrentSearchInput } from './torrent-search-resolve'
 
 const AGGREGATE_MAX = 400
 
-/** Merge rows that share the same info-hash; keep the copy with the highest seeder count. */
+/**
+ * Merge rows that share the same info-hash; keep the copy with the highest seeder count, carrying
+ * over TorrentClaw quality and episode details from whichever copy had them.
+ */
 export function dedupeTorrentSources<T extends RawTorrentSource>(rows: T[]): T[] {
   const map = new Map<string, T>()
   for (const r of rows) {
@@ -19,9 +22,18 @@ export function dedupeTorrentSources<T extends RawTorrentSource>(rows: T[]): T[]
     const btih = /btih:([a-f0-9]{40})/.exec(m)?.[1]
     const key = btih ?? `${r.providerName}\0${r.title}\0${r.size ?? ''}`
     const prev = map.get(key)
-    if (!prev || r.seeders > prev.seeders) {
+    if (!prev) {
       map.set(key, r)
+      continue
     }
+    const [kept, other] = r.seeders > prev.seeders ? [r, prev] : [prev, r]
+    const quality = kept.quality ?? other.quality
+    const tvEpisode = kept.tvEpisode ?? other.tvEpisode
+    map.set(key, {
+      ...kept,
+      ...(quality ? { quality } : {}),
+      ...(tvEpisode ? { tvEpisode } : {})
+    })
   }
   return [...map.values()]
 }

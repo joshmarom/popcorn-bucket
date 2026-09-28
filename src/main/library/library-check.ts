@@ -39,7 +39,7 @@ function run(): void {
           version: number
         }[]
       ).map((row) => row.version),
-      [1, 2, 3]
+      [1, 2, 3, 4]
     )
 
     upsertMovie(db, {

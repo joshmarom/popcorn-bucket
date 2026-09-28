@@ -170,7 +170,10 @@ export function TvShowPage(): ReactElement {
       const best = rankEpisodeSources(
         rows,
         { showName: show.name, season: ep.seasonNumber, episode: ep.episodeNumber },
-        { preferredResolution: prefs.preferredResolution }
+        {
+          preferredResolution: prefs.preferredResolution,
+          preferredLanguage: prefs.subtitleLanguage
+        }
       ).ranked[0]
       if (!best?.magnetUri) {
         setStatus((s) => ({

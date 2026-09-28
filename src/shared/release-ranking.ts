@@ -4,6 +4,8 @@ import type { TorrentSource } from './torrent'
 export type RankingPreferences = {
   /** Resolution the user wants; closer matches rank higher. */
   preferredResolution: ReleaseResolution
+  /** ISO 639-1 code; copies with a matching subtitle or audio track get a small bonus. */
+  preferredLanguage?: string
 }
 
 export const defaultRankingPreferences: RankingPreferences = {
@@ -91,6 +93,24 @@ function seedScore(seeders: number): number {
   return Math.min(40, Math.log2(seeders + 1) * 5)
 }
 
+function baseLang(code: string | null | undefined): string {
+  return (code ?? '').trim().toLowerCase().split(/[-_]/)[0] ?? ''
+}
+
+/** TorrentClaw's score, verified file scans, and a track in the user's language. */
+function qualityInfoScore(row: TorrentSource, prefs: RankingPreferences): number {
+  const q = row.quality
+  if (!q) return 0
+  let score = q.score != null ? (Math.max(0, Math.min(100, q.score)) - 50) * 0.3 : 0
+  if (q.verified) score += 5
+  const lang = baseLang(prefs.preferredLanguage)
+  if (lang) {
+    const langs = [...q.subtitleLangs, ...q.audioTracks.map((a) => a.lang)].map(baseLang)
+    if (langs.includes(lang)) score += 4
+  }
+  return score
+}
+
 export function scoreTorrentSource(row: TorrentSource, prefs: RankingPreferences): number {
   const r = row.release
   return (
@@ -98,7 +118,8 @@ export function scoreTorrentSource(row: TorrentSource, prefs: RankingPreferences
     (r.source ? (SOURCE_SCORE[r.source] ?? 0) : 5) +
     (r.codec === 'x265' || r.codec === 'av1' ? 3 : 0) +
     sizeScore(row.sizeBytes, r.resolution) +
-    seedScore(row.seeders)
+    seedScore(row.seeders) +
+    qualityInfoScore(row, prefs)
   )
 }
 

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { CatalogMovieListItem } from '@shared/catalog'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -20,6 +21,7 @@ export function GenreBrowsePage(): ReactElement {
   const genreId = genreIdParam != null ? Number.parseInt(genreIdParam, 10) : Number.NaN
   const invalidId = !Number.isFinite(genreId) || genreId < 1
 
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const [items, setItems] = useState<CatalogMovieListItem[]>([])
   const [loading, setLoading] = useState(!invalidId)
   const [error, setError] = useState<string | null>(invalidId ? 'Invalid genre.' : null)
@@ -90,8 +92,9 @@ export function GenreBrowsePage(): ReactElement {
       },
       { replace: true }
     )
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  useScrollToOnPageChange(headingRef, currentPage)
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 pb-12">
@@ -100,7 +103,9 @@ export function GenreBrowsePage(): ReactElement {
           <Link to="/">Back</Link>
         </Button>
       </div>
-      <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
+      <h1 ref={headingRef} className="scroll-mt-4 text-2xl font-semibold tracking-tight">
+        {heading}
+      </h1>
       <p className="text-muted-foreground text-sm">
         Ranked by torrent availability, TMDB popularity, and rating.
       </p>

@@ -7,12 +7,18 @@ import { HomePage } from '@/pages/home-page'
 import { MoviePage } from '@/pages/movie/movie-page'
 import { SettingsPage } from '@/pages/settings-page'
 import { ContinuePage } from '@/pages/continue-page'
+import { CollectionPage } from '@/pages/collection-page'
 import { TvBrowsePage } from '@/pages/tv-browse-page'
 import { TvShowPage } from '@/pages/tv-show-page'
 
 function MovieRoute(): ReactElement {
   const { movieId } = useParams()
   return <MoviePage key={movieId ?? ''} />
+}
+
+function CollectionRoute(): ReactElement {
+  const { collectionId } = useParams()
+  return <CollectionPage key={collectionId ?? ''} />
 }
 
 const router = createHashRouter([
@@ -22,6 +28,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'genre/:genreId', element: <GenreBrowsePage /> },
+      { path: 'collection/:collectionId', element: <CollectionRoute /> },
       { path: 'movie/:movieId', element: <MovieRoute /> },
       { path: 'continue', element: <ContinuePage /> },
       { path: 'tv', element: <TvBrowsePage /> },

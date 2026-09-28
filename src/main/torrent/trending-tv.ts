@@ -5,6 +5,7 @@ import { getLibrary, readLibraryMeta, writeLibraryMeta } from '../library/db'
 import type { TrendingSwarmRow } from '../library/ranked-lists'
 import { rankShows, recordShowSwarm } from '../library/shows'
 import { findTvShowByImdbId, getPopularTvShows } from '../tmdb-tv'
+import { fetchPopularSwarm } from '../torrentclaw/discovery'
 import { mapWithConcurrency } from './map-with-concurrency'
 import { fetchMergedTvTrendingCandidates } from './tv-trending-candidates'
 
@@ -19,28 +20,36 @@ const PAGE_SIZE = 20
 
 let refreshInFlight: Promise<void> | null = null
 
+/** Indexer swarm lists resolved through TMDB. Used when TorrentClaw is down. */
+async function indexerTvSwarm(settings: AppSettings): Promise<TrendingSwarmRow[]> {
+  const candidates = (await fetchMergedTvTrendingCandidates()).slice(0, MAX_TMDB_RESOLVE)
+  const shows = await mapWithConcurrency(candidates, TMDB_CONCURRENCY, (c) =>
+    findTvShowByImdbId(settings, c.imdbId).catch(() => null)
+  )
+  return candidates.flatMap((c, i) => {
+    const show = shows[i]
+    return show
+      ? [
+          {
+            tmdbId: show.id,
+            seeders: c.maxSeeds,
+            peers: c.maxPeers,
+            latestUploadUnix: Math.floor(c.latestUploadUnix)
+          }
+        ]
+      : []
+  })
+}
+
 async function refreshTvPool(settings: AppSettings): Promise<void> {
   let swarm: TrendingSwarmRow[] = []
   try {
-    const candidates = (await fetchMergedTvTrendingCandidates()).slice(0, MAX_TMDB_RESOLVE)
-    const shows = await mapWithConcurrency(candidates, TMDB_CONCURRENCY, (c) =>
-      findTvShowByImdbId(settings, c.imdbId).catch(() => null)
-    )
-    swarm = candidates.flatMap((c, i) => {
-      const show = shows[i]
-      return show
-        ? [
-            {
-              tmdbId: show.id,
-              seeders: c.maxSeeds,
-              peers: c.maxPeers,
-              latestUploadUnix: Math.floor(c.latestUploadUnix)
-            }
-          ]
-        : []
-    })
-  } catch {
-    swarm = []
+    swarm = await fetchPopularSwarm(getLibrary(), 'show')
+  } catch (error) {
+    console.warn('TorrentClaw popular unavailable; using indexer TV trending', error)
+  }
+  if (swarm.length === 0) {
+    swarm = await indexerTvSwarm(settings).catch(() => [])
   }
 
   for (let page = 1; page <= TMDB_POPULAR_PAGES; page++) {

@@ -17,10 +17,14 @@ import { MovieCard } from '@/components/movie-card'
 import { MovieGrid } from '@/components/movie-grid'
 import { useMovieListFacts } from '@/components/use-movie-list-facts'
 import { PersonalRails } from '@/components/personal-rails'
-import { Input } from '@/components/ui/input'
+import { DiscoveryRails } from '@/components/discovery-rails'
+import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 import { cn } from '@/lib/utils'
+import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
+
+type TrendingPage = { page: number; results: CatalogMovieListItem[]; hasMore: boolean }
 
 const SEARCH_SORT_OPTIONS = [
   { value: 'relevance', label: 'Relevance (TMDB)' },
@@ -206,7 +210,6 @@ export function HomePage(): ReactElement {
       },
       { replace: true }
     )
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const setSearchSort = (key: SearchSortValue): void => {
@@ -239,9 +242,10 @@ export function HomePage(): ReactElement {
     )
   }
 
-  const [nowPlaying, setNowPlaying] = useState<CatalogMovieListItem[]>([])
-  const [nowPlayingError, setNowPlayingError] = useState<string | null>(null)
-  const [nowPlayingLoading, setNowPlayingLoading] = useState(true)
+  const [trending, setTrending] = useState<TrendingPage | null>(null)
+  const [trendingError, setTrendingError] = useState<string | null>(null)
+  const [trendingLoading, setTrendingLoading] = useState(true)
+  const listHeadingRef = useRef<HTMLDivElement>(null)
 
   const [searchResults, setSearchResults] = useState<CatalogMovieListItem[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -255,18 +259,21 @@ export function HomePage(): ReactElement {
 
   const showingSearch = debouncedQuery.trim().length >= 2
 
-  const refreshTrendingList = useCallback(async (): Promise<void> => {
+  const requestedPage = parseListPage(searchParams.get('page'))
+
+  const refreshTrendingList = async (): Promise<void> => {
     setTrendingRefreshBusy(true)
-    setNowPlayingError(null)
-    const res = await window.api.catalog.nowPlaying({ forceRefresh: true })
+    setTrendingError(null)
+    const res = await window.api.catalog.trendingPage({ page: 1, forceRefresh: true })
     if (res.ok) {
-      setNowPlaying(res.results.filter(shouldIncludeCatalogListItem))
+      setTrending({ page: 1, results: res.results, hasMore: res.hasMore })
     } else {
-      setNowPlaying([])
-      setNowPlayingError(res.error)
+      setTrending(null)
+      setTrendingError(res.error)
     }
     setTrendingRefreshBusy(false)
-  }, [])
+    if (requestedPage !== 1) setListPage(1)
+  }
 
   const refreshGenreRails = useCallback(async (): Promise<void> => {
     setGenreRailsRefreshBusy(true)
@@ -303,46 +310,57 @@ export function HomePage(): ReactElement {
   }, [debouncedQuery, showingSearch, setSearchParams])
 
   useEffect(() => {
-    let cancelled = false
-
-    async function load(): Promise<void> {
-      if (showingSearch) {
-        setNowPlayingLoading(false)
-        setSearchLoading(true)
-        setSearchError(null)
-        const res = await window.api.catalog.search(debouncedQuery.trim())
-        if (cancelled) return
-        setSearchLoading(false)
-        if (res.ok) {
-          setSearchResults(res.results.filter(shouldIncludeCatalogListItem))
-        } else {
-          setSearchResults([])
-          setSearchError(res.error)
-        }
-        return
-      }
-
+    if (!showingSearch) {
       setSearchResults([])
       setSearchError(null)
       setSearchLoading(false)
-      setNowPlayingLoading(true)
-      setNowPlayingError(null)
-      const res = await window.api.catalog.nowPlaying()
-      if (cancelled) return
-      setNowPlayingLoading(false)
-      if (res.ok) {
-        setNowPlaying(res.results.filter(shouldIncludeCatalogListItem))
-      } else {
-        setNowPlaying([])
-        setNowPlayingError(res.error)
-      }
+      return
     }
-
-    void load()
+    let cancelled = false
+    setSearchLoading(true)
+    setSearchError(null)
+    void window.api.catalog.search(debouncedQuery.trim()).then((res) => {
+      if (cancelled) return
+      setSearchLoading(false)
+      if (res.ok) {
+        setSearchResults(res.results.filter(shouldIncludeCatalogListItem))
+      } else {
+        setSearchResults([])
+        setSearchError(res.error)
+      }
+    })
     return (): void => {
       cancelled = true
     }
   }, [debouncedQuery, showingSearch])
+
+  // Trending is paged by the main process, which keeps discovering titles as pages go deeper.
+  useEffect(() => {
+    if (showingSearch) return
+    let cancelled = false
+    setTrendingLoading(true)
+    setTrendingError(null)
+    void window.api.catalog.trendingPage({ page: requestedPage }).then((res) => {
+      if (cancelled) return
+      setTrendingLoading(false)
+      if (!res.ok) {
+        setTrending(null)
+        setTrendingError(res.error)
+        return
+      }
+      const results = res.results.filter(shouldIncludeCatalogListItem)
+      if (results.length === 0 && res.page > 1) {
+        // Past the end (e.g. an old link): go back to the first page.
+        setListPage(1)
+        return
+      }
+      setTrending({ page: res.page, results, hasMore: res.hasMore })
+    })
+    return (): void => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showingSearch, requestedPage])
 
   useEffect(() => {
     if (showingSearch) {
@@ -367,66 +385,88 @@ export function HomePage(): ReactElement {
   }, [showingSearch])
 
   const searchPending = query.trim().length >= 2 && debouncedQuery !== query
-  const listLoading = showingSearch ? searchLoading || searchPending : nowPlayingLoading
+  const listLoading = showingSearch ? searchLoading || searchPending : trendingLoading
 
   const sortedSearchResults = useMemo(
     () => sortSearchResults(searchResults, sortKey, sortOrder),
     [searchResults, sortKey, sortOrder]
   )
 
-  const { items, listError, heading } = useMemo(() => {
-    if (showingSearch) {
-      return {
-        items: sortedSearchResults,
-        listError: searchError,
-        heading: 'Search results'
-      }
-    }
-    return {
-      items: nowPlaying,
-      listError: nowPlayingError,
-      heading: 'Trending'
-    }
-  }, [showingSearch, sortedSearchResults, searchError, nowPlaying, nowPlayingError])
-
-  const requestedPage = parseListPage(searchParams.get('page'))
-  const totalPages = Math.max(1, Math.ceil(items.length / CATALOG_LIST_PAGE_SIZE))
-  const currentPage = Math.min(requestedPage, totalPages)
+  // Search results are one finite list paged here; Trending arrives one page at a time.
+  const searchTotalPages = Math.max(
+    1,
+    Math.ceil(sortedSearchResults.length / CATALOG_LIST_PAGE_SIZE)
+  )
+  const searchPage = Math.min(requestedPage, searchTotalPages)
 
   useEffect(() => {
-    if (items.length === 0) return
-    if (requestedPage <= totalPages) return
+    if (!showingSearch || sortedSearchResults.length === 0) return
+    if (requestedPage <= searchTotalPages) return
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        if (totalPages <= 1) {
+        if (searchTotalPages <= 1) {
           next.delete('page')
         } else {
-          next.set('page', String(totalPages))
+          next.set('page', String(searchTotalPages))
         }
         return next
       },
       { replace: true }
     )
-  }, [items.length, requestedPage, totalPages, setSearchParams])
+  }, [showingSearch, sortedSearchResults.length, requestedPage, searchTotalPages, setSearchParams])
 
-  const pagedItems = useMemo(() => {
-    const start = (currentPage - 1) * CATALOG_LIST_PAGE_SIZE
-    return items.slice(start, start + CATALOG_LIST_PAGE_SIZE)
-  }, [items, currentPage])
+  const list = useMemo(() => {
+    if (showingSearch) {
+      const start = (searchPage - 1) * CATALOG_LIST_PAGE_SIZE
+      return {
+        heading: 'Search results',
+        error: searchError,
+        items: sortedSearchResults.slice(start, start + CATALOG_LIST_PAGE_SIZE),
+        page: searchPage,
+        hasPrev: searchPage > 1,
+        hasNext: searchPage < searchTotalPages,
+        pageLabel: `Page ${searchPage} of ${searchTotalPages}`,
+        total: sortedSearchResults.length as number | null
+      }
+    }
+    const page = trending?.page ?? requestedPage
+    return {
+      heading: 'Trending',
+      error: trendingError,
+      items: trending?.results ?? [],
+      page,
+      hasPrev: page > 1,
+      hasNext: trending?.hasMore ?? false,
+      pageLabel: `Page ${page}`,
+      total: null as number | null
+    }
+  }, [
+    showingSearch,
+    searchPage,
+    searchError,
+    sortedSearchResults,
+    searchTotalPages,
+    trending,
+    trendingError,
+    requestedPage
+  ])
 
-  const rangeStart = items.length === 0 ? 0 : (currentPage - 1) * CATALOG_LIST_PAGE_SIZE + 1
-  const rangeEnd = Math.min(currentPage * CATALOG_LIST_PAGE_SIZE, items.length)
+  const rangeStart = list.items.length === 0 ? 0 : (list.page - 1) * CATALOG_LIST_PAGE_SIZE + 1
+  const rangeEnd = rangeStart === 0 ? 0 : rangeStart + list.items.length - 1
+
+  // Keyed on the page actually rendered, so the scroll happens once the new cards are in place.
+  useScrollToOnPageChange(listHeadingRef, list.page)
 
   return (
     <div className="pb-8">
       <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10 border-b border-border px-4 py-4 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
-          <Input
-            className="max-w-md"
+          <SearchAutocomplete
+            className="w-full max-w-md"
             placeholder="Search movies…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={setQuery}
           />
           {listLoading && <span className="text-muted-foreground text-sm">Loading…</span>}
         </div>
@@ -439,10 +479,13 @@ export function HomePage(): ReactElement {
 
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
         {!showingSearch && <PersonalRails />}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          ref={listHeadingRef}
+          className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-              {heading}
+              {list.heading}
             </h2>
             {!showingSearch && (
               <Button
@@ -450,14 +493,14 @@ export function HomePage(): ReactElement {
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1.5"
-                disabled={nowPlayingLoading || trendingRefreshBusy}
-                title="Rebuild the trending list from torrent indexers (ignores the 24h cache)"
+                disabled={trendingLoading || trendingRefreshBusy}
+                title="Rebuild the trending list from TorrentClaw and torrent indexers (ignores the 24h cache)"
                 onClick={() => void refreshTrendingList()}
               >
                 <RefreshCw
                   className={cn(
                     'size-3.5',
-                    (nowPlayingLoading || trendingRefreshBusy) && 'animate-spin'
+                    (trendingLoading || trendingRefreshBusy) && 'animate-spin'
                   )}
                 />
                 Refresh
@@ -515,43 +558,44 @@ export function HomePage(): ReactElement {
             </div>
           )}
         </div>
-        {listError && (
+        {list.error && (
           <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
-            {listError}
+            {list.error}
           </p>
         )}
-        {!listLoading && !listError && items.length === 0 && showingSearch && (
+        {!listLoading && !list.error && list.items.length === 0 && showingSearch && (
           <p className="text-muted-foreground text-sm">No titles match that search.</p>
         )}
-        {items.length > 0 && (
+        {list.items.length > 0 && (
           <>
-            <MovieGrid items={pagedItems} />
-            {totalPages > 1 && (
+            <MovieGrid items={list.items} />
+            {(list.hasPrev || list.hasNext) && (
               <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
                 <p className="text-muted-foreground order-2 text-sm sm:order-1">
-                  Showing {rangeStart}–{rangeEnd} of {items.length}
+                  Showing {rangeStart}–{rangeEnd}
+                  {list.total != null ? ` of ${list.total}` : ''}
                 </p>
                 <div className="flex items-center gap-2 sm:order-2">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={currentPage <= 1}
-                    onClick={() => setListPage(currentPage - 1)}
+                    disabled={!list.hasPrev || listLoading}
+                    onClick={() => setListPage(list.page - 1)}
                     aria-label="Previous page"
                   >
                     <ChevronLeft aria-hidden className="size-4" />
                     Previous
                   </Button>
                   <span className="text-muted-foreground min-w-[7rem] text-center text-sm tabular-nums">
-                    Page {currentPage} of {totalPages}
+                    {list.pageLabel}
                   </span>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setListPage(currentPage + 1)}
+                    disabled={!list.hasNext || listLoading}
+                    onClick={() => setListPage(list.page + 1)}
                     aria-label="Next page"
                   >
                     Next
@@ -562,6 +606,7 @@ export function HomePage(): ReactElement {
             )}
           </>
         )}
+        {!showingSearch && <DiscoveryRails className="mt-12" />}
         {!showingSearch && (
           <div className="border-border mt-12 space-y-10 border-t pt-10">
             <div className="flex flex-wrap items-center gap-2">

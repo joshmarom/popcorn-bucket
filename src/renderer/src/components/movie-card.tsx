@@ -32,6 +32,7 @@ export function MovieCard({
   voteAverage,
   progress,
   note,
+  rank,
   size = 'md'
 }: {
   href: string
@@ -45,6 +46,8 @@ export function MovieCard({
   /** Watched share, 0 to 1. */
   progress?: number | null
   note?: string | null
+  /** Chart position (e.g. streaming Top 10), shown in the poster corner. */
+  rank?: number | null
   size?: 'md' | 'sm'
 }): ReactElement {
   const facts: string[] = []
@@ -81,6 +84,12 @@ export function MovieCard({
         )}
         <div className="pointer-events-none absolute inset-0 rounded-lg ring-1 ring-black/5 ring-inset dark:ring-white/10" />
         <RatingBadge voteAverage={voteAverage} />
+        {rank != null ? (
+          <span className="absolute top-2 left-2 inline-flex min-w-6 items-center justify-center rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-bold text-white tabular-nums shadow-sm backdrop-blur-sm">
+            <span className="sr-only">Rank </span>
+            {rank}
+          </span>
+        ) : null}
         {progress != null && progress > 0 ? (
           <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
             <div

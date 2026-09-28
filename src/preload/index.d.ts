@@ -1,10 +1,11 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { AppSettings } from '@shared/app-settings'
+import type { AppSettings, TorrentClawKeyStatus } from '@shared/app-settings'
 import type {
   CatalogGenreRailsResponse,
   CatalogMovieListFactsResponse,
   CatalogMovieResponse,
-  CatalogSearchResponse
+  CatalogSearchResponse,
+  CatalogTrendingPageResponse
 } from '@shared/catalog'
 import type { TorrentSearchInput, TorrentSearchResponse } from '@shared/torrent'
 import type {
@@ -18,6 +19,15 @@ import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
 import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
+import type {
+  AutocompleteResponse,
+  AutocompleteSuggestion,
+  DiscoverCollectionResponse,
+  DiscoverCollectionsResponse,
+  DiscoverListResponse,
+  ResolveSuggestionResponse,
+  StreamingService
+} from '@shared/discovery'
 
 export type PopcornApi = {
   app: {
@@ -48,6 +58,8 @@ export type PopcornApi = {
     get(): Promise<AppSettings>
     /** False when the OS offers no secure storage and keys are saved as plain text. */
     isEncrypted(): Promise<boolean>
+    /** Whether TorrentClaw accepted the saved key on the last request. */
+    torrentClawKeyStatus(): Promise<TorrentClawKeyStatus>
     set(partial: Partial<AppSettings>): Promise<void>
   }
   tv: {
@@ -66,13 +78,28 @@ export type PopcornApi = {
     defaultDownloadDir(): Promise<string>
   }
   catalog: {
-    nowPlaying(opts?: { forceRefresh?: boolean }): Promise<CatalogSearchResponse>
+    /** One page of the endless Trending list (24 titles). */
+    trendingPage(opts: {
+      page: number
+      forceRefresh?: boolean
+    }): Promise<CatalogTrendingPageResponse>
     search(query: string): Promise<CatalogSearchResponse>
     getMovie(id: number): Promise<CatalogMovieResponse>
     /** Rating, genres, and runtime for the movies currently on screen. */
     listFacts(ids: number[]): Promise<CatalogMovieListFactsResponse>
     genreRails(): Promise<CatalogGenreRailsResponse>
     discoverGenre(genreId: number): Promise<CatalogSearchResponse>
+  }
+  /** TorrentClaw discovery; every call can fail independently of TMDB. */
+  discover: {
+    popular(): Promise<DiscoverListResponse>
+    upcoming(): Promise<DiscoverListResponse>
+    streamingTop(service: StreamingService): Promise<DiscoverListResponse>
+    collections(): Promise<DiscoverCollectionsResponse>
+    collection(id: number): Promise<DiscoverCollectionResponse>
+    autocomplete(q: string): Promise<AutocompleteResponse>
+    /** Route (`/movie/:id`, `/tv/:id`, `/collection/:id`) for a picked suggestion. */
+    resolveSuggestion(s: AutocompleteSuggestion): Promise<ResolveSuggestionResponse>
   }
   torrent: {
     search(input: TorrentSearchInput): Promise<TorrentSearchResponse>

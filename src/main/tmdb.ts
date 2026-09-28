@@ -593,6 +593,27 @@ export async function getNowPlayingMovies(settings: AppSettings): Promise<Catalo
   return mapTmdbResultsToCatalog(parsed.data.results)
 }
 
+/** TMDB's most popular movies, one page (20 rows). TMDB serves at most 500 pages. */
+export async function getPopularMoviesPage(
+  settings: AppSettings,
+  page: number
+): Promise<{ results: CatalogMovieListItem[]; totalPages: number }> {
+  const genresReady = ensureGenreNames(settings)
+  const json = await tmdbFetchJson(
+    settings,
+    '/movie/popular',
+    { page: String(page) },
+    { cacheTtlMs: 1000 * 60 * 60 }
+  )
+  const parsed = searchResponseSchema.safeParse(json)
+  if (!parsed.success) {
+    throw new Error('BAD_RESPONSE')
+  }
+  await genresReady
+  const totalPages = Math.min(500, parsed.data.total_pages ?? 1)
+  return { results: mapTmdbResultsToCatalog(parsed.data.results), totalPages }
+}
+
 export async function getMovieDetails(
   settings: AppSettings,
   id: number

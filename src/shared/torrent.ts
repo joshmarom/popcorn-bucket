@@ -26,6 +26,32 @@ export type RawTorrentSource = {
   /** HTTPS details/comments page when available. */
   detailsUrl: string | null
   uploadDate: string | null
+  /** TorrentClaw scoring and file-scan details, when TorrentClaw knows this torrent. */
+  quality?: TorrentQualityInfo
+  /** Season/episode reported by the indexer; fills in what the release name does not say. */
+  tvEpisode?: { season: number; episode: number | null }
+}
+
+export type TorrentAudioTrack = {
+  lang: string | null
+  codec: string | null
+  channels: number | null
+}
+
+export type TorrentQualityInfo = {
+  /** TorrentClaw's 0-100 score (resolution, source, codec, seeders, size). */
+  score: number | null
+  /** True when the actual files were scanned, so the fields below reflect the real contents. */
+  verified: boolean
+  hdr: string | null
+  videoCodec: string | null
+  videoHeight: number | null
+  audioTracks: TorrentAudioTrack[]
+  /** ISO 639 codes of embedded subtitle tracks. */
+  subtitleLangs: string[]
+  /** ISO 639 audio languages (detected from the name when not scanned). */
+  languages: string[]
+  releaseGroup: string | null
 }
 
 /** An indexer row plus what we parsed from its name and size. */
@@ -35,7 +61,14 @@ export type TorrentSource = RawTorrentSource & {
 }
 
 export function withReleaseInfo(row: RawTorrentSource): TorrentSource {
-  return { ...row, sizeBytes: parseSizeBytes(row.size), release: parseReleaseTitle(row.title) }
+  const release = parseReleaseTitle(row.title)
+  const tv = row.tvEpisode
+  if (tv && release.season == null) {
+    release.season = tv.season
+    release.episode = tv.episode
+    release.seasonPack = tv.episode == null
+  }
+  return { ...row, sizeBytes: parseSizeBytes(row.size), release }
 }
 
 export type TorrentSearchResponse =

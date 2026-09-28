@@ -11,6 +11,7 @@ import { searchEztv } from './providers/eztv'
 import { searchKnaben } from './providers/knaben'
 import { searchLimeTorrents } from './providers/limetorrents'
 import { searchPirateBay } from './providers/piratebay'
+import { searchTorrentClaw } from './providers/torrentclaw'
 import { searchTorrentsCsv } from './providers/torrents-csv'
 import { searchUindex } from './providers/uindex'
 import { searchYts } from './providers/yts'
@@ -24,6 +25,7 @@ type TorrentProviderFn = (
 
 /** JSON APIs first; HTML scrapers (LimeTorrents, UIndex) break when their markup changes. */
 const PROVIDERS: { name: string; search: TorrentProviderFn }[] = [
+  { name: 'TorrentClaw', search: searchTorrentClaw },
   { name: 'TorrentsCSV', search: searchTorrentsCsv },
   { name: 'Knaben', search: searchKnaben },
   { name: 'ThePirateBay', search: searchPirateBay },

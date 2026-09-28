@@ -62,7 +62,10 @@ function MoviePageContent(): ReactElement {
       store.setState({ downloads: rows })
     })
     void window.api.prefs.get().then((p) => {
-      store.getState().setRankingPrefs({ preferredResolution: p.preferredResolution })
+      store.getState().setRankingPrefs({
+        preferredResolution: p.preferredResolution,
+        preferredLanguage: p.subtitleLanguage
+      })
     })
   }, [s.movieId, store])
 

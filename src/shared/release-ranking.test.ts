@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { matchesMovie, rankEpisodeSources, rankTorrentSources } from './release-ranking'
+import {
+  defaultRankingPreferences,
+  matchesMovie,
+  rankEpisodeSources,
+  rankTorrentSources,
+  scoreTorrentSource
+} from './release-ranking'
 import { withReleaseInfo, type TorrentSource } from './torrent'
 
 function row(title: string, seeders: number, size = '2 GB'): TorrentSource {
@@ -108,5 +114,58 @@ describe('rankTorrentSources', () => {
       { preferredResolution: '2160p' }
     )
     expect(ranked[0]!.release.resolution).toBe('2160p')
+  })
+})
+
+describe('TorrentClaw quality in scoring', () => {
+  const quality = (
+    over: Partial<NonNullable<TorrentSource['quality']>>
+  ): TorrentSource['quality'] => ({
+    score: null,
+    verified: false,
+    hdr: null,
+    videoCodec: null,
+    videoHeight: null,
+    audioTracks: [],
+    subtitleLangs: [],
+    languages: [],
+    releaseGroup: null,
+    ...over
+  })
+
+  it('lets a high quality score and verified scan outrank a similar copy', () => {
+    const plain = row('The Matrix 1999 1080p BluRay x264 A', 110)
+    const scored = {
+      ...row('The Matrix 1999 1080p BluRay x264 B', 100),
+      quality: quality({ score: 88, verified: true })
+    }
+    const { ranked } = rankTorrentSources([plain, scored], ctx)
+    expect(ranked[0]!.title).toBe('The Matrix 1999 1080p BluRay x264 B')
+    expect(scoreTorrentSource(scored, defaultRankingPreferences)).toBeGreaterThan(
+      scoreTorrentSource(plain, defaultRankingPreferences)
+    )
+  })
+
+  it('prefers a copy with a track in the preferred language', () => {
+    const fr = {
+      ...row('The Matrix 1999 1080p WEB A', 100),
+      quality: quality({ subtitleLangs: ['fr'] })
+    }
+    const he = {
+      ...row('The Matrix 1999 1080p WEB B', 100),
+      quality: quality({ subtitleLangs: ['he-IL'] })
+    }
+    const { ranked } = rankTorrentSources([fr, he], ctx, {
+      preferredResolution: '1080p',
+      preferredLanguage: 'he'
+    })
+    expect(ranked[0]!.title).toBe('The Matrix 1999 1080p WEB B')
+  })
+
+  it('penalizes a low quality score', () => {
+    const low = { ...row('The Matrix 1999 1080p WEB', 100), quality: quality({ score: 10 }) }
+    expect(scoreTorrentSource(low, defaultRankingPreferences)).toBeLessThan(
+      scoreTorrentSource(row('The Matrix 1999 1080p WEB', 100), defaultRankingPreferences)
+    )
   })
 })

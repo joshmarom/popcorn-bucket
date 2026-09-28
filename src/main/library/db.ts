@@ -160,7 +160,12 @@ CREATE INDEX idx_shows_list_seen ON shows(list_seen_at);
 CREATE INDEX idx_show_swarm_seen ON show_swarm(seen_at);
 `
 
-const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3]
+/** TorrentClaw quality / episode details (`{ quality?, tvEpisode? }`). */
+const SCHEMA_V4 = `
+ALTER TABLE torrents ADD COLUMN extras_json TEXT;
+`
+
+const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4]
 
 let singleton: LibraryDb | null = null
 

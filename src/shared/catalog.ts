@@ -96,6 +96,11 @@ export type CatalogSearchResponse =
   | { ok: true; results: CatalogMovieListItem[] }
   | { ok: false; error: string; code: CatalogErrorCode }
 
+/** One page of the endless Trending list; there is no total, only whether a next page exists. */
+export type CatalogTrendingPageResponse =
+  | { ok: true; results: CatalogMovieListItem[]; page: number; hasMore: boolean }
+  | { ok: false; error: string; code: CatalogErrorCode }
+
 export type MovieGenre = {
   id: number
   name: string
