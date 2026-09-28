@@ -38,6 +38,7 @@ module.exports = {
     createDesktopShortcut: 'always'
   },
   mac: {
+    minimumSystemVersion: '13.0',
     entitlements: 'build/entitlements.mac.plist',
     entitlementsInherit: 'build/entitlements.mac.plist',
     hardenedRuntime: true,

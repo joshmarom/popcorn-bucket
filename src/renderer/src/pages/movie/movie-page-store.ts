@@ -137,6 +137,9 @@ function initialState(movieId: number): MoviePageState {
 }
 
 export function createMoviePageStore(movieId: number): MoviePageStoreApi {
+  let searchSeq = 0
+  let searchInFlight: Promise<void> | null = null
+
   return create<MoviePageState & MoviePageActions>((set, get) => ({
     ...initialState(movieId),
 
@@ -147,10 +150,8 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
         const res = await window.api.catalog.getMovie(id)
         if (res.ok) {
           set({ loading: false, detail: res.movie, error: null })
-          if (get().tab === 'sources') {
-            set({ torrentLoading: true, torrentData: null })
-            await get().runTorrentSearch(false)
-          }
+          // Start while the overview is open so Sources is usually ready.
+          void get().runTorrentSearch(false)
         } else {
           set({ loading: false, error: res.error, detail: null })
         }
@@ -166,10 +167,8 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
     setTab: (t) => {
       const prev = get().tab
       set({ tab: t })
-      if (t === 'sources' && t !== prev) {
-        const d = get().detail
-        if (d) {
-          set({ torrentLoading: true, torrentData: null })
+      if (t === 'sources' && t !== prev && get().detail) {
+        if (!get().torrentData?.ok && !get().torrentLoading) {
           void get().runTorrentSearch(false)
         }
       }
@@ -180,26 +179,42 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
     runTorrentSearch: async (forceRefresh: boolean): Promise<void> => {
       const detail = get().detail
       if (!detail) return
-      set({ torrentLoading: true, torrentData: null })
-      try {
-        const res = await window.api.torrent.search({
-          title: detail.title,
-          releaseDate: detail.releaseDate,
-          imdbId: detail.imdbId,
-          ...(forceRefresh ? { forceRefresh: true as const } : {})
-        })
-        set({ torrentLoading: false, torrentData: res })
-      } catch (e) {
-        const code: TorrentSearchErrorCode = 'NETWORK'
-        set({
-          torrentLoading: false,
-          torrentData: {
-            ok: false,
-            error: e instanceof Error ? e.message : 'Search failed.',
-            code
-          }
-        })
+      if (!forceRefresh) {
+        if (get().torrentData?.ok) return
+        if (searchInFlight) return searchInFlight
       }
+      const seq = ++searchSeq
+      set({
+        torrentLoading: true,
+        torrentData: forceRefresh ? null : get().torrentData
+      })
+      const run = (async (): Promise<void> => {
+        try {
+          const res = await window.api.torrent.search({
+            title: detail.title,
+            releaseDate: detail.releaseDate,
+            imdbId: detail.imdbId,
+            ...(forceRefresh ? { forceRefresh: true as const } : {})
+          })
+          if (seq !== searchSeq) return
+          set({ torrentLoading: false, torrentData: res })
+        } catch (e) {
+          if (seq !== searchSeq) return
+          const code: TorrentSearchErrorCode = 'NETWORK'
+          set({
+            torrentLoading: false,
+            torrentData: {
+              ok: false,
+              error: e instanceof Error ? e.message : 'Search failed.',
+              code
+            }
+          })
+        } finally {
+          if (searchSeq === seq) searchInFlight = null
+        }
+      })()
+      searchInFlight = run
+      return run
     },
 
     refreshTorrentSources: () => {

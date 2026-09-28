@@ -18,6 +18,11 @@ import { isSafeTorrentDetailsUrl } from '@shared/torrent'
  * @see https://github.com/electron/electron/issues/50391
  */
 app.commandLine.appendSwitch('local-network-access-permissions-policy-default-enabled')
+// Dev builds are ad-hoc signed, so macOS asks for the login keychain on every launch.
+// A mock keychain skips that prompt. Packaged builds still use the real keychain.
+if (!app.isPackaged) {
+  app.commandLine.appendSwitch('use-mock-keychain')
+}
 import {
   flushMovieDownloadsPersistence,
   restoreMovieDownloadsOnStartup,
