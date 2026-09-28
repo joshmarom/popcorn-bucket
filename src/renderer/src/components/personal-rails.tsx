@@ -1,10 +1,9 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { Link } from 'react-router-dom'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
 import { isEpisodeMediaKey } from '@shared/tv'
-import { MovieCardMeta, MovieRatingBadge } from '@/components/movie-card-meta'
-import { Card, CardFooter, CardTitle } from '@/components/ui/card'
+import { MovieCard } from '@/components/movie-card'
+import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
 import { releaseYearFromDate } from '@/lib/movie-meta'
 
 const RAIL_MAX = 15
@@ -30,49 +29,24 @@ function Rail({ title, items }: { title: string; items: RailItem[] }): ReactElem
   return (
     <section className="space-y-2">
       <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">{title}</h2>
-      <ul className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
+      <ul className={MOVIE_RAIL_CLASS}>
         {items.map(({ movie, progress }) => (
-          <li key={movie.id} className="w-[118px] shrink-0 snap-start sm:w-[128px]">
-            <Link to={`/movie/${movie.id}`} className="block text-left" state={{ from: 'home' }}>
-              <Card className="overflow-hidden pt-0 transition-shadow hover:shadow-md">
-                <div className="bg-muted relative aspect-[2/3] w-full overflow-hidden">
-                  {movie.posterUrl ? (
-                    <img className="size-full object-cover" src={movie.posterUrl} alt="" />
-                  ) : (
-                    <div className="text-muted-foreground flex size-full items-center justify-center text-[10px]">
-                      No poster
-                    </div>
-                  )}
-                  {progress && progress.duration > 0 ? (
-                    <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
-                      <div
-                        className="bg-primary h-full"
-                        style={{
-                          width: `${Math.min(100, (progress.position / progress.duration) * 100)}%`
-                        }}
-                      />
-                    </div>
-                  ) : null}
-                  <MovieRatingBadge voteAverage={movie.voteAverage} />
-                </div>
-                <CardFooter className="flex flex-col items-start gap-0.5 px-2 py-1.5">
-                  <CardTitle className="line-clamp-2 text-xs leading-tight">
-                    {movie.title}
-                  </CardTitle>
-                  <MovieCardMeta
-                    compact
-                    releaseYear={releaseYearFromDate(movie.releaseDate)}
-                    runtime={movie.runtime}
-                    genres={movie.genres}
-                  />
-                  {progress ? (
-                    <span className="text-muted-foreground text-[10px]">
-                      {formatRemaining(progress)}
-                    </span>
-                  ) : null}
-                </CardFooter>
-              </Card>
-            </Link>
+          <li key={movie.id} className={MOVIE_RAIL_ITEM_CLASS}>
+            <MovieCard
+              size="sm"
+              href={`/movie/${movie.id}`}
+              linkState={{ from: 'home' }}
+              title={movie.title}
+              posterUrl={movie.posterUrl}
+              releaseYear={releaseYearFromDate(movie.releaseDate)}
+              runtime={movie.runtime}
+              genres={movie.genres}
+              voteAverage={movie.voteAverage}
+              progress={
+                progress && progress.duration > 0 ? progress.position / progress.duration : null
+              }
+              note={progress ? formatRemaining(progress) : null}
+            />
           </li>
         ))}
       </ul>

@@ -13,12 +13,12 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { MovieCardMeta, MovieRatingBadge } from '@/components/movie-card-meta'
+import { MovieCard } from '@/components/movie-card'
 import { MovieGrid } from '@/components/movie-grid'
 import { useMovieListFacts } from '@/components/use-movie-list-facts'
 import { PersonalRails } from '@/components/personal-rails'
-import { Card, CardFooter, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 import { cn } from '@/lib/utils'
 
@@ -147,32 +147,20 @@ function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
           </Link>
         </Button>
       </div>
-      <ul className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5">
+      <ul className={MOVIE_RAIL_CLASS}>
         {movies.map((m) => (
-          <li key={m.id} className="w-[118px] shrink-0 snap-start sm:w-[128px]">
-            <Link to={`/movie/${m.id}`} className="block text-left" state={{ from: 'home' }}>
-              <Card className="cursor-pointer overflow-hidden pt-0 transition-shadow hover:shadow-md">
-                <div className="bg-muted relative aspect-[2/3] w-full overflow-hidden">
-                  {m.posterUrl ? (
-                    <img className="size-full object-cover" src={m.posterUrl} alt="" />
-                  ) : (
-                    <div className="text-muted-foreground flex size-full items-center justify-center text-[10px] leading-tight">
-                      No poster
-                    </div>
-                  )}
-                  <MovieRatingBadge voteAverage={m.voteAverage} />
-                </div>
-                <CardFooter className="flex flex-col items-start gap-0.5 px-2 py-1.5">
-                  <CardTitle className="line-clamp-2 text-xs leading-tight">{m.title}</CardTitle>
-                  <MovieCardMeta
-                    compact
-                    releaseYear={m.releaseYear}
-                    runtime={m.runtime}
-                    genres={m.genres}
-                  />
-                </CardFooter>
-              </Card>
-            </Link>
+          <li key={m.id} className={MOVIE_RAIL_ITEM_CLASS}>
+            <MovieCard
+              size="sm"
+              href={`/movie/${m.id}`}
+              linkState={{ from: 'home' }}
+              title={m.title}
+              posterUrl={m.posterUrl}
+              releaseYear={m.releaseYear}
+              runtime={m.runtime}
+              genres={m.genres}
+              voteAverage={m.voteAverage}
+            />
           </li>
         ))}
       </ul>

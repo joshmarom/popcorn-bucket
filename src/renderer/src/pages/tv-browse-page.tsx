@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { TvListPage, TvShowListItem } from '@shared/tv'
+import { MovieCard } from '@/components/movie-card'
 import { Button } from '@/components/ui/button'
-import { Card, CardFooter, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { MOVIE_GRID_CLASS } from '@/lib/movie-layout'
 
 function parsePage(raw: string | null): number {
   const n = Number.parseInt(raw ?? '1', 10)
@@ -23,28 +24,18 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 
 function ShowGrid({ shows }: { shows: TvShowListItem[] }): ReactElement {
   return (
-    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+    <ul className={MOVIE_GRID_CLASS}>
       {shows.map((s) => (
         <li key={s.id}>
-          <Link to={`/tv/${s.id}`} className="block text-left">
-            <Card className="overflow-hidden pt-0 transition-shadow hover:shadow-md">
-              <div className="bg-muted aspect-[2/3] w-full overflow-hidden">
-                {s.posterUrl ? (
-                  <img className="size-full object-cover" src={s.posterUrl} alt="" />
-                ) : (
-                  <div className="text-muted-foreground flex size-full items-center justify-center text-xs">
-                    No poster
-                  </div>
-                )}
-              </div>
-              <CardFooter className="flex flex-col items-start gap-1 px-3 py-2">
-                <CardTitle className="line-clamp-2 text-sm leading-tight">{s.name}</CardTitle>
-                {s.firstAirYear != null && (
-                  <span className="text-muted-foreground text-xs">{s.firstAirYear}</span>
-                )}
-              </CardFooter>
-            </Card>
-          </Link>
+          <MovieCard
+            href={`/tv/${s.id}`}
+            title={s.name}
+            posterUrl={s.posterUrl}
+            releaseYear={s.firstAirYear}
+            runtime={null}
+            genres={[]}
+            voteAverage={s.voteAverage}
+          />
         </li>
       ))}
     </ul>

@@ -1,10 +1,9 @@
 import { useEffect, useState, type ReactElement } from 'react'
-import { Link } from 'react-router-dom'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import { episodeCode, isEpisodeMediaKey } from '@shared/tv'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
-import { MovieCardMeta, MovieRatingBadge } from '@/components/movie-card-meta'
-import { Card, CardFooter, CardTitle } from '@/components/ui/card'
+import { MovieCard } from '@/components/movie-card'
+import { MOVIE_GRID_CLASS } from '@/lib/movie-layout'
 import { releaseYearFromDate } from '@/lib/movie-meta'
 
 type ContinueItem = {
@@ -101,46 +100,24 @@ export function ContinuePage(): ReactElement {
         </p>
       )}
       {items != null && items.length > 0 && (
-        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <ul className={MOVIE_GRID_CLASS}>
           {items.map((item) => (
             <li key={item.key}>
-              <Link to={item.href} className="block text-left">
-                <Card className="overflow-hidden pt-0 transition-shadow hover:shadow-md">
-                  <div className="bg-muted relative aspect-[2/3] w-full overflow-hidden">
-                    {item.posterUrl ? (
-                      <img className="size-full object-cover" src={item.posterUrl} alt="" />
-                    ) : (
-                      <div className="text-muted-foreground flex size-full items-center justify-center px-2 text-center text-xs">
-                        {item.title}
-                      </div>
-                    )}
-                    {item.progress.duration > 0 ? (
-                      <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
-                        <div
-                          className="bg-primary h-full"
-                          style={{
-                            width: `${Math.min(100, (item.progress.position / item.progress.duration) * 100)}%`
-                          }}
-                        />
-                      </div>
-                    ) : null}
-                    <MovieRatingBadge voteAverage={item.voteAverage} />
-                  </div>
-                  <CardFooter className="flex flex-col items-start gap-0.5 px-3 py-2">
-                    <CardTitle className="line-clamp-2 text-sm leading-tight">
-                      {item.title}
-                    </CardTitle>
-                    <MovieCardMeta
-                      releaseYear={item.releaseYear}
-                      runtime={item.runtime}
-                      genres={item.genres}
-                    />
-                    {item.detail ? (
-                      <span className="text-muted-foreground text-xs">{item.detail}</span>
-                    ) : null}
-                  </CardFooter>
-                </Card>
-              </Link>
+              <MovieCard
+                href={item.href}
+                title={item.title}
+                posterUrl={item.posterUrl}
+                releaseYear={item.releaseYear}
+                runtime={item.runtime}
+                genres={item.genres}
+                voteAverage={item.voteAverage}
+                progress={
+                  item.progress.duration > 0
+                    ? item.progress.position / item.progress.duration
+                    : null
+                }
+                note={item.detail}
+              />
             </li>
           ))}
         </ul>
