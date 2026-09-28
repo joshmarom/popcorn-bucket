@@ -91,7 +91,13 @@ function MoviePageContent(): ReactElement {
         ) ?? null)
       : null
 
-  const backdropImageUrl = s.detail?.backdropUrl ?? s.detail?.posterUrl ?? null
+  const backdropSlides = s.detail?.backdropUrls
+  const backdropImageUrl =
+    s.detail == null
+      ? null
+      : backdropSlides && backdropSlides.length > 0
+        ? backdropSlides
+        : (s.detail.backdropUrl ?? s.detail.posterUrl)
 
   const deleteTitle =
     s.deleteConfirmId != null

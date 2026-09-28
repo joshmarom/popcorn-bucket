@@ -78,6 +78,8 @@ export type CatalogMovieDetails = {
   voteAverage: number | null
   posterUrl: string | null
   backdropUrl: string | null
+  /** Backdrop stills for the detail page, primary first. Empty when none exist. */
+  backdropUrls: string[]
   genres: string[]
   cast: CatalogCastMember[]
   trailers: CatalogTrailer[]

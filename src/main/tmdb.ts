@@ -10,6 +10,7 @@ import type {
   CatalogMovieListItem,
   CatalogTrailer
 } from '@shared/catalog'
+import { pickBackdropPaths, type BackdropCandidate } from '@shared/movie-backdrops'
 import { getLibrary } from './library/db'
 import {
   genreNameById,
@@ -34,6 +35,45 @@ export function posterUrl(
 export function backdropUrl(path: string | null | undefined): string | null {
   if (!path) return null
   return `${IMAGE_BASE}/w1280${path}`
+}
+
+const backdropStillSchema = z.object({
+  file_path: z.string().nullable().optional(),
+  iso_639_1: z.string().nullable().optional(),
+  vote_average: z.number().nullable().optional(),
+  vote_count: z.number().nullable().optional(),
+  aspect_ratio: z.number().nullable().optional(),
+  width: z.number().nullable().optional()
+})
+
+function readBackdropCandidates(images: unknown): BackdropCandidate[] {
+  if (images == null || typeof images !== 'object' || !('backdrops' in images)) return []
+  const backdrops = (images as { backdrops?: unknown }).backdrops
+  if (!Array.isArray(backdrops)) return []
+  const candidates: BackdropCandidate[] = []
+  for (const item of backdrops) {
+    const parsed = backdropStillSchema.safeParse(item)
+    if (!parsed.success) continue
+    const filePath = parsed.data.file_path?.trim()
+    if (!filePath) continue
+    candidates.push({
+      filePath,
+      iso639: parsed.data.iso_639_1 ?? null,
+      voteAverage: parsed.data.vote_average ?? 0,
+      voteCount: parsed.data.vote_count ?? 0,
+      aspectRatio: parsed.data.aspect_ratio ?? null,
+      width: parsed.data.width ?? null
+    })
+  }
+  return candidates
+}
+
+/** Up to five wide stills for the movie page, primary backdrop first. */
+function backdropUrlsFor(primaryPath: string | null | undefined, images: unknown): string[] {
+  return pickBackdropPaths(primaryPath, readBackdropCandidates(images)).flatMap((path) => {
+    const url = backdropUrl(path)
+    return url ? [url] : []
+  })
 }
 
 const searchMovieResultRowSchema = z.object({
@@ -108,6 +148,7 @@ const movieDetailSchema = z.object({
   genres: z.array(z.object({ id: z.number(), name: z.string() })).optional(),
   credits: castSchema.optional(),
   videos: movieVideosSchema.optional(),
+  images: z.unknown().nullish(),
   external_ids: z
     .object({
       imdb_id: z.string().nullable().optional()
@@ -621,7 +662,7 @@ export async function getMovieDetails(
   const json = await tmdbFetchJson(
     settings,
     `/movie/${id}`,
-    { append_to_response: 'credits,external_ids,videos' },
+    { append_to_response: 'credits,external_ids,videos,images' },
     { cacheTtlMs: 1000 * 60 * 60 * 24 }
   )
   const parsed = movieDetailSchema.safeParse(json)
@@ -648,6 +689,7 @@ export async function getMovieDetails(
     voteAverage: m.vote_average ?? null,
     posterUrl: posterUrl(m.poster_path ?? null, 'w500'),
     backdropUrl: backdropUrl(m.backdrop_path ?? null),
+    backdropUrls: backdropUrlsFor(m.backdrop_path ?? null, m.images),
     genres: (m.genres ?? []).map((g) => g.name),
     cast,
     trailers,
