@@ -102,7 +102,7 @@ export function GenreBrowsePage(): ReactElement {
       </div>
       <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
       <p className="text-muted-foreground text-sm">
-        Popular titles with this genre on TMDB (discover).
+        Ranked by torrent availability, TMDB popularity, and rating.
       </p>
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}

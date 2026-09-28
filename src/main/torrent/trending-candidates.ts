@@ -41,9 +41,13 @@ export async function fetchMergedTrendingCandidates(
   const ac = signal
   const byImdb = new Map<string, { maxSeeds: number; maxPeers: number; latestUploadUnix: number }>()
 
-  const ytsList = await fetchYtsTrendingCandidates(ac)
-  for (const c of ytsList) {
-    mergeInto(byImdb, c.imdbId, c.maxSeeds, c.maxPeers, c.latestUploadUnix)
+  try {
+    const ytsList = await fetchYtsTrendingCandidates(ac)
+    for (const c of ytsList) {
+      mergeInto(byImdb, c.imdbId, c.maxSeeds, c.maxPeers, c.latestUploadUnix)
+    }
+  } catch {
+    /* YTS optional: TPB + Knaben still define the rail */
   }
 
   let tpbAll: TpbTrendingRow[] = []
@@ -66,6 +70,10 @@ export async function fetchMergedTrendingCandidates(
     }
   } catch {
     /* Knaben optional: YTS + TPB still define the rail */
+  }
+
+  if (byImdb.size === 0) {
+    throw new Error('No trending indexer responded.')
   }
 
   const candidates: MergedTrendingCandidate[] = [...byImdb.entries()].map(([imdbId, v]) => ({

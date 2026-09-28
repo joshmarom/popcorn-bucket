@@ -106,25 +106,6 @@ function MoviePageContent(): ReactElement {
 
       {s.detail && (
         <>
-          <QuickPlayBar
-            quickPlay={s.quickPlay}
-            best={rankedSources.ranked[0] ?? null}
-            existingDownload={existingDownload}
-            bufferingDownload={bufferingDownload}
-            playBusy={s.playBusyDownloadId != null}
-            resumeSeconds={resumeSeconds}
-            inWatchlist={inWatchlist}
-            onToggleWatchlist={() => {
-              const next = !inWatchlist
-              setInWatchlist(next)
-              void window.api.watchlist.set(s.movieId, next)
-            }}
-            onPlay={() => void s.playBest()}
-            onShowSources={() => s.setTab('sources')}
-            onUseVidking={() => s.setTab('vidking')}
-            onDismiss={s.resetQuickPlay}
-          />
-
           <MovieDetailTabs tab={s.tab} onTabChange={s.setTab} />
 
           {s.tab === 'overview' && (
@@ -132,6 +113,26 @@ function MoviePageContent(): ReactElement {
               detail={s.detail}
               overviewSubTab={s.overviewSubTab}
               onOverviewSubTabChange={s.setOverviewSubTab}
+              posterActions={
+                <QuickPlayBar
+                  quickPlay={s.quickPlay}
+                  best={rankedSources.ranked[0] ?? null}
+                  existingDownload={existingDownload}
+                  bufferingDownload={bufferingDownload}
+                  playBusy={s.playBusyDownloadId != null}
+                  resumeSeconds={resumeSeconds}
+                  inWatchlist={inWatchlist}
+                  onToggleWatchlist={() => {
+                    const next = !inWatchlist
+                    setInWatchlist(next)
+                    void window.api.watchlist.set(s.movieId, next)
+                  }}
+                  onPlay={() => void s.playBest()}
+                  onShowSources={() => s.setTab('sources')}
+                  onUseVidking={() => s.setTab('vidking')}
+                  onDismiss={s.resetQuickPlay}
+                />
+              }
             />
           )}
 

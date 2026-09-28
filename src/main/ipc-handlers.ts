@@ -27,7 +27,8 @@ import { searchTorrentSources } from './torrent/orchestrator'
 import { listProviderHealth } from './torrent/scrape-providers'
 import type { ProviderHealth } from '@shared/provider-health'
 import type { TvSearchResponse, TvSeasonResponse, TvShowResponse } from '@shared/tv'
-import { getPopularTvShows, getTvSeason, getTvShowDetails, searchTvShows } from './tmdb-tv'
+import { getTvSeason, getTvShowDetails, searchTvShows } from './tmdb-tv'
+import { getTrendingTvPage } from './torrent/trending-tv'
 import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
 import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
 import {
@@ -54,6 +55,8 @@ import {
   searchMovies
 } from './tmdb'
 import { getTrendingWatchableMovies } from './torrent/trending-watchable'
+import { getLibrary } from './library/db'
+import { rankMovies } from './library/ranked-lists'
 import {
   clearWatchProgress,
   getWatchProgress,
@@ -444,8 +447,10 @@ export function registerIpcHandlers(): void {
       const rails: CatalogGenreRail[] = []
       const stripMax = 15
       for (const genre of genres) {
-        const raw = await discoverMoviesByGenreFirstPage(settings, genre.id)
-        const movies = raw.filter(shouldIncludeCatalogListItem).slice(0, stripMax)
+        await discoverMoviesByGenreFirstPage(settings, genre.id)
+        const movies = rankMovies(getLibrary(), { genreId: genre.id, limit: stripMax * 3 })
+          .filter(shouldIncludeCatalogListItem)
+          .slice(0, stripMax)
         if (movies.length === 0) continue
         rails.push({ genre, movies })
       }
@@ -472,8 +477,10 @@ export function registerIpcHandlers(): void {
         }
       }
       try {
-        const raw = await discoverMoviesByGenre(settings, parsed.data.genreId)
-        const enriched = await enrichCatalogListWithOmdb(settings, raw)
+        await getMovieGenres(settings)
+        await discoverMoviesByGenre(settings, parsed.data.genreId)
+        const ranked = rankMovies(getLibrary(), { genreId: parsed.data.genreId, limit: 300 })
+        const enriched = await enrichCatalogListWithOmdb(settings, ranked)
         const results = enriched.filter(shouldIncludeCatalogListItem)
         return { ok: true, results }
       } catch (e) {
@@ -487,7 +494,7 @@ export function registerIpcHandlers(): void {
     const parsed = pageInput.safeParse(raw ?? {})
     if (!parsed.success) return { ok: false, error: 'Invalid page.' }
     try {
-      return { ok: true, ...(await getPopularTvShows(getAppSettings(), parsed.data.page ?? 1)) }
+      return { ok: true, ...(await getTrendingTvPage(getAppSettings(), parsed.data.page ?? 1)) }
     } catch (e) {
       return { ok: false, error: mapCatalogError(e).error }
     }

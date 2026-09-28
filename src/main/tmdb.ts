@@ -10,6 +10,8 @@ import type {
   CatalogMovieListItem,
   CatalogTrailer
 } from '@shared/catalog'
+import { getLibrary } from './library/db'
+import { upsertGenres, upsertMovie, upsertMovieListRows } from './library/movies'
 
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const IMAGE_BASE = 'https://image.tmdb.org/t/p'
@@ -35,7 +37,9 @@ const searchMovieResultRowSchema = z.object({
   poster_path: z.string().nullable().optional(),
   release_date: z.string().nullable().optional(),
   vote_average: z.number().optional(),
-  popularity: z.number().optional()
+  vote_count: z.number().optional(),
+  popularity: z.number().optional(),
+  genre_ids: z.array(z.number()).optional()
 })
 
 const searchResponseSchema = z.object({
@@ -61,6 +65,7 @@ const genreListSchema = z.object({
 const castSchema = z.object({
   cast: z.array(
     z.object({
+      id: z.number(),
       name: z.string(),
       character: z.string(),
       profile_path: z.string().nullable().optional()
@@ -90,9 +95,11 @@ const movieDetailSchema = z.object({
   runtime: z.number().nullable().optional(),
   release_date: z.string().nullable().optional(),
   vote_average: z.number().optional(),
+  vote_count: z.number().optional(),
+  popularity: z.number().optional(),
   poster_path: z.string().nullable().optional(),
   backdrop_path: z.string().nullable().optional(),
-  genres: z.array(z.object({ name: z.string() })).optional(),
+  genres: z.array(z.object({ id: z.number(), name: z.string() })).optional(),
   credits: castSchema.optional(),
   videos: movieVideosSchema.optional(),
   external_ids: z
@@ -332,9 +339,38 @@ function mapSearchRowToCatalogItem(
   }
 }
 
+function rememberListRows(
+  results: z.infer<typeof searchMovieResultRowSchema>[],
+  imdbId?: string
+): void {
+  try {
+    upsertMovieListRows(
+      getLibrary(),
+      results.map((r) => {
+        const item = mapSearchRowToCatalogItem(r)
+        return {
+          tmdbId: item.id,
+          title: item.title,
+          releaseDate: item.releaseDate ?? (item.releaseYear ? String(item.releaseYear) : null),
+          overview: item.overview,
+          posterUrl: item.posterUrl,
+          voteAverage: item.voteAverage,
+          voteCount: r.vote_count ?? null,
+          popularity: item.popularity,
+          genreIds: r.genre_ids ?? [],
+          imdbId: imdbId ?? null
+        }
+      })
+    )
+  } catch (error) {
+    console.error('Could not save TMDB list rows to the library', error)
+  }
+}
+
 function mapTmdbResultsToCatalog(
   results: z.infer<typeof searchMovieResultRowSchema>[]
 ): CatalogMovieListItem[] {
+  rememberListRows(results)
   return results.map(mapSearchRowToCatalogItem)
 }
 
@@ -368,6 +404,7 @@ export async function findMovieListItemByImdbId(
   if (!first) {
     return null
   }
+  rememberListRows([first], raw)
   return mapSearchRowToCatalogItem(first)
 }
 
@@ -415,6 +452,11 @@ export async function getMovieGenres(
   const parsed = genreListSchema.safeParse(json)
   if (!parsed.success) {
     throw new Error('BAD_RESPONSE')
+  }
+  try {
+    upsertGenres(getLibrary(), parsed.data.genres)
+  } catch (error) {
+    console.error('Could not save TMDB genres to the library', error)
   }
   return parsed.data.genres
 }
@@ -518,7 +560,7 @@ export async function getMovieDetails(
   const trailerCandidates = pickTrailerCandidatesFromVideos(m.videos?.results)
   const trailers = await filterTrailersToLandscape(trailerCandidates)
 
-  return {
+  const details: CatalogMovieDetails = {
     id: m.id,
     title: m.title,
     tagline: m.tagline ?? '',
@@ -533,4 +575,27 @@ export async function getMovieDetails(
     trailers,
     imdbId: m.external_ids?.imdb_id ?? null
   }
+
+  upsertMovie(getLibrary(), {
+    tmdbId: m.id,
+    title: m.title,
+    releaseDate: m.release_date ?? null,
+    imdbId: m.external_ids?.imdb_id ?? null,
+    overview: details.overview,
+    posterUrl: details.posterUrl,
+    backdropUrl: details.backdropUrl,
+    runtime: details.runtime,
+    rating: m.vote_average ?? null,
+    voteCount: m.vote_count ?? null,
+    popularity: m.popularity ?? null,
+    genres: (m.genres ?? []).map((genre) => ({ id: genre.id, name: genre.name })),
+    cast: (m.credits?.cast ?? []).slice(0, 12).map((person) => ({
+      id: person.id,
+      name: person.name,
+      character: person.character,
+      profileUrl: posterUrl(person.profile_path ?? null, 'w185')
+    }))
+  })
+
+  return details
 }

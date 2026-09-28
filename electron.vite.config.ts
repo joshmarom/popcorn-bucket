@@ -13,7 +13,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         /** ESM + top-level await — must load via `import()`, not bundled `require()`. */
-        external: ['webtorrent']
+        external: ['webtorrent', 'better-sqlite3']
       }
     }
   },

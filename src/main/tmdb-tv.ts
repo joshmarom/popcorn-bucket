@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { AppSettings } from '@shared/app-settings'
 import type { TvListPage, TvSeasonDetails, TvShowDetails, TvShowListItem } from '@shared/tv'
+import { getLibrary } from './library/db'
+import { upsertShowDetails, upsertShowListRows } from './library/shows'
 import { backdropUrl, posterUrl, tmdbFetchJson } from './tmdb'
 
 const yearOf = (date: string | null | undefined): number | null => {
@@ -14,7 +16,9 @@ const tvRowSchema = z.object({
   overview: z.string().nullable().optional(),
   poster_path: z.string().nullable().optional(),
   first_air_date: z.string().nullable().optional(),
-  vote_average: z.number().optional()
+  vote_average: z.number().optional(),
+  vote_count: z.number().optional(),
+  popularity: z.number().optional()
 })
 
 const tvListSchema = z.object({
@@ -47,6 +51,7 @@ async function fetchTvList(
   )
   const parsed = tvListSchema.safeParse(json)
   if (!parsed.success) throw new Error('BAD_RESPONSE')
+  rememberShowRows(parsed.data.results)
   const totalPages = Math.max(1, Math.min(TMDB_MAX_PAGE, parsed.data.total_pages ?? 1))
   return {
     results: parsed.data.results.map(mapTvRow),
@@ -68,6 +73,51 @@ export async function searchTvShows(
     page,
     1000 * 60 * 30
   )
+}
+
+function rememberShowRows(rows: z.infer<typeof tvRowSchema>[], imdbId?: string): void {
+  try {
+    upsertShowListRows(
+      getLibrary(),
+      rows.map((r) => ({
+        tmdbId: r.id,
+        name: r.name,
+        firstAirDate: r.first_air_date?.trim() || null,
+        overview: r.overview ?? '',
+        posterUrl: posterUrl(r.poster_path ?? null, 'w185'),
+        voteAverage: r.vote_average ?? null,
+        voteCount: r.vote_count ?? null,
+        popularity: r.popularity ?? null,
+        imdbId: imdbId ?? null
+      }))
+    )
+  } catch (error) {
+    console.error('Could not save TMDB shows to the library', error)
+  }
+}
+
+const findTvResponseSchema = z.object({
+  tv_results: z.array(tvRowSchema).optional()
+})
+
+/** Resolve a TMDB show from its IMDb id (`tt…`). Returns null when TMDB has no TV match. */
+export async function findTvShowByImdbId(
+  settings: AppSettings,
+  imdbId: string
+): Promise<TvShowListItem | null> {
+  const raw = imdbId.trim().toLowerCase()
+  if (!/^tt\d+$/u.test(raw)) return null
+  const json = await tmdbFetchJson(
+    settings,
+    `/find/${encodeURIComponent(raw)}`,
+    { external_source: 'imdb_id' },
+    { cacheTtlMs: 1000 * 60 * 60 * 24 }
+  )
+  const parsed = findTvResponseSchema.safeParse(json)
+  const first = parsed.success ? parsed.data.tv_results?.[0] : undefined
+  if (!first) return null
+  rememberShowRows([first], raw)
+  return mapTvRow(first)
 }
 
 function mapTvRow(r: z.infer<typeof tvRowSchema>): TvShowListItem {
@@ -93,6 +143,9 @@ const tvDetailsSchema = z.object({
   first_air_date: z.string().nullable().optional(),
   poster_path: z.string().nullable().optional(),
   backdrop_path: z.string().nullable().optional(),
+  vote_average: z.number().optional(),
+  vote_count: z.number().optional(),
+  popularity: z.number().optional(),
   external_ids: z.object({ imdb_id: z.string().nullable().optional() }).optional(),
   seasons: z
     .array(
@@ -116,6 +169,21 @@ export async function getTvShowDetails(settings: AppSettings, id: number): Promi
   const parsed = tvDetailsSchema.safeParse(json)
   if (!parsed.success) throw new Error('BAD_RESPONSE')
   const d = parsed.data
+  try {
+    upsertShowDetails(getLibrary(), {
+      tmdbId: d.id,
+      name: d.name,
+      firstAirDate: d.first_air_date?.trim() || null,
+      overview: d.overview ?? '',
+      posterUrl: posterUrl(d.poster_path ?? null, 'w342'),
+      imdbId: d.external_ids?.imdb_id ?? null,
+      voteAverage: d.vote_average ?? null,
+      voteCount: d.vote_count ?? null,
+      popularity: d.popularity ?? null
+    })
+  } catch (error) {
+    console.error('Could not save TMDB show details to the library', error)
+  }
   return {
     id: d.id,
     name: d.name,

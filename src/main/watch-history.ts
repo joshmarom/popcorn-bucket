@@ -1,69 +1,34 @@
-import * as ElectronStoreModule from 'electron-store'
-import { FINISHED_FRACTION, type WatchProgress } from '@shared/watch-history'
-
-type StoreCtor = typeof import('electron-store').default
-
-function getStoreConstructor(): StoreCtor {
-  const exported = (ElectronStoreModule as { default?: unknown }).default
-  if (typeof exported === 'function') return exported as StoreCtor
-  if (
-    exported !== null &&
-    typeof exported === 'object' &&
-    'default' in exported &&
-    typeof (exported as { default: unknown }).default === 'function'
-  ) {
-    return (exported as { default: StoreCtor }).default
-  }
-  throw new Error('Could not load electron-store constructor.')
-}
-
-type StoreShape = {
-  progress: Record<string, WatchProgress>
-  watchlist: number[]
-}
-
-const store = new (getStoreConstructor())({
-  name: 'popcorn-bucket-watch-history',
-  defaults: { progress: {}, watchlist: [] } satisfies StoreShape
-})
+import type { WatchProgress } from '@shared/watch-history'
+import { getLibrary } from './library/db'
+import {
+  clearWatchProgress as clearStoredWatchProgress,
+  getWatchProgress as readStoredWatchProgress,
+  getWatchlist as readStoredWatchlist,
+  listWatchProgress as listStoredWatchProgress,
+  recordWatchProgress as recordStoredWatchProgress,
+  setInWatchlist as setStoredWatchlist
+} from './library/watch'
 
 export function recordWatchProgress(movieId: number, position: number, duration: number): void {
-  if (!Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) return
-  const finished = position / duration >= FINISHED_FRACTION
-  const progress = { ...(store.get('progress') as StoreShape['progress']) }
-  progress[String(movieId)] = {
-    movieId,
-    position: finished ? 0 : Math.max(0, position),
-    duration,
-    updatedAt: Date.now(),
-    finished
-  }
-  store.set('progress', progress)
+  recordStoredWatchProgress(getLibrary(), movieId, position, duration)
 }
 
 export function getWatchProgress(movieId: number): WatchProgress | null {
-  const progress = store.get('progress') as StoreShape['progress']
-  return progress[String(movieId)] ?? null
+  return readStoredWatchProgress(getLibrary(), movieId)
 }
 
 export function listWatchProgress(): WatchProgress[] {
-  const progress = store.get('progress') as StoreShape['progress']
-  return Object.values(progress).sort((a, b) => b.updatedAt - a.updatedAt)
+  return listStoredWatchProgress(getLibrary())
 }
 
 export function clearWatchProgress(movieId: number): void {
-  const progress = { ...(store.get('progress') as StoreShape['progress']) }
-  delete progress[String(movieId)]
-  store.set('progress', progress)
+  clearStoredWatchProgress(getLibrary(), movieId)
 }
 
 export function getWatchlist(): number[] {
-  return [...(store.get('watchlist') as number[])]
+  return readStoredWatchlist(getLibrary())
 }
 
 export function setInWatchlist(movieId: number, inList: boolean): number[] {
-  const list = getWatchlist().filter((id) => id !== movieId)
-  if (inList) list.unshift(movieId)
-  store.set('watchlist', list)
-  return list
+  return setStoredWatchlist(getLibrary(), movieId, inList)
 }

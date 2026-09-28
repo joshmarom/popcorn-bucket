@@ -67,7 +67,19 @@ function mergeByHash(rows: TpbTrendingRow[]): TpbTrendingRow[] {
  * valid `imdb` id. Sorted by seeders (newest swarm first among precompiled rows).
  */
 export async function fetchTpbMovieRowsWithImdb(signal?: AbortSignal): Promise<TpbTrendingRow[]> {
-  const urls = [`${API_BASE}/data_top100_201.json`, `${API_BASE}/data_top100_207.json`]
+  return fetchTpbRowsWithImdb(['201', '207'], signal)
+}
+
+/** TV episodes and packs from the precompiled TV (205) and HD TV (208) lists; `imdb` is the show. */
+export async function fetchTpbTvRowsWithImdb(signal?: AbortSignal): Promise<TpbTrendingRow[]> {
+  return fetchTpbRowsWithImdb(['205', '208'], signal)
+}
+
+async function fetchTpbRowsWithImdb(
+  categories: string[],
+  signal?: AbortSignal
+): Promise<TpbTrendingRow[]> {
+  const urls = categories.map((c) => `${API_BASE}/data_top100_${c}.json`)
   const merged: TpbTrendingRow[] = []
 
   for (const url of urls) {

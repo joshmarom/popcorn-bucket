@@ -1,5 +1,5 @@
 import type { CatalogMovieDetails } from '@shared/catalog'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,15 +10,17 @@ import type { OverviewSubTab } from './movie-types'
 export function MovieOverviewTab({
   detail,
   overviewSubTab,
-  onOverviewSubTabChange
+  onOverviewSubTabChange,
+  posterActions
 }: {
   detail: CatalogMovieDetails
   overviewSubTab: OverviewSubTab
   onOverviewSubTabChange: (t: OverviewSubTab) => void
+  posterActions?: ReactNode
 }): ReactElement {
   return (
     <div className="grid gap-6 md:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
-      <div>
+      <div className="space-y-3">
         <Card className="overflow-hidden p-0">
           <div className="bg-muted aspect-[2/3]">
             {detail.posterUrl ? (
@@ -30,6 +32,7 @@ export function MovieOverviewTab({
             )}
           </div>
         </Card>
+        {posterActions}
       </div>
       <div className="min-w-0 space-y-4">
         <div>

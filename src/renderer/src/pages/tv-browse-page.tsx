@@ -183,7 +183,7 @@ export function TvBrowsePage(): ReactElement {
 
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
         <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-          {searching ? 'Results' : 'Popular'}
+          {searching ? 'Results' : 'Trending'}
         </h2>
         {error && <p className="text-destructive text-sm">{error}</p>}
         {list == null && !error && (

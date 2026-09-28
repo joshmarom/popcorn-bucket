@@ -29,7 +29,7 @@ module.exports = {
     '!{.env,.env.*,.npmrc,pnpm-lock.yaml}',
     '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   ],
-  asarUnpack: ['resources/**'],
+  asarUnpack: ['resources/**', 'node_modules/better-sqlite3/**'],
   win: { executableName: 'PopcornBucket' },
   nsis: {
     artifactName: '${name}-${version}-setup.${ext}',

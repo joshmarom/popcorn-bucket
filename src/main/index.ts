@@ -4,6 +4,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc-handlers'
 import { migratePlaintextSecrets } from './settings-store'
+import { closeLibrary } from './library/db'
+import { importLegacyLibrary } from './library/migrate'
 import { startAutoUpdates } from './auto-update'
 import { resetDownloadsBroadcast, startDownloadsBroadcast } from './downloads-broadcast'
 import { guardVidkingWebviews, installVidkingSession } from './vidking-session'
@@ -96,6 +98,7 @@ app.whenReady().then(() => {
   })
 
   migratePlaintextSecrets()
+  importLegacyLibrary()
   lockDownMainSession()
   installVidkingSession()
   installLocalMediaProtocol()
@@ -125,6 +128,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   flushMovieDownloadsPersistence()
   shutdownMovieDownloads()
+  closeLibrary()
 })
 
 // In this file you can include the rest of your app's specific main process
