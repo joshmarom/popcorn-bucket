@@ -1,18 +1,17 @@
 import './env'
-import { existsSync, fstatSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { fstatSync } from 'node:fs'
 import { createAdaptorServer } from '@hono/node-server'
 import { Hono } from 'hono'
 import pg from 'pg'
+import { createAuth, requireSession } from './auth'
 import { registerCatalogRoutes } from './catalog-routes'
+import { registerMeRoutes } from './me-routes'
 import { registerTorrentRoutes } from './torrent-routes'
 import { migrate } from './migrate'
 import { pgConfig } from './pg-config'
 
-loadEnvFile(join(homedir(), '.config', 'popcorn', 'env'))
-
 const app = new Hono()
+mountAuth(app)
 registerCatalogRoutes(app)
 registerTorrentRoutes(app)
 
@@ -71,11 +70,32 @@ function listen(server: ReturnType<typeof createAdaptorServer>): void {
   }
   const port = Number(process.env.PORT)
   if (Number.isInteger(port) && port > 0) {
-    server.listen({ port, hostname: '127.0.0.1' }, onListening)
+    server.listen({ port, host: '127.0.0.1' }, onListening)
     return
   }
   console.error('systemd socket was not passed. Refusing to open a port.')
   process.exit(1)
+}
+
+function mountAuth(app: Hono): void {
+  if (!process.env.DATABASE_URL || !process.env.BETTER_AUTH_SECRET) {
+    console.error('auth disabled: DATABASE_URL or BETTER_AUTH_SECRET is not set')
+    return
+  }
+  try {
+    const auth = createAuth()
+    const signedIn = requireSession(auth)
+    app.on(['GET', 'POST'], '/v1/auth/*', (c) => auth.handler(c.req.raw))
+    app.use('/v1/catalog/*', signedIn)
+    app.use('/v1/tv/*', signedIn)
+    app.use('/v1/discover/*', signedIn)
+    app.use('/v1/torrents/*', signedIn)
+    app.use('/v1/me/*', signedIn)
+    registerMeRoutes(app)
+  } catch (error) {
+    console.error('auth init failed')
+    console.error(error instanceof Error ? error.message : error)
+  }
 }
 
 function socketFd(fd: number): boolean {
@@ -86,22 +106,3 @@ function socketFd(fd: number): boolean {
   }
 }
 
-function loadEnvFile(path: string): void {
-  if (!existsSync(path)) return
-  for (const line of readFileSync(path, 'utf8').split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const eq = trimmed.indexOf('=')
-    if (eq <= 0) continue
-    const key = trimmed.slice(0, eq).trim()
-    if (process.env[key]) continue
-    let value = trimmed.slice(eq + 1).trim()
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
-    process.env[key] = value
-  }
-}

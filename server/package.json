@@ -7,7 +7,8 @@
     "start": "node dist/index.js",
     "migrate": "node dist/migrate.js",
     "secrets": "node dist/secrets.js",
-    "refresh": "node dist/refresh.js"
+    "refresh": "node dist/refresh.js",
+    "import-library": "node dist/import-library.js"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",

@@ -7,7 +7,8 @@ await build({
     'src/migrate.ts',
     'src/pg-worker.ts',
     'src/secrets-cli.ts',
-    'src/refresh.ts'
+    'src/refresh.ts',
+    'src/import-library.ts'
   ],
   outdir: 'dist',
   bundle: true,
