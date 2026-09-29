@@ -1,0 +1,57 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload and build
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/popcorn_deploy
+          chmod 600 ~/.ssh/popcorn_deploy
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+          rsh="ssh -i $HOME/.ssh/popcorn_deploy -p $SSH_PORT -o StrictHostKeyChecking=yes"
+          rsync -az -e "$rsh" \
+            --exclude node_modules \
+            --exclude .git \
+            --exclude dist \
+            --exclude out \
+            --exclude .env \
+            --exclude '.env.*' \
+            --exclude server/node_modules \
+            --exclude server/dist \
+            --exclude .DS_Store \
+            ./ "${SSH_USER}@${SSH_HOST}:popcorn-api/"
+          ssh -i "$HOME/.ssh/popcorn_deploy" -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" 'bash ~/popcorn-api/server/scripts/remote-build.sh'
+          ssh -i "$HOME/.ssh/popcorn_deploy" -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" 'bash ~/popcorn-api/server/scripts/restart.sh'
+
+      - name: Check health
+        run: |
+          set -euo pipefail
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if curl -fsS --max-time 20 https://popcorn.josh.co.il/health | grep -q '"ok":true'; then
+              echo health-ok
+              exit 0
+            fi
+            sleep 3
+          done
+          echo health-failed
+          exit 1
