@@ -2,7 +2,13 @@ import { resolve } from 'node:path'
 import { build } from 'esbuild'
 
 await build({
-  entryPoints: ['src/index.ts', 'src/migrate.ts', 'src/pg-worker.ts', 'src/secrets-cli.ts'],
+  entryPoints: [
+    'src/index.ts',
+    'src/migrate.ts',
+    'src/pg-worker.ts',
+    'src/secrets-cli.ts',
+    'src/refresh.ts'
+  ],
   outdir: 'dist',
   bundle: true,
   platform: 'node',

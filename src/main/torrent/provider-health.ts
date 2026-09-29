@@ -5,6 +5,16 @@ export const FAILURES_BEFORE_SKIP = 3
 export const SKIP_MS = 10 * 60 * 1000
 
 const health = new Map<string, ProviderHealth>()
+let onChange: ((row: ProviderHealth) => void) | null = null
+
+/** The API sets this so a restart keeps cooldown state. The desktop leaves it unset. */
+export function onProviderHealthChange(listener: ((row: ProviderHealth) => void) | null): void {
+  onChange = listener
+}
+
+export function hydrateProviderHealth(rows: ProviderHealth[]): void {
+  for (const row of rows) health.set(row.provider, { ...row })
+}
 
 function entry(provider: string): ProviderHealth {
   let h = health.get(provider)
@@ -29,6 +39,7 @@ export function shouldQueryProvider(provider: string, now = Date.now()): boolean
   if (h.state !== 'skipped') return true
   if (h.retryAt != null && now >= h.retryAt) {
     h.state = 'failing'
+    onChange?.({ ...h })
     return true
   }
   return false
@@ -42,6 +53,7 @@ export function recordProviderSuccess(provider: string, latencyMs: number, count
   h.lastLatencyMs = latencyMs
   h.lastResultCount = count
   h.retryAt = null
+  onChange?.({ ...h })
 }
 
 export function recordProviderFailure(
@@ -61,6 +73,7 @@ export function recordProviderFailure(
   } else {
     h.state = 'failing'
   }
+  onChange?.({ ...h })
 }
 
 export function getProviderHealth(providers: string[]): ProviderHealth[] {

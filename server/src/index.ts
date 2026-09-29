@@ -6,6 +6,7 @@ import { createAdaptorServer } from '@hono/node-server'
 import { Hono } from 'hono'
 import pg from 'pg'
 import { registerCatalogRoutes } from './catalog-routes'
+import { registerTorrentRoutes } from './torrent-routes'
 import { migrate } from './migrate'
 import { pgConfig } from './pg-config'
 
@@ -13,6 +14,7 @@ loadEnvFile(join(homedir(), '.config', 'popcorn', 'env'))
 
 const app = new Hono()
 registerCatalogRoutes(app)
+registerTorrentRoutes(app)
 
 app.get('/health', async (c) => {
   const databaseUrl = process.env.DATABASE_URL
