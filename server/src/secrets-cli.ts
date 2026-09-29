@@ -16,3 +16,4 @@ if (!value) {
 
 setServerSecret(key, value)
 console.log(`saved ${key}`)
+process.exit(0)
