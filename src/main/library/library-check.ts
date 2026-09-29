@@ -47,7 +47,7 @@ function run(): void {
           version: number
         }[]
       ).map((row) => row.version),
-      [1, 2, 3, 4, 5]
+      [1, 2, 3, 4, 5, 6]
     )
 
     upsertMovie(db, {
@@ -89,6 +89,18 @@ function run(): void {
     assert.equal(movie.imdb_id, 'tt0137523')
     assert.equal(movie.runtime, 139)
     assert.equal(movie.rating, 8.4)
+
+    const queued = db
+      .prepare(
+        `SELECT kind, size FROM media_assets WHERE tmdb_id = 550 ORDER BY kind, size`
+      )
+      .all() as { kind: string; size: string }[]
+    assert.deepEqual(queued, [
+      { kind: 'backdrop', size: 'w1280' },
+      { kind: 'poster', size: 'w185' },
+      { kind: 'poster', size: 'w500' },
+      { kind: 'profile', size: 'w185' }
+    ])
 
     const genres = db
       .prepare(

@@ -5,7 +5,9 @@ import { shouldIncludeCatalogListItem } from '../../src/shared/catalog'
 import { STREAMING_SERVICES, type StreamingService } from '../../src/shared/discovery'
 import { fillCatalogMovieListFacts } from '../../src/main/catalog-list-facts'
 import { getLibrary } from '../../src/main/library/db'
+import { genreNameById } from '../../src/main/library/movies'
 import { rankMovies } from '../../src/main/library/ranked-lists'
+import { rankShows } from '../../src/main/library/shows'
 import { enrichCatalogListWithOmdb, enrichMovieDetailsWithOmdb } from '../../src/main/omdb'
 import {
   discoverMoviesByGenre,
@@ -35,10 +37,14 @@ import {
   getStreamingTop,
   getStreamingTopShows,
   getUpcomingMovies,
-  resolveSuggestionTmdbId
+  resolveSuggestionTmdbId,
+  searchMoviesFromTorrentClaw,
+  searchShowsFromTorrentClaw
 } from '../../src/main/torrentclaw/discovery'
 import { getTvGenrePage, getTvGenreRails } from '../../src/main/tv-genres'
 import { fillTvShowListFacts } from '../../src/main/tv-list-facts'
+import { mergeById, searchMoviesLocal, searchShowsLocal } from './local-search'
+import { withPublicMedia } from './public-media'
 import { serverSettings } from './secrets'
 
 configureTorrentClaw({
@@ -87,12 +93,46 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = searchInput.safeParse({ query: c.req.query('query') ?? '' })
     if (!parsed.success) return c.json(invalid('Enter a search query.'))
     const settings = serverSettings()
-    if (!hasTmdbCredentials(settings)) return c.json(noCredentials())
+    const local = await searchMoviesLocal(parsed.data.query)
+    let remote: Awaited<ReturnType<typeof searchMovies>> = []
+    if (hasTmdbCredentials(settings)) {
+      try {
+        remote = await searchMovies(settings, parsed.data.query)
+      } catch {
+        remote = []
+      }
+    }
+    if (remote.length === 0) {
+      try {
+        remote = (await searchMoviesFromTorrentClaw(parsed.data.query)).map((item) => ({
+          id: item.id,
+          title: item.title,
+          releaseDate: item.releaseDate,
+          releaseYear: item.releaseYear,
+          voteAverage: item.voteAverage,
+          popularity: item.popularity,
+          posterUrl: item.posterUrl,
+          overview: item.overview,
+          genres: item.genres,
+          runtime: item.runtime
+        }))
+      } catch {
+        remote = []
+      }
+    }
+    if (local.length === 0 && remote.length === 0 && !hasTmdbCredentials(settings)) {
+      return c.json(noCredentials())
+    }
     try {
-      const found = await searchMovies(settings, parsed.data.query)
-      const enriched = await enrichCatalogListWithOmdb(settings, found)
-      return c.json({ ok: true, results: enriched.filter(shouldIncludeCatalogListItem) })
+      const merged = mergeById(local, remote)
+      const enriched = await enrichCatalogListWithOmdb(settings, merged)
+      return c.json(
+        withPublicMedia({ ok: true as const, results: enriched.filter(shouldIncludeCatalogListItem) })
+      )
     } catch (error) {
+      if (local.length > 0) {
+        return c.json(withPublicMedia({ ok: true as const, results: local.filter(shouldIncludeCatalogListItem) }))
+      }
       return c.json(mapCatalogError(error))
     }
   })
@@ -104,12 +144,11 @@ export function registerCatalogRoutes(app: Hono): void {
     })
     if (!parsed.success) return c.json(invalid('Invalid page.'))
     const settings = serverSettings()
-    if (!hasTmdbCredentials(settings)) return c.json(noCredentials())
     try {
       const page = await getTrendingPage(settings, parsed.data.page ?? 1, {
         forceRefresh: parsed.data.forceRefresh === '1' || parsed.data.forceRefresh === 'true'
       })
-      return c.json({ ok: true, ...page })
+      return c.json(withPublicMedia({ ok: true, ...page }))
     } catch (error) {
       return c.json(mapCatalogError(error))
     }
@@ -119,13 +158,12 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = idInput.safeParse({ id: c.req.param('id') })
     if (!parsed.success) return c.json(invalid('Invalid movie id.'))
     const settings = serverSettings()
-    if (!hasTmdbCredentials(settings)) return c.json(noCredentials())
     try {
       const movie = await enrichMovieDetailsWithOmdb(
         settings,
         await getMovieDetails(settings, parsed.data.id)
       )
-      return c.json({ ok: true, movie })
+      return c.json(withPublicMedia({ ok: true, movie }))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (message.includes('TMDB_HTTP_404')) {
@@ -137,19 +175,30 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/catalog/genre-rails', async (c) => {
     const settings = serverSettings()
-    if (!hasTmdbCredentials(settings)) return c.json(noCredentials())
     try {
-      const genres = await getMovieGenres(settings)
+      let genres: { id: number; name: string }[] = []
+      if (hasTmdbCredentials(settings)) {
+        try {
+          genres = await getMovieGenres(settings)
+        } catch {
+          genres = []
+        }
+      }
+      if (genres.length === 0) {
+        genres = [...genreNameById(getLibrary()).entries()].map(([id, name]) => ({ id, name }))
+      }
       const rails = []
       for (const genre of genres) {
-        await discoverMoviesByGenreFirstPage(settings, genre.id)
+        if (hasTmdbCredentials(settings)) {
+          await discoverMoviesByGenreFirstPage(settings, genre.id).catch(() => undefined)
+        }
         const movies = rankMovies(getLibrary(), { genreId: genre.id, limit: 45 })
           .filter(shouldIncludeCatalogListItem)
           .slice(0, 15)
         if (movies.length === 0) continue
         rails.push({ genre, movies })
       }
-      return c.json({ ok: true, rails })
+      return c.json(withPublicMedia({ ok: true, rails }))
     } catch (error) {
       return c.json(mapCatalogError(error))
     }
@@ -159,13 +208,16 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = genreInput.safeParse({ genreId: c.req.query('genreId') })
     if (!parsed.success) return c.json(invalid('Invalid genre.'))
     const settings = serverSettings()
-    if (!hasTmdbCredentials(settings)) return c.json(noCredentials())
     try {
-      await getMovieGenres(settings)
-      await discoverMoviesByGenre(settings, parsed.data.genreId)
+      if (hasTmdbCredentials(settings)) {
+        await getMovieGenres(settings).catch(() => undefined)
+        await discoverMoviesByGenre(settings, parsed.data.genreId).catch(() => undefined)
+      }
       const ranked = rankMovies(getLibrary(), { genreId: parsed.data.genreId, limit: 300 })
       const enriched = await enrichCatalogListWithOmdb(settings, ranked)
-      return c.json({ ok: true, results: enriched.filter(shouldIncludeCatalogListItem) })
+      return c.json(
+        withPublicMedia({ ok: true, results: enriched.filter(shouldIncludeCatalogListItem) })
+      )
     } catch (error) {
       return c.json(mapCatalogError(error))
     }
@@ -176,7 +228,7 @@ export function registerCatalogRoutes(app: Hono): void {
     if (!parsed.success) return c.json(invalid('Invalid movie ids.'))
     try {
       const facts = await fillCatalogMovieListFacts(serverSettings(), parsed.data.ids)
-      return c.json({ ok: true, facts })
+      return c.json(withPublicMedia({ ok: true, facts }))
     } catch (error) {
       return c.json(mapCatalogError(error))
     }
@@ -188,10 +240,25 @@ export function registerCatalogRoutes(app: Hono): void {
       .safeParse({ query: c.req.query('query') ?? '', page: c.req.query('page') })
     if (!parsed.success) return c.json({ ok: false, error: 'Enter a search query.' })
     try {
-      return c.json({
-        ok: true,
-        ...(await searchTvShows(serverSettings(), parsed.data.query, parsed.data.page ?? 1))
-      })
+      const local = await searchShowsLocal(parsed.data.query)
+      try {
+        const page = await searchTvShows(
+          serverSettings(),
+          parsed.data.query,
+          parsed.data.page ?? 1
+        )
+        return c.json(
+          withPublicMedia({
+            ok: true,
+            ...page,
+            results: mergeById(local, page.results)
+          })
+        )
+      } catch {
+        const extra = await searchShowsFromTorrentClaw(parsed.data.query).catch(() => [])
+        const results = mergeById(local, extra)
+        return c.json(withPublicMedia({ ok: true, results, page: 1, totalPages: 1, totalResults: results.length }))
+      }
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -201,7 +268,14 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = searchInput.safeParse({ query: c.req.query('query') ?? '' })
     if (!parsed.success) return c.json({ ok: false, error: 'Enter a search query.' })
     try {
-      return c.json({ ok: true, results: await searchTvShowsAll(serverSettings(), parsed.data.query) })
+      const local = await searchShowsLocal(parsed.data.query)
+      let remote: Awaited<ReturnType<typeof searchTvShowsAll>> = []
+      try {
+        remote = await searchTvShowsAll(serverSettings(), parsed.data.query)
+      } catch {
+        remote = await searchShowsFromTorrentClaw(parsed.data.query).catch(() => [])
+      }
+      return c.json(withPublicMedia({ ok: true, results: mergeById(local, remote) }))
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -217,7 +291,7 @@ export function registerCatalogRoutes(app: Hono): void {
       const page = await getTrendingTvPage(serverSettings(), parsed.data.page ?? 1, {
         forceRefresh: parsed.data.forceRefresh === '1' || parsed.data.forceRefresh === 'true'
       })
-      return c.json({ ok: true, ...page })
+      return c.json(withPublicMedia({ ok: true, ...page }))
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -227,7 +301,9 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = idInput.safeParse({ id: c.req.param('id') })
     if (!parsed.success) return c.json({ ok: false, error: 'Invalid show id.' })
     try {
-      return c.json({ ok: true, show: await getTvShowDetails(serverSettings(), parsed.data.id) })
+      return c.json(
+        withPublicMedia({ ok: true, show: await getTvShowDetails(serverSettings(), parsed.data.id) })
+      )
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -240,10 +316,12 @@ export function registerCatalogRoutes(app: Hono): void {
     })
     if (!parsed.success) return c.json({ ok: false, error: 'Invalid season.' })
     try {
-      return c.json({
-        ok: true,
-        season: await getTvSeason(serverSettings(), parsed.data.showId, parsed.data.seasonNumber)
-      })
+      return c.json(
+        withPublicMedia({
+          ok: true,
+          season: await getTvSeason(serverSettings(), parsed.data.showId, parsed.data.seasonNumber)
+        })
+      )
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -251,7 +329,7 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/tv/genre-rails', async (c) => {
     try {
-      return c.json({ ok: true, rails: await getTvGenreRails(serverSettings()) })
+      return c.json(withPublicMedia({ ok: true, rails: await getTvGenreRails(serverSettings()) }))
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -267,7 +345,7 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/tv/on-the-air', async (c) => {
     try {
-      return c.json({ ok: true, results: await getOnTheAirShows(serverSettings()) })
+      return c.json(withPublicMedia({ ok: true, results: await getOnTheAirShows(serverSettings()) }))
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -285,7 +363,7 @@ export function registerCatalogRoutes(app: Hono): void {
         parsed.data.genreId,
         parsed.data.page ?? 1
       )
-      return c.json({ ok: true, ...page })
+      return c.json(withPublicMedia({ ok: true, ...page }))
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -295,10 +373,12 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = idsInput.safeParse({ ids: c.req.query('ids') ?? '' })
     if (!parsed.success) return c.json({ ok: false, error: 'Invalid show ids.' })
     try {
-      return c.json({
-        ok: true,
-        facts: await fillTvShowListFacts(serverSettings(), parsed.data.ids)
-      })
+      return c.json(
+        withPublicMedia({
+          ok: true,
+          facts: await fillTvShowListFacts(serverSettings(), parsed.data.ids)
+        })
+      )
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -306,23 +386,35 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/discover/popular', async (c) => {
     try {
-      return c.json({ ok: true, items: await getPopularMovies() })
+      return c.json(withPublicMedia({ ok: true, items: await getPopularMovies() }))
     } catch (error) {
+      const items = rankMovies(getLibrary(), { limit: 50 }).map((item) => ({
+        ...item,
+        rank: null,
+        maxSeeders: null
+      }))
+      if (items.length > 0) return c.json(withPublicMedia({ ok: true, items }))
       return c.json({ ok: false, error: discoverError(error) })
     }
   })
 
   app.get('/v1/discover/popular-shows', async (c) => {
     try {
-      return c.json({ ok: true, items: await getPopularShows() })
+      return c.json(withPublicMedia({ ok: true, items: await getPopularShows() }))
     } catch (error) {
+      const items = rankShows(getLibrary(), { limit: 50 }).map((item) => ({
+        ...item,
+        rank: null,
+        maxSeeders: null
+      }))
+      if (items.length > 0) return c.json(withPublicMedia({ ok: true, items }))
       return c.json({ ok: false, error: discoverError(error) })
     }
   })
 
   app.get('/v1/discover/upcoming', async (c) => {
     try {
-      return c.json({ ok: true, items: await getUpcomingMovies() })
+      return c.json(withPublicMedia({ ok: true, items: await getUpcomingMovies() }))
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }
@@ -332,7 +424,7 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = streamingInput.safeParse({ service: c.req.query('service') })
     if (!parsed.success) return c.json({ ok: false, error: 'Unknown streaming service.' })
     try {
-      return c.json({ ok: true, items: await getStreamingTop(parsed.data.service) })
+      return c.json(withPublicMedia({ ok: true, items: await getStreamingTop(parsed.data.service) }))
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }
@@ -342,7 +434,9 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = streamingInput.safeParse({ service: c.req.query('service') })
     if (!parsed.success) return c.json({ ok: false, error: 'Unknown streaming service.' })
     try {
-      return c.json({ ok: true, items: await getStreamingTopShows(parsed.data.service) })
+      return c.json(
+        withPublicMedia({ ok: true, items: await getStreamingTopShows(parsed.data.service) })
+      )
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }
@@ -350,7 +444,7 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/discover/collections', async (c) => {
     try {
-      return c.json({ ok: true, collections: await getCollections() })
+      return c.json(withPublicMedia({ ok: true, collections: await getCollections() }))
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }
@@ -360,7 +454,7 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = idInput.safeParse({ id: c.req.param('id') })
     if (!parsed.success) return c.json({ ok: false, error: 'Invalid collection id.' })
     try {
-      return c.json({ ok: true, ...(await getCollection(parsed.data.id)) })
+      return c.json(withPublicMedia({ ok: true, ...(await getCollection(parsed.data.id)) }))
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }
@@ -368,9 +462,9 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/discover/autocomplete', async (c) => {
     const parsed = autocompleteInput.safeParse({ q: c.req.query('q') ?? '' })
-    if (!parsed.success) return c.json({ ok: true, suggestions: [] })
+    if (!parsed.success) return c.json(withPublicMedia({ ok: true, suggestions: [] }))
     try {
-      return c.json({ ok: true, suggestions: await autocomplete(parsed.data.q) })
+      return c.json(withPublicMedia({ ok: true, suggestions: await autocomplete(parsed.data.q) }))
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }

@@ -1,4 +1,6 @@
+import type { CatalogMovieDetails, CatalogTrailer } from '@shared/catalog'
 import type { LibraryDb } from './db'
+import { enqueueMediaFromUrls, stillUrlsForMovie } from './media-assets'
 import { linkTorrentsForImdb } from './torrents'
 
 export type LibraryCastMember = {
@@ -27,6 +29,12 @@ export type LibraryMovieWrite = {
   popularity?: number | null
   genres: LibraryGenre[]
   cast: LibraryCastMember[]
+  tagline?: string
+  trailers?: CatalogTrailer[]
+  originCountry?: string[]
+  titleOriginal?: string | null
+  backdropUrls?: string[]
+  omdb?: CatalogMovieDetails['omdb']
 }
 
 /** One row from a TMDB list endpoint (discover, now playing, find, search). */
@@ -36,11 +44,14 @@ export type LibraryMovieListRow = {
   releaseDate: string | null
   overview: string
   posterUrl: string | null
+  backdropUrl?: string | null
   voteAverage: number | null
   voteCount: number | null
   popularity: number | null
   genreIds: number[]
   imdbId?: string | null
+  originCountry?: string[]
+  titleOriginal?: string | null
 }
 
 function releaseYear(releaseDate: string | null): number | null {
@@ -74,8 +85,9 @@ export function upsertMovie(db: LibraryDb, movie: LibraryMovieWrite): void {
     db.prepare(
       `INSERT INTO movies (
          tmdb_id, title, year, release_date, imdb_id, overview, poster_url, backdrop_url,
-         runtime, rating, vote_count, tmdb_popularity, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         runtime, rating, vote_count, tmdb_popularity, updated_at, details_at, tagline,
+         trailers_json, origin_country_json, title_original, omdb_json
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(tmdb_id) DO UPDATE SET
          title = excluded.title,
          year = excluded.year,
@@ -88,7 +100,13 @@ export function upsertMovie(db: LibraryDb, movie: LibraryMovieWrite): void {
          rating = excluded.rating,
          vote_count = COALESCE(excluded.vote_count, movies.vote_count),
          tmdb_popularity = COALESCE(excluded.tmdb_popularity, movies.tmdb_popularity),
-         updated_at = excluded.updated_at`
+         updated_at = excluded.updated_at,
+         details_at = excluded.details_at,
+         tagline = COALESCE(excluded.tagline, movies.tagline),
+         trailers_json = COALESCE(excluded.trailers_json, movies.trailers_json),
+         origin_country_json = COALESCE(excluded.origin_country_json, movies.origin_country_json),
+         title_original = COALESCE(excluded.title_original, movies.title_original),
+         omdb_json = COALESCE(excluded.omdb_json, movies.omdb_json)`
     ).run(
       movie.tmdbId,
       movie.title,
@@ -102,7 +120,15 @@ export function upsertMovie(db: LibraryDb, movie: LibraryMovieWrite): void {
       movie.rating,
       movie.voteCount ?? null,
       movie.popularity ?? null,
-      Date.now()
+      Date.now(),
+      Date.now(),
+      movie.tagline ?? '',
+      movie.trailers && movie.trailers.length > 0 ? JSON.stringify(movie.trailers) : null,
+      movie.originCountry && movie.originCountry.length > 0
+        ? JSON.stringify(movie.originCountry)
+        : null,
+      movie.titleOriginal ?? null,
+      movie.omdb ? JSON.stringify(movie.omdb) : null
     )
 
     db.prepare('DELETE FROM movie_cast WHERE movie_id = ?').run(movie.tmdbId)
@@ -136,6 +162,13 @@ export function upsertMovie(db: LibraryDb, movie: LibraryMovieWrite): void {
     })
 
     if (imdbId) linkTorrentsForImdb(db, imdbId, movie.tmdbId)
+    enqueueMediaFromUrls(db, {
+      tmdbId: movie.tmdbId,
+      posterUrl: movie.posterUrl,
+      backdropUrl: movie.backdropUrl,
+      stillUrls: movie.backdropUrls,
+      profileUrls: cast.map((person) => person.profileUrl).filter((url): url is string => !!url)
+    })
   })
   run()
 }
@@ -162,9 +195,10 @@ export function upsertMovieListRows(
 ): void {
   const upsert = db.prepare(
     `INSERT INTO movies (
-       tmdb_id, title, year, release_date, imdb_id, overview, poster_url,
-       rating, vote_count, tmdb_popularity, list_seen_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       tmdb_id, title, year, release_date, imdb_id, overview, poster_url, backdrop_url,
+       rating, vote_count, tmdb_popularity, list_seen_at, updated_at,
+       origin_country_json, title_original
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(tmdb_id) DO UPDATE SET
        title = excluded.title,
        year = COALESCE(excluded.year, movies.year),
@@ -172,10 +206,13 @@ export function upsertMovieListRows(
        imdb_id = COALESCE(movies.imdb_id, excluded.imdb_id),
        overview = CASE WHEN movies.overview = '' THEN excluded.overview ELSE movies.overview END,
        poster_url = COALESCE(movies.poster_url, excluded.poster_url),
+       backdrop_url = COALESCE(movies.backdrop_url, excluded.backdrop_url),
        rating = COALESCE(excluded.rating, movies.rating),
        vote_count = COALESCE(excluded.vote_count, movies.vote_count),
        tmdb_popularity = COALESCE(excluded.tmdb_popularity, movies.tmdb_popularity),
-       list_seen_at = excluded.list_seen_at`
+       list_seen_at = excluded.list_seen_at,
+       origin_country_json = COALESCE(movies.origin_country_json, excluded.origin_country_json),
+       title_original = COALESCE(movies.title_original, excluded.title_original)`
   )
   const linkGenre = db.prepare(
     `INSERT OR IGNORE INTO movie_genres (movie_id, genre_id)
@@ -192,14 +229,24 @@ export function upsertMovieListRows(
         imdbId,
         row.overview,
         row.posterUrl,
+        row.backdropUrl ?? null,
         row.voteAverage,
         row.voteCount,
         row.popularity,
         seenAt,
-        seenAt
+        seenAt,
+        row.originCountry && row.originCountry.length > 0
+          ? JSON.stringify(row.originCountry)
+          : null,
+        row.titleOriginal ?? null
       )
       for (const genreId of new Set(row.genreIds)) linkGenre.run(row.tmdbId, genreId)
       if (imdbId) linkTorrentsForImdb(db, imdbId, row.tmdbId)
+      enqueueMediaFromUrls(db, {
+        tmdbId: row.tmdbId,
+        posterUrl: row.posterUrl,
+        backdropUrl: row.backdropUrl
+      })
     }
   })
   run()
@@ -312,4 +359,112 @@ export function saveMovieListCore(
     }
   })
   run()
+}
+
+type StoredMovieRow = {
+  tmdb_id: number
+  title: string
+  overview: string
+  tagline: string | null
+  runtime: number | null
+  release_date: string | null
+  rating: number | null
+  poster_url: string | null
+  backdrop_url: string | null
+  imdb_id: string | null
+  trailers_json: string | null
+  omdb_json: string | null
+  details_at: number | null
+}
+
+function parseJsonArray<T>(raw: string | null, guard: (value: unknown) => value is T): T[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? parsed.filter(guard) : []
+  } catch {
+    return []
+  }
+}
+
+function isTrailer(value: unknown): value is CatalogTrailer {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as CatalogTrailer).name === 'string' &&
+    typeof (value as CatalogTrailer).youtubeKey === 'string'
+  )
+}
+
+export type StoredMovieDetails = {
+  details: CatalogMovieDetails
+  detailsAt: number | null
+}
+
+export function readStoredMovieDetails(db: LibraryDb, tmdbId: number): StoredMovieDetails | null {
+  const row = db
+    .prepare(
+      `SELECT tmdb_id, title, overview, tagline, runtime, release_date, rating,
+              poster_url, backdrop_url, imdb_id, trailers_json, omdb_json, details_at
+       FROM movies WHERE tmdb_id = ?`
+    )
+    .get(tmdbId) as StoredMovieRow | undefined
+  if (!row) return null
+  const genres = genresByMovieId(db, [tmdbId]).get(tmdbId) ?? []
+  const castRows = db
+    .prepare(
+      `SELECT p.name, mc.character, p.profile_url
+       FROM movie_cast mc
+       JOIN people p ON p.tmdb_id = mc.person_id
+       WHERE mc.movie_id = ?
+       ORDER BY mc.billing_order`
+    )
+    .all(tmdbId) as { name: string; character: string | null; profile_url: string | null }[]
+  const stills = stillUrlsForMovie(db, tmdbId)
+  const backdropUrls =
+    stills.length > 0 ? stills : row.backdrop_url ? [row.backdrop_url] : []
+  let omdb: CatalogMovieDetails['omdb'] = null
+  if (row.omdb_json) {
+    try {
+      omdb = JSON.parse(row.omdb_json) as CatalogMovieDetails['omdb']
+    } catch {
+      omdb = null
+    }
+  }
+  return {
+    detailsAt: row.details_at,
+    details: {
+      id: row.tmdb_id,
+      title: row.title,
+      tagline: row.tagline ?? '',
+      overview: row.overview,
+      runtime: row.runtime,
+      releaseDate: row.release_date,
+      voteAverage: row.rating,
+      posterUrl: row.poster_url,
+      backdropUrl: row.backdrop_url,
+      backdropUrls,
+      genres,
+      cast: castRows.map((person) => ({
+        name: person.name,
+        character: person.character ?? '',
+        profileUrl: person.profile_url
+      })),
+      trailers: parseJsonArray(row.trailers_json, isTrailer),
+      imdbId: row.imdb_id,
+      omdb
+    }
+  }
+}
+
+export function moviesNeedingDetails(db: LibraryDb, limit: number, staleBefore: number): number[] {
+  const rows = db
+    .prepare(
+      `SELECT tmdb_id FROM movies
+       WHERE details_at IS NULL OR details_at < ?
+       ORDER BY CASE WHEN list_seen_at IS NULL THEN 1 ELSE 0 END, list_seen_at DESC, tmdb_id DESC
+       LIMIT ?`
+    )
+    .all(staleBefore, limit) as { tmdb_id: number }[]
+  return rows.map((row) => row.tmdb_id)
 }

@@ -45,6 +45,17 @@ describe('torrentClawRow', () => {
     expect(withReleaseInfo(row).release).toMatchObject({ season: 1, seasonPack: true })
   })
 
+  it('drops rows marked as a threat', () => {
+    const t = tcTorrentSchema.parse({
+      infoHash: 'b'.repeat(40),
+      rawTitle: 'Inception 2010 spam',
+      seeders: 5,
+      leechers: 0,
+      threatLevel: 'malicious'
+    })
+    expect(torrentClawRow(t, result)).toBeNull()
+  })
+
   it('drops rows without a magnet or info hash (anonymous responses)', () => {
     const t = tcTorrentSchema.parse({ rawTitle: 'Inception 2010 1080p', seeders: 5, leechers: 0 })
     expect(torrentClawRow(t, result)).toBeNull()

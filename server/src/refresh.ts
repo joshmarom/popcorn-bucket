@@ -3,15 +3,19 @@ import { getLibrary } from '../../src/main/library/db'
 import { getTrendingPage } from '../../src/main/torrent/trending-watchable'
 import { getTrendingTvPage } from '../../src/main/torrent/trending-tv'
 import { configureTorrentClaw } from '../../src/main/torrentclaw/client'
+import { runHarvestJobs } from './harvest'
+import { migrate } from './migrate'
 import { serverSettings } from './secrets'
 
 configureTorrentClaw({ getApiKey: () => serverSettings().torrentClawApiKey })
 
 const started = new Date()
 try {
+  await migrate()
   const settings = serverSettings()
   await getTrendingPage(settings, 1, { forceRefresh: true })
   await getTrendingTvPage(settings, 1, { forceRefresh: true })
+  await runHarvestJobs()
   recordJob(true, null)
   console.log('refresh ok')
 } catch (error) {

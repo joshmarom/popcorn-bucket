@@ -1,6 +1,7 @@
 import { movieScore } from '@shared/movie-score'
-import type { TvShowListItem } from '@shared/tv'
+import type { TvShowDetails, TvShowListItem } from '@shared/tv'
 import type { LibraryDb } from './db'
+import { enqueueMediaFromUrls } from './media-assets'
 import { RANK_POOL_WINDOW_MS, pickSwarmEvidence, type TrendingSwarmRow } from './ranked-lists'
 
 /** One row from a TMDB TV list endpoint (popular, search, find). */
@@ -10,12 +11,15 @@ export type LibraryShowListRow = {
   firstAirDate: string | null
   overview: string
   posterUrl: string | null
+  backdropUrl?: string | null
   voteAverage: number | null
   voteCount: number | null
   popularity: number | null
   imdbId?: string | null
   /** Genre names; empty keeps what the library already has. */
   genres?: string[]
+  originCountry?: string[]
+  titleOriginal?: string | null
 }
 
 export type LibraryShowDetails = {
@@ -24,10 +28,14 @@ export type LibraryShowDetails = {
   firstAirDate: string | null
   overview: string
   posterUrl: string | null
+  backdropUrl?: string | null
   imdbId: string | null
   voteAverage: number | null
   voteCount: number | null
   popularity: number | null
+  titleOriginal?: string | null
+  originCountry?: string[]
+  seasons?: TvShowDetails['seasons']
   /** Card facts from the full TMDB record; written together with `facts_at`. */
   facts?: {
     genres: string[]
@@ -104,9 +112,10 @@ export function upsertShowListRows(
 ): void {
   const upsert = db.prepare(
     `INSERT INTO shows (
-       tmdb_id, name, first_air_date, year, imdb_id, overview, poster_url,
-       rating, vote_count, tmdb_popularity, list_seen_at, updated_at, genres_json
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       tmdb_id, name, first_air_date, year, imdb_id, overview, poster_url, backdrop_url,
+       rating, vote_count, tmdb_popularity, list_seen_at, updated_at, genres_json,
+       origin_country_json, title_original
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(tmdb_id) DO UPDATE SET
        name = excluded.name,
        first_air_date = COALESCE(excluded.first_air_date, shows.first_air_date),
@@ -114,11 +123,14 @@ export function upsertShowListRows(
        imdb_id = COALESCE(shows.imdb_id, excluded.imdb_id),
        overview = CASE WHEN shows.overview = '' THEN excluded.overview ELSE shows.overview END,
        poster_url = COALESCE(shows.poster_url, excluded.poster_url),
+       backdrop_url = COALESCE(shows.backdrop_url, excluded.backdrop_url),
        rating = COALESCE(excluded.rating, shows.rating),
        vote_count = COALESCE(excluded.vote_count, shows.vote_count),
        tmdb_popularity = COALESCE(excluded.tmdb_popularity, shows.tmdb_popularity),
        list_seen_at = excluded.list_seen_at,
-       genres_json = COALESCE(shows.genres_json, excluded.genres_json)`
+       genres_json = COALESCE(shows.genres_json, excluded.genres_json),
+       origin_country_json = COALESCE(shows.origin_country_json, excluded.origin_country_json),
+       title_original = COALESCE(shows.title_original, excluded.title_original)`
   )
   const run = db.transaction(() => {
     for (const row of rows) {
@@ -130,13 +142,23 @@ export function upsertShowListRows(
         storedImdbId(row.imdbId),
         row.overview,
         row.posterUrl,
+        row.backdropUrl ?? null,
         row.voteAverage,
         row.voteCount,
         row.popularity,
         seenAt,
         seenAt,
-        genresJson(row.genres)
+        genresJson(row.genres),
+        row.originCountry && row.originCountry.length > 0
+          ? JSON.stringify(row.originCountry)
+          : null,
+        row.titleOriginal ?? null
       )
+      enqueueMediaFromUrls(db, {
+        tmdbId: row.tmdbId,
+        posterUrl: row.posterUrl,
+        backdropUrl: row.backdropUrl
+      })
     }
   })
   run()
@@ -145,9 +167,10 @@ export function upsertShowListRows(
 export function upsertShowDetails(db: LibraryDb, show: LibraryShowDetails): void {
   db.prepare(
     `INSERT INTO shows (
-       tmdb_id, name, first_air_date, year, imdb_id, overview, poster_url,
-       rating, vote_count, tmdb_popularity, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       tmdb_id, name, first_air_date, year, imdb_id, overview, poster_url, backdrop_url,
+       rating, vote_count, tmdb_popularity, updated_at, details_at, title_original,
+       origin_country_json
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(tmdb_id) DO UPDATE SET
        name = excluded.name,
        first_air_date = COALESCE(excluded.first_air_date, shows.first_air_date),
@@ -155,10 +178,14 @@ export function upsertShowDetails(db: LibraryDb, show: LibraryShowDetails): void
        imdb_id = COALESCE(excluded.imdb_id, shows.imdb_id),
        overview = excluded.overview,
        poster_url = COALESCE(excluded.poster_url, shows.poster_url),
+       backdrop_url = COALESCE(excluded.backdrop_url, shows.backdrop_url),
        rating = COALESCE(excluded.rating, shows.rating),
        vote_count = COALESCE(excluded.vote_count, shows.vote_count),
        tmdb_popularity = COALESCE(excluded.tmdb_popularity, shows.tmdb_popularity),
-       updated_at = excluded.updated_at`
+       updated_at = excluded.updated_at,
+       details_at = excluded.details_at,
+       title_original = COALESCE(excluded.title_original, shows.title_original),
+       origin_country_json = COALESCE(excluded.origin_country_json, shows.origin_country_json)`
   ).run(
     show.tmdbId,
     show.name,
@@ -167,10 +194,16 @@ export function upsertShowDetails(db: LibraryDb, show: LibraryShowDetails): void
     storedImdbId(show.imdbId),
     show.overview,
     show.posterUrl,
+    show.backdropUrl ?? null,
     show.voteAverage,
     show.voteCount,
     show.popularity,
-    Date.now()
+    Date.now(),
+    Date.now(),
+    show.titleOriginal ?? null,
+    show.originCountry && show.originCountry.length > 0
+      ? JSON.stringify(show.originCountry)
+      : null
   )
   const f = show.facts
   if (f) {
@@ -191,6 +224,38 @@ export function upsertShowDetails(db: LibraryDb, show: LibraryShowDetails): void
       f.lastEpisodeAirDate,
       Date.now(),
       show.tmdbId
+    )
+  }
+  enqueueMediaFromUrls(db, {
+    tmdbId: show.tmdbId,
+    posterUrl: show.posterUrl,
+    backdropUrl: show.backdropUrl
+  })
+  if (show.seasons && show.seasons.length > 0) {
+    saveShowSeasonSummaries(db, show.tmdbId, show.seasons)
+  }
+}
+
+export function saveShowSeasonSummaries(
+  db: LibraryDb,
+  showId: number,
+  seasons: NonNullable<LibraryShowDetails['seasons']>
+): void {
+  const upsert = db.prepare(
+    `INSERT INTO seasons (show_id, season_number, name, episode_count, air_date)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (show_id, season_number) DO UPDATE SET
+       name = excluded.name,
+       episode_count = excluded.episode_count,
+       air_date = COALESCE(excluded.air_date, seasons.air_date)`
+  )
+  for (const season of seasons) {
+    upsert.run(
+      showId,
+      season.seasonNumber,
+      season.name,
+      season.episodeCount,
+      season.airYear ? `${season.airYear}-01-01` : null
     )
   }
 }
@@ -350,4 +415,74 @@ export function rankShows(db: LibraryDb, opts: { limit: number; now?: number }):
     voteAverage: row.rating,
     genres: parseGenres(row.genres_json)
   }))
+}
+
+export type StoredShowDetails = {
+  details: TvShowDetails
+  detailsAt: number | null
+}
+
+export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShowDetails | null {
+  const row = db
+    .prepare(
+      `SELECT tmdb_id, name, overview, first_air_date, year, poster_url, backdrop_url,
+              imdb_id, details_at
+       FROM shows WHERE tmdb_id = ?`
+    )
+    .get(tmdbId) as
+    | {
+        tmdb_id: number
+        name: string
+        overview: string
+        first_air_date: string | null
+        year: number | null
+        poster_url: string | null
+        backdrop_url: string | null
+        imdb_id: string | null
+        details_at: number | null
+      }
+    | undefined
+  if (!row) return null
+  const seasons = db
+    .prepare(
+      `SELECT season_number, name, episode_count, air_date
+       FROM seasons WHERE show_id = ? AND season_number > 0
+       ORDER BY season_number`
+    )
+    .all(tmdbId) as {
+    season_number: number
+    name: string | null
+    episode_count: number | null
+    air_date: string | null
+  }[]
+  return {
+    detailsAt: row.details_at,
+    details: {
+      id: row.tmdb_id,
+      name: row.name,
+      overview: row.overview,
+      firstAirYear: row.year ?? airYear(row.first_air_date),
+      posterUrl: row.poster_url,
+      backdropUrl: row.backdrop_url,
+      imdbId: row.imdb_id,
+      seasons: seasons.map((season) => ({
+        seasonNumber: season.season_number,
+        name: season.name || `Season ${season.season_number}`,
+        episodeCount: season.episode_count ?? 0,
+        airYear: airYear(season.air_date)
+      }))
+    }
+  }
+}
+
+export function showsNeedingDetails(db: LibraryDb, limit: number, staleBefore: number): number[] {
+  const rows = db
+    .prepare(
+      `SELECT tmdb_id FROM shows
+       WHERE details_at IS NULL OR details_at < ?
+       ORDER BY CASE WHEN list_seen_at IS NULL THEN 1 ELSE 0 END, list_seen_at DESC, tmdb_id DESC
+       LIMIT ?`
+    )
+    .all(staleBefore, limit) as { tmdb_id: number }[]
+  return rows.map((row) => row.tmdb_id)
 }

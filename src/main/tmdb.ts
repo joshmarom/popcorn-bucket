@@ -11,14 +11,17 @@ import type {
   CatalogTrailer
 } from '@shared/catalog'
 import { pickBackdropPaths, type BackdropCandidate } from '@shared/movie-backdrops'
+import { isDetailsFresh } from './catalog-fresh'
 import { getLibrary } from './library/db'
 import {
   genreNameById,
+  readStoredMovieDetails,
   runtimesByMovieId,
   upsertGenres,
   upsertMovie,
   upsertMovieListRows
 } from './library/movies'
+import { hydrateFromTorrentClaw } from './torrentclaw/discovery'
 
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const IMAGE_BASE = 'https://image.tmdb.org/t/p'
@@ -657,6 +660,32 @@ export async function getPopularMoviesPage(
 
 export async function getMovieDetails(
   settings: AppSettings,
+  id: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<CatalogMovieDetails> {
+  const db = getLibrary()
+  if (!opts?.forceRefresh) {
+    const stored = readStoredMovieDetails(db, id)
+    if (stored && isDetailsFresh(stored.detailsAt)) return stored.details
+  }
+
+  try {
+    return await fetchMovieDetailsFromTmdb(settings, id)
+  } catch (error) {
+    const stored = readStoredMovieDetails(db, id)
+    if (stored && isDetailsFresh(stored.detailsAt)) return stored.details
+    const hydrated = await hydrateFromTorrentClaw(db, id, 'movie').catch(() => false)
+    if (hydrated) {
+      const again = readStoredMovieDetails(db, id)
+      if (again) return again.details
+    }
+    if (stored) return stored.details
+    throw error
+  }
+}
+
+async function fetchMovieDetailsFromTmdb(
+  settings: AppSettings,
   id: number
 ): Promise<CatalogMovieDetails> {
   const json = await tmdbFetchJson(
@@ -708,6 +737,9 @@ export async function getMovieDetails(
     rating: m.vote_average ?? null,
     voteCount: m.vote_count ?? null,
     popularity: m.popularity ?? null,
+    tagline: details.tagline,
+    trailers: details.trailers,
+    backdropUrls: details.backdropUrls,
     genres: (m.genres ?? []).map((genre) => ({ id: genre.id, name: genre.name })),
     cast: (m.credits?.cast ?? []).slice(0, 12).map((person) => ({
       id: person.id,

@@ -7,10 +7,13 @@ import type {
   DiscoverShowItem,
   StreamingService
 } from '@shared/discovery'
-import type { LibraryDb } from '../library/db'
+import type { TvSeasonDetails } from '@shared/tv'
+import { getLibrary, type LibraryDb } from '../library/db'
+import { enqueueMediaFromUrls } from '../library/media-assets'
 import { upsertMovieListRows } from '../library/movies'
+import { saveTvSeason, readStoredTvSeason } from '../library/tv-episodes'
 import type { TrendingSwarmRow } from '../library/ranked-lists'
-import { upsertShowListRows } from '../library/shows'
+import { saveShowSeasonSummaries, upsertShowListRows } from '../library/shows'
 import { tcFetchJson } from './client'
 import {
   tcAutocompleteSchema,
@@ -19,7 +22,8 @@ import {
   tcListResponseSchema,
   tcSearchResponseSchema,
   tcStreamingTopSchema,
-  type TcListItem
+  type TcListItem,
+  type TcSearchResult
 } from './schemas'
 
 const LIST_TTL_MS = 30 * 60 * 1000
@@ -37,6 +41,10 @@ function parseRating(raw: string | number | null | undefined): number | null {
   return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null
 }
 
+function listRating(item: Omit<TcListItem, 'id'> & { ratingTmdb?: string | number | null }): number | null {
+  return parseRating(item.ratingTmdb) ?? parseRating(item.rating)
+}
+
 function toMovieItem(
   item: Omit<TcListItem, 'id'>,
   rank: number | null = null
@@ -49,7 +57,7 @@ function toMovieItem(
     releaseDate: item.releaseDate ?? null,
     releaseYear:
       item.year ?? (item.releaseDate ? Number(item.releaseDate.slice(0, 4)) || null : null),
-    voteAverage: parseRating(item.rating),
+    voteAverage: listRating(item),
     popularity: null,
     posterUrl: item.posterUrl ?? null,
     overview: item.overview ?? '',
@@ -72,7 +80,7 @@ function toShowItem(
     firstAirYear: item.year ?? null,
     posterUrl: item.posterUrl ?? null,
     overview: item.overview ?? '',
-    voteAverage: parseRating(item.rating),
+    voteAverage: listRating(item),
     genres: item.genres ?? [],
     rank,
     maxSeeders: item.maxSeeders ?? null
@@ -260,14 +268,6 @@ export async function resolveSuggestionTmdbId(s: {
   return numericId((exact ?? byTitle)?.tmdbId)
 }
 
-function existingIds(db: LibraryDb, table: 'movies' | 'shows', ids: number[]): Set<number> {
-  if (ids.length === 0) return new Set()
-  const rows = db
-    .prepare(`SELECT tmdb_id FROM ${table} WHERE tmdb_id IN (${ids.map(() => '?').join(',')})`)
-    .all(...ids) as { tmdb_id: number }[]
-  return new Set(rows.map((r) => r.tmdb_id))
-}
-
 /**
  * Swarm rows for the Trending rails, built from TorrentClaw's popular list. Titles the library has
  * not seen are saved first (swarm rows need a movie/show row); the year stands in for a release
@@ -329,12 +329,87 @@ export async function getPopularShowsPage(
 
 function withTmdbIds(
   items: TcListItem[],
-  type: 'movie' | 'show'
+  type: 'movie' | 'show',
+  assumeType = false
 ): { item: TcListItem; tmdbId: number }[] {
   return items.flatMap((item) => {
     const tmdbId = numericId(item.tmdbId)
-    return tmdbId != null && item.contentType === type ? [{ item, tmdbId }] : []
+    if (tmdbId == null) return []
+    if (item.contentType === type || (assumeType && item.contentType == null)) {
+      return [{ item, tmdbId }]
+    }
+    return []
   })
+}
+
+function searchHitsToList(
+  results: TcSearchResult[],
+  type: 'movie' | 'show'
+): { item: TcListItem; tmdbId: number }[] {
+  return withTmdbIds(
+    results.map((hit) => ({
+      id: hit.id,
+      tmdbId: hit.tmdbId,
+      imdbId: hit.imdbId,
+      title: hit.title,
+      contentType: hit.contentType,
+      year: hit.year,
+      posterUrl: hit.posterUrl,
+      backdropUrl: hit.backdropUrl,
+      overview: hit.overview,
+      genres: hit.genres,
+      originCountry: hit.originCountry,
+      titleOriginal: hit.titleOriginal,
+      rating: hit.ratingTmdb ?? hit.rating,
+      maxSeeders: hit.maxSeeders ?? null,
+      releaseDate: null,
+      hasTorrents: hit.hasTorrents
+    })),
+    type
+  )
+}
+
+function torrentClawEpisodeId(showId: number, season: number, episode: number): number {
+  return -(showId * 1_000_000 + season * 1_000 + episode)
+}
+
+function persistTvFromTorrentClaw(db: LibraryDb, tmdbId: number, hit: TcSearchResult): void {
+  const seasons = (hit.seasons ?? []).filter((season) => season.season > 0)
+  if (seasons.length === 0) return
+  saveShowSeasonSummaries(
+    db,
+    tmdbId,
+    seasons.map((season) => ({
+      seasonNumber: season.season,
+      name: `Season ${season.season}`,
+      episodeCount: season.episodeCount ?? season.episodes?.length ?? 0,
+      airYear: null
+    }))
+  )
+  enqueueMediaFromUrls(db, {
+    tmdbId,
+    stillUrls: seasons.flatMap((season) => [
+      ...(season.posterUrl ? [season.posterUrl] : []),
+      ...(season.episodes ?? []).flatMap((episode) => (episode.stillUrl ? [episode.stillUrl] : []))
+    ])
+  })
+  for (const season of seasons) {
+    if (!season.episodes?.length) continue
+    saveTvSeason(db, {
+      showId: tmdbId,
+      seasonNumber: season.season,
+      episodes: season.episodes.map((episode) => ({
+        id: torrentClawEpisodeId(tmdbId, season.season, episode.episode),
+        seasonNumber: season.season,
+        episodeNumber: episode.episode,
+        name: episode.name,
+        overview: episode.overview ?? '',
+        airDate: episode.airDate ?? null,
+        runtime: episode.runtime ?? null,
+        stillUrl: episode.stillUrl ?? null
+      }))
+    })
+  }
 }
 
 /** Titles the library has not seen are saved; the year stands in until TMDB details replace it. */
@@ -344,42 +419,139 @@ function saveNewListRows(
   items: { item: TcListItem; tmdbId: number }[],
   now: number
 ): void {
-  const known = existingIds(
-    db,
-    type === 'movie' ? 'movies' : 'shows',
-    items.map((i) => i.tmdbId)
-  )
-  const fresh = items.filter((i) => !known.has(i.tmdbId))
   if (type === 'movie') {
     upsertMovieListRows(
       db,
-      fresh.map(({ item, tmdbId }) => ({
+      items.map(({ item, tmdbId }) => ({
         tmdbId,
         title: item.title,
-        releaseDate: item.year ? String(item.year) : null,
+        releaseDate: item.year ? String(item.year) : item.releaseDate ?? null,
         overview: item.overview ?? '',
         posterUrl: item.posterUrl ?? null,
-        voteAverage: parseRating(item.rating),
+        backdropUrl: item.backdropUrl ?? null,
+        voteAverage: listRating(item),
         voteCount: null,
         popularity: null,
-        genreIds: []
+        genreIds: [],
+        imdbId: item.imdbId ?? null,
+        originCountry: item.originCountry ?? undefined,
+        titleOriginal: item.titleOriginal ?? null
       })),
       now
     )
   } else {
     upsertShowListRows(
       db,
-      fresh.map(({ item, tmdbId }) => ({
+      items.map(({ item, tmdbId }) => ({
         tmdbId,
         name: item.title,
         firstAirDate: item.year ? String(item.year) : null,
         overview: item.overview ?? '',
         posterUrl: item.posterUrl ?? null,
-        voteAverage: parseRating(item.rating),
+        backdropUrl: item.backdropUrl ?? null,
+        voteAverage: listRating(item),
         voteCount: null,
-        popularity: null
+        popularity: null,
+        imdbId: item.imdbId ?? null,
+        genres: item.genres ?? undefined,
+        originCountry: item.originCountry ?? undefined,
+        titleOriginal: item.titleOriginal ?? null
       })),
       now
     )
   }
+}
+
+export async function fetchContentByTmdbId(
+  tmdbId: number,
+  type: 'movie' | 'show',
+  extra?: { includeSeasons?: boolean }
+): Promise<TcSearchResult | null> {
+  const res = await tcFetchJson(
+    '/search',
+    {
+      tmdbid: tmdbId,
+      type,
+      limit: 1,
+      include: extra?.includeSeasons ? 'seasons,episodes' : undefined
+    },
+    { schema: tcSearchResponseSchema, ttlMs: LIST_TTL_MS }
+  )
+  const hit = res.results.find((r) => numericId(r.tmdbId) === tmdbId) ?? res.results[0]
+  return hit ?? null
+}
+
+/** Persist TorrentClaw metadata for a TMDB id when TMDB itself is down. */
+export async function hydrateFromTorrentClaw(
+  db: LibraryDb,
+  tmdbId: number,
+  type: 'movie' | 'show'
+): Promise<boolean> {
+  const hit = await fetchContentByTmdbId(tmdbId, type, {
+    includeSeasons: type === 'show'
+  }).catch(() => null)
+  if (!hit || numericId(hit.tmdbId) !== tmdbId) return false
+  saveNewListRows(db, type, searchHitsToList([hit], type), Date.now())
+  if (type === 'show') persistTvFromTorrentClaw(db, tmdbId, hit)
+  return true
+}
+
+export async function hydrateSeasonFromTorrentClaw(
+  db: LibraryDb,
+  showId: number,
+  seasonNumber: number
+): Promise<TvSeasonDetails | null> {
+  const hit = await fetchContentByTmdbId(showId, 'show', { includeSeasons: true }).catch(() => null)
+  if (!hit || numericId(hit.tmdbId) !== showId) return null
+  persistTvFromTorrentClaw(db, showId, hit)
+  return readStoredTvSeason(db, showId, seasonNumber)
+}
+
+export async function fetchTrending(
+  type: 'movie' | 'show',
+  period: 'daily' | 'weekly' | 'monthly' = 'daily'
+): Promise<TcListItem[]> {
+  const res = await tcFetchJson(
+    '/trending',
+    { period, type, limit: PAGE_LIMIT, page: 1 },
+    { schema: tcListResponseSchema, ttlMs: LIST_TTL_MS }
+  )
+  return res.items.filter((item) => item.contentType === type || item.contentType == null)
+}
+
+export async function ingestTrendingLists(db: LibraryDb): Promise<void> {
+  for (const type of ['movie', 'show'] as const) {
+    const popular = withTmdbIds(await fetchPopular(type, 2).catch(() => []), type)
+    saveNewListRows(db, type, popular, Date.now())
+    for (const period of ['daily', 'weekly', 'monthly'] as const) {
+      const trending = withTmdbIds(await fetchTrending(type, period).catch(() => []), type, true)
+      saveNewListRows(db, type, trending, Date.now())
+    }
+    const recent = withTmdbIds(
+      await fetchListPages('/recent', { type }, 1).catch(() => []),
+      type,
+      true
+    )
+    saveNewListRows(db, type, recent, Date.now())
+  }
+}
+
+export async function searchMoviesFromTorrentClaw(query: string): Promise<DiscoverMovieItem[]> {
+  const res = await tcFetchJson(
+    '/search',
+    { q: query, type: 'movie', limit: 20 },
+    { schema: tcSearchResponseSchema, ttlMs: AUTOCOMPLETE_TTL_MS }
+  )
+  saveNewListRows(getLibrary(), 'movie', searchHitsToList(res.results, 'movie'), Date.now())
+  return uniqueMovies(res.results.map((item) => toMovieItem(item)))
+}
+
+export async function searchShowsFromTorrentClaw(query: string): Promise<DiscoverShowItem[]> {
+  const res = await tcFetchJson(
+    '/search',
+    { q: query, type: 'show', limit: 20 },
+    { schema: tcSearchResponseSchema, ttlMs: AUTOCOMPLETE_TTL_MS }
+  )
+  saveNewListRows(getLibrary(), 'show', searchHitsToList(res.results, 'show'), Date.now())
+  return uniqueById(res.results.map((item) => toShowItem(item)))
 }

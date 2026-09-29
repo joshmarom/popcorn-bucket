@@ -31,6 +31,8 @@ export const tcTorrentSchema = z.object({
   season: nullableNumber,
   episode: nullableNumber,
   scanStatus: nullableString,
+  verified: z.boolean().optional(),
+  threatLevel: nullableString,
   audioTracks: z.array(tcAudioTrackSchema).nullable().optional(),
   subtitleLanguages: z.array(z.string()).nullable().optional(),
   videoInfo: z
@@ -44,6 +46,25 @@ export const tcTorrentSchema = z.object({
 })
 export type TcTorrent = z.infer<typeof tcTorrentSchema>
 
+export const tcSeasonSummarySchema = z.object({
+  season: z.number(),
+  episodeCount: z.number().optional(),
+  posterUrl: nullableString,
+  episodes: z
+    .array(
+      z.object({
+        episode: z.number(),
+        name: z.string(),
+        overview: nullableString,
+        stillUrl: nullableString,
+        airDate: nullableString,
+        runtime: nullableNumber,
+        voteAverage: z.number().nullable().optional()
+      })
+    )
+    .optional()
+})
+
 export const tcSearchResultSchema = z.object({
   id: z.number(),
   imdbId: nullableString,
@@ -55,8 +76,15 @@ export const tcSearchResultSchema = z.object({
   posterUrl: nullableString,
   backdropUrl: nullableString,
   genres: z.array(z.string()).nullable().optional(),
+  originCountry: z.array(z.string()).nullable().optional(),
+  titleOriginal: nullableString,
   rating: ratingString,
+  ratingImdb: ratingString,
+  ratingTmdb: ratingString,
   contentUrl: nullableString,
+  hasTorrents: z.boolean().optional(),
+  maxSeeders: nullableNumber,
+  seasons: z.array(tcSeasonSummarySchema).optional(),
   torrents: z.array(tcTorrentSchema).nullable().optional()
 })
 export type TcSearchResult = z.infer<typeof tcSearchResultSchema>
@@ -69,6 +97,7 @@ export const tcSearchResponseSchema = z.object({
 export const tcListItemSchema = z.object({
   id: z.number(),
   tmdbId: z.union([z.number(), z.string()]).nullable().optional(),
+  imdbId: nullableString,
   title: z.string(),
   contentType: z.enum(['movie', 'show']).nullable().optional(),
   year: nullableNumber,
@@ -76,6 +105,8 @@ export const tcListItemSchema = z.object({
   backdropUrl: nullableString,
   overview: nullableString,
   genres: z.array(z.string()).nullable().optional(),
+  originCountry: z.array(z.string()).nullable().optional(),
+  titleOriginal: nullableString,
   rating: ratingString,
   maxSeeders: nullableNumber,
   releaseDate: nullableString,

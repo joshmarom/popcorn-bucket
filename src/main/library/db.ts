@@ -180,7 +180,59 @@ CREATE TABLE show_watchlist (
 );
 `
 
-const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5]
+/** Local-first catalog: detail timestamps, extra copy, and on-disk media bookkeeping. */
+const SCHEMA_V6 = `
+ALTER TABLE movies ADD COLUMN details_at INTEGER;
+ALTER TABLE movies ADD COLUMN tagline TEXT;
+ALTER TABLE movies ADD COLUMN trailers_json TEXT;
+ALTER TABLE movies ADD COLUMN origin_country_json TEXT;
+ALTER TABLE movies ADD COLUMN title_original TEXT;
+ALTER TABLE movies ADD COLUMN omdb_json TEXT;
+
+ALTER TABLE shows ADD COLUMN details_at INTEGER;
+ALTER TABLE shows ADD COLUMN backdrop_url TEXT;
+ALTER TABLE shows ADD COLUMN title_original TEXT;
+ALTER TABLE shows ADD COLUMN origin_country_json TEXT;
+
+CREATE TABLE IF NOT EXISTS seasons (
+  show_id INTEGER NOT NULL REFERENCES shows(tmdb_id) ON DELETE CASCADE,
+  season_number INTEGER NOT NULL,
+  name TEXT,
+  episode_count INTEGER,
+  air_date TEXT,
+  PRIMARY KEY (show_id, season_number)
+);
+
+CREATE TABLE IF NOT EXISTS episodes (
+  id INTEGER PRIMARY KEY,
+  show_id INTEGER NOT NULL,
+  season_number INTEGER NOT NULL,
+  episode_number INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  overview TEXT NOT NULL,
+  air_date TEXT,
+  runtime INTEGER,
+  still_url TEXT,
+  UNIQUE (show_id, season_number, episode_number)
+);
+
+CREATE TABLE media_assets (
+  id INTEGER PRIMARY KEY,
+  tmdb_id INTEGER,
+  kind TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  size TEXT NOT NULL,
+  sha256 TEXT,
+  local_relpath TEXT,
+  source TEXT,
+  original_url TEXT,
+  fetched_at INTEGER,
+  last_error TEXT,
+  UNIQUE (kind, size, file_path)
+);
+`
+
+const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6]
 
 let singleton: LibraryDb | null = null
 

@@ -27,7 +27,7 @@ function qualityOf(t: TcTorrent): TorrentQualityInfo {
   const hdr = t.videoInfo?.hdr?.trim() || t.hdrType?.trim() || null
   return {
     score: t.qualityScore ?? null,
-    verified: t.scanStatus === 'success',
+    verified: t.verified === true || t.scanStatus === 'success',
     hdr,
     videoCodec: t.videoInfo?.codec?.trim() || t.codec?.trim() || null,
     videoHeight: t.videoInfo?.height ?? null,
@@ -49,6 +49,8 @@ export function torrentClawRow(t: TcTorrent, result: TcSearchResult): RawTorrent
     (t.magnetUrl && isValidMagnetUri(t.magnetUrl) ? t.magnetUrl : null) ??
     (t.infoHash ? magnetFromInfoHash(title, t.infoHash) : null)
   if (!magnetUri) return null
+  const threat = t.threatLevel?.trim().toLowerCase()
+  if (threat && threat !== 'clean' && threat !== 'unknown') return null
 
   const bytes = sizeBytesOf(t)
   const details = result.contentUrl ? `${TORRENTCLAW_ORIGIN}${result.contentUrl}` : null

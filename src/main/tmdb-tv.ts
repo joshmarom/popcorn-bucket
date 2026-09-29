@@ -8,8 +8,11 @@ import type {
   TvShowListItem
 } from '@shared/tv'
 import { getLibrary } from './library/db'
-import { upsertShowDetails, upsertShowListRows } from './library/shows'
+import { upsertShowDetails, upsertShowListRows, readStoredShowDetails } from './library/shows'
+import { readStoredTvSeason, saveTvSeason } from './library/tv-episodes'
+import { isDetailsFresh } from './catalog-fresh'
 import { backdropUrl, posterUrl, tmdbFetchJson } from './tmdb'
+import { hydrateFromTorrentClaw, hydrateSeasonFromTorrentClaw } from './torrentclaw/discovery'
 
 const yearOf = (date: string | null | undefined): number | null => {
   const y = date && /^\d{4}/.test(date) ? Number.parseInt(date.slice(0, 4), 10) : NaN
@@ -270,7 +273,39 @@ const tvDetailsSchema = z.object({
     .optional()
 })
 
-export async function getTvShowDetails(settings: AppSettings, id: number): Promise<TvShowDetails> {
+export async function getTvShowDetails(
+  settings: AppSettings,
+  id: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<TvShowDetails> {
+  const db = getLibrary()
+  if (!opts?.forceRefresh) {
+    const stored = readStoredShowDetails(db, id)
+    if (stored && isDetailsFresh(stored.detailsAt) && stored.details.seasons.length > 0) {
+      return stored.details
+    }
+  }
+  try {
+    return await fetchTvShowDetailsFromTmdb(settings, id)
+  } catch (error) {
+    const stored = readStoredShowDetails(db, id)
+    if (stored && isDetailsFresh(stored.detailsAt) && stored.details.seasons.length > 0) {
+      return stored.details
+    }
+    const hydrated = await hydrateFromTorrentClaw(db, id, 'show').catch(() => false)
+    if (hydrated) {
+      const again = readStoredShowDetails(db, id)
+      if (again) return again.details
+    }
+    if (stored) return stored.details
+    throw error
+  }
+}
+
+async function fetchTvShowDetailsFromTmdb(
+  settings: AppSettings,
+  id: number
+): Promise<TvShowDetails> {
   const json = await tmdbFetchJson(
     settings,
     `/tv/${id}`,
@@ -287,10 +322,19 @@ export async function getTvShowDetails(settings: AppSettings, id: number): Promi
       firstAirDate: d.first_air_date?.trim() || null,
       overview: d.overview ?? '',
       posterUrl: posterUrl(d.poster_path ?? null, 'w342'),
+      backdropUrl: backdropUrl(d.backdrop_path ?? null),
       imdbId: d.external_ids?.imdb_id ?? null,
       voteAverage: d.vote_average ?? null,
       voteCount: d.vote_count ?? null,
       popularity: d.popularity ?? null,
+      seasons: (d.seasons ?? [])
+        .filter((s) => s.season_number > 0)
+        .map((s) => ({
+          seasonNumber: s.season_number,
+          name: s.name,
+          episodeCount: s.episode_count ?? 0,
+          airYear: yearOf(s.air_date)
+        })),
       facts: {
         genres: (d.genres ?? []).map((g) => g.name),
         seasonCount:
@@ -343,26 +387,39 @@ export async function getTvSeason(
   showId: number,
   seasonNumber: number
 ): Promise<TvSeasonDetails> {
-  const json = await tmdbFetchJson(
-    settings,
-    `/tv/${showId}/season/${seasonNumber}`,
-    {},
-    { cacheTtlMs: 1000 * 60 * 60 * 6 }
-  )
-  const parsed = tvSeasonSchema.safeParse(json)
-  if (!parsed.success) throw new Error('BAD_RESPONSE')
-  return {
-    showId,
-    seasonNumber,
-    episodes: parsed.data.episodes.map((e) => ({
-      id: e.id,
-      seasonNumber: e.season_number,
-      episodeNumber: e.episode_number,
-      name: e.name,
-      overview: e.overview ?? '',
-      airDate: e.air_date ?? null,
-      runtime: e.runtime ?? null,
-      stillUrl: e.still_path ? `https://image.tmdb.org/t/p/w300${e.still_path}` : null
-    }))
+  const stored = readStoredTvSeason(getLibrary(), showId, seasonNumber)
+  if (stored && stored.episodes.length > 0) return stored
+  try {
+    const json = await tmdbFetchJson(
+      settings,
+      `/tv/${showId}/season/${seasonNumber}`,
+      {},
+      { cacheTtlMs: 1000 * 60 * 60 * 6 }
+    )
+    const parsed = tvSeasonSchema.safeParse(json)
+    if (!parsed.success) throw new Error('BAD_RESPONSE')
+    const season: TvSeasonDetails = {
+      showId,
+      seasonNumber,
+      episodes: parsed.data.episodes.map((e) => ({
+        id: e.id,
+        seasonNumber: e.season_number,
+        episodeNumber: e.episode_number,
+        name: e.name,
+        overview: e.overview ?? '',
+        airDate: e.air_date ?? null,
+        runtime: e.runtime ?? null,
+        stillUrl: e.still_path ? `https://image.tmdb.org/t/p/w300${e.still_path}` : null
+      }))
+    }
+    saveTvSeason(getLibrary(), season)
+    return season
+  } catch (error) {
+    if (stored) return stored
+    const fromTc = await hydrateSeasonFromTorrentClaw(getLibrary(), showId, seasonNumber).catch(
+      () => null
+    )
+    if (fromTc && fromTc.episodes.length > 0) return fromTc
+    throw error
   }
 }

@@ -1,6 +1,8 @@
 import type { AppSettings } from '@shared/app-settings'
 import { hasListPosterUrl } from '@shared/catalog'
 import type { TvGenreRail, TvShowListItem } from '@shared/tv'
+import { getLibrary } from './library/db'
+import { rankShows } from './library/shows'
 import { discoverTvByGenre, getTvGenres } from './tmdb-tv'
 import { TrendingPager, type TrendingPageResult } from './torrent/trending-pager'
 
@@ -13,7 +15,13 @@ const PAGER_TTL_MS = 60 * 60 * 1000
 
 /** One rail per TMDB TV genre: the most popular shows that have a poster. */
 export async function getTvGenreRails(settings: AppSettings): Promise<TvGenreRail[]> {
-  const genres = await getTvGenres(settings)
+  let genres: { id: number; name: string }[] = []
+  try {
+    genres = await getTvGenres(settings)
+  } catch {
+    const ranked = rankShows(getLibrary(), { limit: 45 }).filter((s) => hasListPosterUrl(s.posterUrl))
+    return ranked.length > 0 ? [{ genre: { id: 0, name: 'Popular' }, shows: ranked.slice(0, RAIL_MAX) }] : []
+  }
   const rails = await Promise.all(
     genres.map(async (genre) => {
       try {
@@ -25,7 +33,10 @@ export async function getTvGenreRails(settings: AppSettings): Promise<TvGenreRai
       }
     })
   )
-  return rails.filter((r): r is TvGenreRail => r != null)
+  const filled = rails.filter((r): r is TvGenreRail => r != null)
+  if (filled.length > 0) return filled
+  const ranked = rankShows(getLibrary(), { limit: 45 }).filter((s) => hasListPosterUrl(s.posterUrl))
+  return ranked.length > 0 ? [{ genre: { id: 0, name: 'Popular' }, shows: ranked.slice(0, RAIL_MAX) }] : []
 }
 
 const pagers = new Map<number, { pager: TrendingPager<TvShowListItem>; createdAt: number }>()

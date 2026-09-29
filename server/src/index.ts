@@ -5,6 +5,7 @@ import { Hono } from 'hono'
 import pg from 'pg'
 import { createAuth, requireSession } from './auth'
 import { registerCatalogRoutes } from './catalog-routes'
+import { registerMediaRoutes } from './media-routes'
 import { registerMeRoutes } from './me-routes'
 import { registerSubtitleRoutes } from './subtitle-routes'
 import { registerTorrentRoutes } from './torrent-routes'
@@ -12,6 +13,7 @@ import { migrate } from './migrate'
 import { pgConfig } from './pg-config'
 
 const app = new Hono()
+registerMediaRoutes(app)
 mountAuth(app)
 registerCatalogRoutes(app)
 registerTorrentRoutes(app)
@@ -31,22 +33,23 @@ app.get('/health', async (c) => {
   }
 })
 
-migrate()
-  .then(() => {
-    console.log('database schema is current')
-  })
-  .catch((error: unknown) => {
-    console.error('database migration failed')
-    console.error(error instanceof Error ? error.message : error)
-  })
-
 const server = createAdaptorServer({ fetch: app.fetch })
 server.on('error', (error) => {
   console.error('listen failed')
   console.error(error instanceof Error ? error.message : error)
   process.exit(1)
 })
-listen(server)
+
+migrate()
+  .then(() => {
+    console.log('database schema is current')
+    listen(server)
+  })
+  .catch((error: unknown) => {
+    console.error('database migration failed')
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
 
 function listen(server: ReturnType<typeof createAdaptorServer>): void {
   const onListening = (): void => {
