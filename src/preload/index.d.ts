@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { AppSettings, TorrentClawKeyStatus } from '@shared/app-settings'
+import type { AuthSignInResult, AuthStatus } from '@shared/auth'
 import type {
   CatalogGenreRailsResponse,
   CatalogMovieListFactsResponse,
@@ -63,13 +63,11 @@ export type PopcornApi = {
       }[]
     >
   }
-  settings: {
-    get(): Promise<AppSettings>
-    /** False when the OS offers no secure storage and keys are saved as plain text. */
-    isEncrypted(): Promise<boolean>
-    /** Whether TorrentClaw accepted the saved key on the last request. */
-    torrentClawKeyStatus(): Promise<TorrentClawKeyStatus>
-    set(partial: Partial<AppSettings>): Promise<void>
+  auth: {
+    status(): Promise<AuthStatus>
+    signIn(email: string, password: string): Promise<AuthSignInResult>
+    signOut(): Promise<AuthStatus>
+    onChange(cb: (status: AuthStatus) => void): () => void
   }
   tv: {
     /** One page (24 shows) of the endless Trending list. */

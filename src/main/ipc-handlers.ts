@@ -1,19 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { isAbsolute } from 'node:path'
-import type { TorrentClawKeyStatus } from '@shared/app-settings'
+import type { AuthSignInResult, AuthStatus } from '@shared/auth'
 import type { Preferences } from '@shared/preferences'
-import { configureTorrentClaw, getTorrentClawKeyStatus } from './torrentclaw/client'
-import {
-  autocomplete,
-  getCollection,
-  getCollections,
-  getPopularMovies,
-  getPopularShows,
-  getStreamingTop,
-  getStreamingTopShows,
-  getUpcomingMovies,
-  resolveSuggestionTmdbId
-} from './torrentclaw/discovery'
 import {
   STREAMING_SERVICES,
   type AutocompleteResponse,
@@ -29,27 +17,16 @@ import { baseDownloadDir, defaultDownloadDir } from './torrent/webtorrent-core'
 import { isVidkingEmbedUrl, openOrFocusVidkingEmbed } from './vidking-embed-window'
 import { clearVidkingSessionData } from './vidking-session'
 import { z } from 'zod'
-import {
-  shouldIncludeCatalogListItem,
-  type CatalogErrorCode,
-  type CatalogGenreRail,
-  type CatalogGenreRailsResponse,
-  type CatalogMovieListFactsResponse,
-  type CatalogMovieResponse,
-  type CatalogSearchResponse,
-  type CatalogTrendingPageResponse
+import type {
+  CatalogGenreRailsResponse,
+  CatalogMovieListFactsResponse,
+  CatalogMovieResponse,
+  CatalogSearchResponse,
+  CatalogTrendingPageResponse
 } from '@shared/catalog'
 import { isSafeTorrentDetailsUrl, type TorrentSearchResponse } from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot, UntrackedDownload } from '@shared/torrent-downloads'
 import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
-import {
-  getAppSettings,
-  getStoredSettings,
-  isSecretStorageEncrypted,
-  setAppSettings
-} from './settings-store'
-import { searchTorrentSources } from './torrent/orchestrator'
-import { listProviderHealth } from './torrent/scrape-providers'
 import type { ProviderHealth } from '@shared/provider-health'
 import type {
   TvSearchResponse,
@@ -60,19 +37,6 @@ import type {
   TvShowListResponse,
   TvShowResponse
 } from '@shared/tv'
-import { fillTvShowListFacts } from './tv-list-facts'
-import {
-  getOnTheAirShows,
-  getTvGenres,
-  getTvSeason,
-  getTvShowDetails,
-  searchTvShows,
-  searchTvShowsAll
-} from './tmdb-tv'
-import { getTvGenrePage, getTvGenreRails } from './tv-genres'
-import { getTrendingTvPage } from './torrent/trending-tv'
-import { readTorrentSearchCache, writeTorrentSearchCache } from './torrent/torrent-search-cache'
-import { resolveTorrentSearchInput } from './torrent/torrent-search-resolve'
 import {
   addMovieDownload,
   endStreamingPlayback,
@@ -87,19 +51,6 @@ import {
   startMoviePlayback
 } from './torrent/movie-downloads'
 import { mpvEvents } from './torrent/mpv-controller'
-import { fillCatalogMovieListFacts } from './catalog-list-facts'
-import { enrichCatalogListWithOmdb, enrichMovieDetailsWithOmdb } from './omdb'
-import {
-  discoverMoviesByGenre,
-  discoverMoviesByGenreFirstPage,
-  getMovieDetails,
-  getMovieGenres,
-  hasTmdbCredentials,
-  searchMovies
-} from './tmdb'
-import { getTrendingPage } from './torrent/trending-watchable'
-import { getLibrary } from './library/db'
-import { rankMovies } from './library/ranked-lists'
 import {
   clearWatchProgress,
   getWatchProgress,
@@ -112,6 +63,8 @@ import {
 } from './watch-history'
 import type { WatchProgress } from '@shared/watch-history'
 import { readVidkingDiagnostics, type VidkingNetEvent } from './vidking-diagnostics'
+import { apiJson, apiSignIn, broadcastAuthStatus } from './api-client'
+import { clearSession, getCachedSession, getSessionToken, setSession } from './session-store'
 
 const searchInput = z.object({
   query: z.string().min(1).max(200)
@@ -133,12 +86,9 @@ const discoverGenreInput = z.object({
   genreId: z.number().int().positive()
 })
 
-const settingsInput = z.object({
-  tmdbApiKey: z.string().optional(),
-  tmdbReadAccessToken: z.string().optional(),
-  omdbApiKey: z.string().optional(),
-  openSubtitlesApiKey: z.string().optional(),
-  torrentClawApiKey: z.string().optional()
+const signInInput = z.object({
+  email: z.email().max(200),
+  password: z.string().min(1).max(200)
 })
 
 const torrentSearchInput = z.object({
@@ -227,43 +177,61 @@ const resolveSuggestionInput = z.object({
   contentType: z.enum(['movie', 'show', 'collection'])
 })
 
-function discoverError(e: unknown): string {
-  return e instanceof Error && e.message ? e.message : 'TorrentClaw is unavailable.'
+type MeResponse =
+  | { ok: true; id: string; email: string; name: string; role: string }
+  | { ok: false; error: string }
+
+function query(params: Record<string, string | number | boolean | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === '') continue
+    search.set(key, String(value))
+  }
+  const encoded = search.toString()
+  return encoded ? `?${encoded}` : ''
 }
 
-function mapCatalogError(err: unknown): { error: string; code: CatalogErrorCode } {
-  if (err instanceof z.ZodError) {
-    return { error: 'Invalid request', code: 'VALIDATION' }
+async function restoreSession(): Promise<AuthStatus> {
+  if (!getSessionToken()) {
+    clearSession()
+    return { signedIn: false }
   }
-  const msg = err instanceof Error ? err.message : String(err)
-  if (msg === 'NO_CREDENTIALS') {
-    return {
-      error: 'Add your TMDB Read Access Token or API key in Settings.',
-      code: 'NO_CREDENTIALS'
-    }
+  const me = await apiJson<MeResponse>('/v1/me')
+  if (me.ok) {
+    setSession(getSessionToken(), { email: me.email, name: me.name, role: me.role })
+    return { signedIn: true, email: me.email, name: me.name, role: me.role }
   }
-  if (msg.startsWith('TMDB_HTTP_')) {
-    return { error: `TMDB request failed (${msg.slice(0, 80)})`, code: 'BAD_RESPONSE' }
-  }
-  if (msg === 'BAD_RESPONSE') {
-    return { error: 'Unexpected response from TMDB.', code: 'BAD_RESPONSE' }
-  }
-  return { error: msg || 'Unknown error', code: 'NETWORK' }
+  if (!getSessionToken()) return { signedIn: false }
+  const cached = getCachedSession()
+  if (cached) return { signedIn: true, ...cached }
+  return { signedIn: false }
 }
 
 export function registerIpcHandlers(): void {
-  configureTorrentClaw({ getApiKey: () => getAppSettings().torrentClawApiKey })
+  ipcMain.handle('auth:status', async (): Promise<AuthStatus> => restoreSession())
 
-  ipcMain.handle('settings:get', () => {
-    return getStoredSettings()
+  ipcMain.handle('auth:signIn', async (_evt, raw: unknown): Promise<AuthSignInResult> => {
+    const parsed = signInInput.safeParse(raw)
+    if (!parsed.success) return { ok: false, error: 'Enter a valid email and password.' }
+    const signed = await apiSignIn(parsed.data.email, parsed.data.password)
+    if ('error' in signed) return { ok: false, error: signed.error }
+    setSession(signed.token, { email: parsed.data.email, name: '', role: 'user' })
+    const me = await apiJson<MeResponse>('/v1/me')
+    if (!me.ok) {
+      clearSession()
+      broadcastAuthStatus()
+      return { ok: false, error: me.error }
+    }
+    setSession(signed.token, { email: me.email, name: me.name, role: me.role })
+    broadcastAuthStatus()
+    return { ok: true, email: me.email, name: me.name, role: me.role }
   })
 
-  ipcMain.handle('settings:isEncrypted', (): boolean => isSecretStorageEncrypted())
-
-  ipcMain.handle(
-    'settings:torrentClawKeyStatus',
-    (): TorrentClawKeyStatus => getTorrentClawKeyStatus()
-  )
+  ipcMain.handle('auth:signOut', (): AuthStatus => {
+    clearSession()
+    broadcastAuthStatus()
+    return { signedIn: false }
+  })
 
   ipcMain.handle('prefs:get', (): Preferences => getPreferences())
 
@@ -291,14 +259,6 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('prefs:defaultDownloadDir', (): string => defaultDownloadDir())
-
-  ipcMain.handle('settings:set', (_evt, raw: unknown) => {
-    const parsed = settingsInput.safeParse(raw)
-    if (!parsed.success) {
-      throw new Error('Invalid settings payload')
-    }
-    setAppSettings(parsed.data)
-  })
 
   ipcMain.handle('app:openExternal', async (_evt, raw: unknown): Promise<void> => {
     if (typeof raw !== 'string' || !isSafeTorrentDetailsUrl(raw)) {
@@ -349,31 +309,22 @@ export function registerIpcHandlers(): void {
     if (!parsed.success) {
       return { ok: false, error: 'Invalid search payload.', code: 'VALIDATION' }
     }
-    const d = parsed.data
-    const input = {
-      title: d.title,
-      releaseDate: d.releaseDate ?? null,
-      imdbId: d.imdbId ?? null,
-      forceRefresh: d.forceRefresh ?? false
-    }
-    const resolved = resolveTorrentSearchInput(input)
-    if (!resolved.valid) {
-      return resolved.response
-    }
-    if (!input.forceRefresh) {
-      const cached = readTorrentSearchCache(resolved.cacheKey)
-      if (cached) {
-        return cached
-      }
-    }
-    const fresh = await searchTorrentSources(getAppSettings(), input)
-    if (fresh.ok) {
-      writeTorrentSearchCache(resolved.cacheKey, fresh)
-    }
-    return fresh
+    return apiJson('/v1/torrents/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: parsed.data.title,
+        releaseDate: parsed.data.releaseDate ?? null,
+        imdbId: parsed.data.imdbId ?? null,
+        forceRefresh: parsed.data.forceRefresh ?? false
+      }),
+      timeoutMs: 60_000
+    })
   })
 
-  ipcMain.handle('torrent:providerHealth', (): ProviderHealth[] => listProviderHealth())
+  ipcMain.handle('torrent:providerHealth', async (): Promise<ProviderHealth[]> => {
+    const rows = await apiJson<ProviderHealth[] | { ok: false }>('/v1/torrents/providers/health')
+    return Array.isArray(rows) ? rows : []
+  })
 
   ipcMain.handle('torrent:addMovieDownload', (_evt, raw: unknown) => {
     const parsed = addMovieTorrentInput.safeParse(raw)
@@ -419,28 +370,28 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle('history:list', (): WatchProgress[] => listWatchProgress())
+  ipcMain.handle('history:list', (): Promise<WatchProgress[]> => listWatchProgress())
 
-  ipcMain.handle('history:get', (_evt, raw: unknown): WatchProgress | null => {
+  ipcMain.handle('history:get', async (_evt, raw: unknown): Promise<WatchProgress | null> => {
     const parsed = movieInput.safeParse(raw)
     return parsed.success ? getWatchProgress(parsed.data.id) : null
   })
 
-  ipcMain.handle('history:report', (_evt, raw: unknown): void => {
+  ipcMain.handle('history:report', async (_evt, raw: unknown): Promise<void> => {
     const parsed = historyReportInput.safeParse(raw)
     if (parsed.success) {
-      recordWatchProgress(parsed.data.movieId, parsed.data.position, parsed.data.duration)
+      await recordWatchProgress(parsed.data.movieId, parsed.data.position, parsed.data.duration)
     }
   })
 
-  ipcMain.handle('history:clear', (_evt, raw: unknown): void => {
+  ipcMain.handle('history:clear', async (_evt, raw: unknown): Promise<void> => {
     const parsed = movieInput.safeParse(raw)
-    if (parsed.success) clearWatchProgress(parsed.data.id)
+    if (parsed.success) await clearWatchProgress(parsed.data.id)
   })
 
-  ipcMain.handle('watchlist:get', (): number[] => getWatchlist())
+  ipcMain.handle('watchlist:get', (): Promise<number[]> => getWatchlist())
 
-  ipcMain.handle('watchlist:set', (_evt, raw: unknown): number[] => {
+  ipcMain.handle('watchlist:set', async (_evt, raw: unknown): Promise<number[]> => {
     const parsed = watchlistSetInput.safeParse(raw)
     if (!parsed.success) return getWatchlist()
     return setInWatchlist(parsed.data.movieId, parsed.data.inList)
@@ -476,39 +427,21 @@ export function registerIpcHandlers(): void {
       if (!parsed.success) {
         return { ok: false, error: 'Invalid page.', code: 'VALIDATION' }
       }
-      const forceRefresh = parsed.data.forceRefresh === true
-      const settings = getAppSettings()
-      if (!hasTmdbCredentials(settings)) {
-        return {
-          ok: false,
-          error: 'Add your TMDB credentials in Settings first.',
-          code: 'NO_CREDENTIALS'
-        }
-      }
-      try {
-        const page = await getTrendingPage(settings, parsed.data.page ?? 1, { forceRefresh })
-        return { ok: true, ...page }
-      } catch (e) {
-        const m = mapCatalogError(e)
-        return { ok: false, error: m.error, code: m.code }
-      }
+      return apiJson(
+        `/v1/catalog/trending${query({
+          page: parsed.data.page,
+          forceRefresh: parsed.data.forceRefresh ? '1' : undefined
+        })}`
+      )
     }
   )
 
-  ipcMain.handle('discover:popular', async (): Promise<DiscoverListResponse> => {
-    try {
-      return { ok: true, items: await getPopularMovies() }
-    } catch (e) {
-      return { ok: false, error: discoverError(e) }
-    }
+  ipcMain.handle('discover:popular', (): Promise<DiscoverListResponse> => {
+    return apiJson('/v1/discover/popular')
   })
 
-  ipcMain.handle('discover:upcoming', async (): Promise<DiscoverListResponse> => {
-    try {
-      return { ok: true, items: await getUpcomingMovies() }
-    } catch (e) {
-      return { ok: false, error: discoverError(e) }
-    }
+  ipcMain.handle('discover:upcoming', (): Promise<DiscoverListResponse> => {
+    return apiJson('/v1/discover/upcoming')
   })
 
   ipcMain.handle(
@@ -516,20 +449,12 @@ export function registerIpcHandlers(): void {
     async (_evt, raw: unknown): Promise<DiscoverListResponse> => {
       const parsed = streamingTopInput.safeParse(raw)
       if (!parsed.success) return { ok: false, error: 'Unknown streaming service.' }
-      try {
-        return { ok: true, items: await getStreamingTop(parsed.data.service) }
-      } catch (e) {
-        return { ok: false, error: discoverError(e) }
-      }
+      return apiJson(`/v1/discover/streaming-top${query({ service: parsed.data.service })}`)
     }
   )
 
-  ipcMain.handle('discover:collections', async (): Promise<DiscoverCollectionsResponse> => {
-    try {
-      return { ok: true, collections: await getCollections() }
-    } catch (e) {
-      return { ok: false, error: discoverError(e) }
-    }
+  ipcMain.handle('discover:collections', (): Promise<DiscoverCollectionsResponse> => {
+    return apiJson('/v1/discover/collections')
   })
 
   ipcMain.handle(
@@ -537,11 +462,7 @@ export function registerIpcHandlers(): void {
     async (_evt, raw: unknown): Promise<DiscoverCollectionResponse> => {
       const parsed = movieInput.safeParse(raw)
       if (!parsed.success) return { ok: false, error: 'Invalid collection id.' }
-      try {
-        return { ok: true, ...(await getCollection(parsed.data.id)) }
-      } catch (e) {
-        return { ok: false, error: discoverError(e) }
-      }
+      return apiJson(`/v1/discover/collections/${parsed.data.id}`)
     }
   )
 
@@ -550,11 +471,7 @@ export function registerIpcHandlers(): void {
     async (_evt, raw: unknown): Promise<AutocompleteResponse> => {
       const parsed = autocompleteInput.safeParse(raw)
       if (!parsed.success) return { ok: true, suggestions: [] }
-      try {
-        return { ok: true, suggestions: await autocomplete(parsed.data.q) }
-      } catch (e) {
-        return { ok: false, error: discoverError(e) }
-      }
+      return apiJson(`/v1/discover/autocomplete${query({ q: parsed.data.q })}`)
     }
   )
 
@@ -563,15 +480,10 @@ export function registerIpcHandlers(): void {
     async (_evt, raw: unknown): Promise<ResolveSuggestionResponse> => {
       const parsed = resolveSuggestionInput.safeParse(raw)
       if (!parsed.success) return { ok: false, error: 'Invalid suggestion.' }
-      const s = parsed.data
-      if (s.contentType === 'collection') return { ok: true, route: `/collection/${s.id}` }
-      try {
-        const tmdbId = await resolveSuggestionTmdbId({ ...s, contentType: s.contentType })
-        if (tmdbId == null) return { ok: false, error: 'No TMDB match.' }
-        return { ok: true, route: s.contentType === 'show' ? `/tv/${tmdbId}` : `/movie/${tmdbId}` }
-      } catch (e) {
-        return { ok: false, error: discoverError(e) }
-      }
+      return apiJson('/v1/discover/resolve', {
+        method: 'POST',
+        body: JSON.stringify(parsed.data)
+      })
     }
   )
 
@@ -580,51 +492,11 @@ export function registerIpcHandlers(): void {
     if (!parsed.success) {
       return { ok: false, error: 'Enter a search query.', code: 'VALIDATION' }
     }
-    const settings = getAppSettings()
-    if (!hasTmdbCredentials(settings)) {
-      return {
-        ok: false,
-        error: 'Add your TMDB credentials in Settings first.',
-        code: 'NO_CREDENTIALS'
-      }
-    }
-    try {
-      const raw = await searchMovies(settings, parsed.data.query)
-      const enriched = await enrichCatalogListWithOmdb(settings, raw)
-      const results = enriched.filter(shouldIncludeCatalogListItem)
-      return { ok: true, results }
-    } catch (e) {
-      const m = mapCatalogError(e)
-      return { ok: false, error: m.error, code: m.code }
-    }
+    return apiJson(`/v1/catalog/search${query({ query: parsed.data.query })}`)
   })
 
-  ipcMain.handle('catalog:genreRails', async (): Promise<CatalogGenreRailsResponse> => {
-    const settings = getAppSettings()
-    if (!hasTmdbCredentials(settings)) {
-      return {
-        ok: false,
-        error: 'Add your TMDB credentials in Settings first.',
-        code: 'NO_CREDENTIALS'
-      }
-    }
-    try {
-      const genres = await getMovieGenres(settings)
-      const rails: CatalogGenreRail[] = []
-      const stripMax = 15
-      for (const genre of genres) {
-        await discoverMoviesByGenreFirstPage(settings, genre.id)
-        const movies = rankMovies(getLibrary(), { genreId: genre.id, limit: stripMax * 3 })
-          .filter(shouldIncludeCatalogListItem)
-          .slice(0, stripMax)
-        if (movies.length === 0) continue
-        rails.push({ genre, movies })
-      }
-      return { ok: true, rails }
-    } catch (e) {
-      const m = mapCatalogError(e)
-      return { ok: false, error: m.error, code: m.code }
-    }
+  ipcMain.handle('catalog:genreRails', (): Promise<CatalogGenreRailsResponse> => {
+    return apiJson('/v1/catalog/genre-rails')
   })
 
   ipcMain.handle(
@@ -634,92 +506,50 @@ export function registerIpcHandlers(): void {
       if (!parsed.success) {
         return { ok: false, error: 'Invalid genre.', code: 'VALIDATION' }
       }
-      const settings = getAppSettings()
-      if (!hasTmdbCredentials(settings)) {
-        return {
-          ok: false,
-          error: 'Add your TMDB credentials in Settings first.',
-          code: 'NO_CREDENTIALS'
-        }
-      }
-      try {
-        await getMovieGenres(settings)
-        await discoverMoviesByGenre(settings, parsed.data.genreId)
-        const ranked = rankMovies(getLibrary(), { genreId: parsed.data.genreId, limit: 300 })
-        const enriched = await enrichCatalogListWithOmdb(settings, ranked)
-        const results = enriched.filter(shouldIncludeCatalogListItem)
-        return { ok: true, results }
-      } catch (e) {
-        const m = mapCatalogError(e)
-        return { ok: false, error: m.error, code: m.code }
-      }
+      return apiJson(`/v1/catalog/discover${query({ genreId: parsed.data.genreId })}`)
     }
   )
 
   ipcMain.handle('tv:trendingPage', async (_evt, raw: unknown): Promise<TvListPageResponse> => {
     const parsed = catalogTrendingPageInput.safeParse(raw ?? {})
     if (!parsed.success) return { ok: false, error: 'Invalid page.' }
-    try {
-      const page = await getTrendingTvPage(getAppSettings(), parsed.data.page ?? 1, {
-        forceRefresh: parsed.data.forceRefresh === true
-      })
-      return { ok: true, ...page }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(
+      `/v1/tv/trending${query({
+        page: parsed.data.page,
+        forceRefresh: parsed.data.forceRefresh ? '1' : undefined
+      })}`
+    )
   })
 
   ipcMain.handle('tv:searchAll', async (_evt, raw: unknown): Promise<TvShowListResponse> => {
     const parsed = searchInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Enter a search query.' }
-    try {
-      return { ok: true, results: await searchTvShowsAll(getAppSettings(), parsed.data.query) }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(`/v1/tv/search-all${query({ query: parsed.data.query })}`)
   })
 
-  ipcMain.handle('tv:onTheAir', async (): Promise<TvShowListResponse> => {
-    try {
-      return { ok: true, results: await getOnTheAirShows(getAppSettings()) }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+  ipcMain.handle('tv:onTheAir', (): Promise<TvShowListResponse> => {
+    return apiJson('/v1/tv/on-the-air')
   })
 
-  ipcMain.handle('tv:genreRails', async (): Promise<TvGenreRailsResponse> => {
-    try {
-      return { ok: true, rails: await getTvGenreRails(getAppSettings()) }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+  ipcMain.handle('tv:genreRails', (): Promise<TvGenreRailsResponse> => {
+    return apiJson('/v1/tv/genre-rails')
   })
 
   ipcMain.handle('tv:genres', async (): Promise<{ id: number; name: string }[]> => {
-    try {
-      return await getTvGenres(getAppSettings())
-    } catch {
-      return []
-    }
+    const rows = await apiJson<{ id: number; name: string }[] | { ok: false }>('/v1/tv/genres')
+    return Array.isArray(rows) ? rows : []
   })
 
   ipcMain.handle('tv:discoverGenre', async (_evt, raw: unknown): Promise<TvListPageResponse> => {
     const parsed = tvDiscoverGenreInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Invalid genre.' }
-    try {
-      const page = await getTvGenrePage(getAppSettings(), parsed.data.genreId, parsed.data.page)
-      return { ok: true, ...page }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(
+      `/v1/tv/discover${query({ genreId: parsed.data.genreId, page: parsed.data.page })}`
+    )
   })
 
-  ipcMain.handle('discover:popularShows', async (): Promise<DiscoverShowListResponse> => {
-    try {
-      return { ok: true, items: await getPopularShows() }
-    } catch (e) {
-      return { ok: false, error: discoverError(e) }
-    }
+  ipcMain.handle('discover:popularShows', (): Promise<DiscoverShowListResponse> => {
+    return apiJson('/v1/discover/popular-shows')
   })
 
   ipcMain.handle(
@@ -727,17 +557,13 @@ export function registerIpcHandlers(): void {
     async (_evt, raw: unknown): Promise<DiscoverShowListResponse> => {
       const parsed = streamingTopInput.safeParse(raw)
       if (!parsed.success) return { ok: false, error: 'Unknown streaming service.' }
-      try {
-        return { ok: true, items: await getStreamingTopShows(parsed.data.service) }
-      } catch (e) {
-        return { ok: false, error: discoverError(e) }
-      }
+      return apiJson(`/v1/discover/streaming-top-shows${query({ service: parsed.data.service })}`)
     }
   )
 
-  ipcMain.handle('tvWatchlist:get', (): number[] => getShowWatchlist())
+  ipcMain.handle('tvWatchlist:get', (): Promise<number[]> => getShowWatchlist())
 
-  ipcMain.handle('tvWatchlist:set', (_evt, raw: unknown): number[] => {
+  ipcMain.handle('tvWatchlist:set', async (_evt, raw: unknown): Promise<number[]> => {
     const parsed = showWatchlistSetInput.safeParse(raw)
     if (!parsed.success) return getShowWatchlist()
     return setShowInWatchlist(parsed.data.showId, parsed.data.inList)
@@ -746,47 +572,27 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('tv:search', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
     const parsed = tvSearchInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Enter a search query.' }
-    try {
-      return {
-        ok: true,
-        ...(await searchTvShows(getAppSettings(), parsed.data.query, parsed.data.page ?? 1))
-      }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(
+      `/v1/tv/search${query({ query: parsed.data.query, page: parsed.data.page })}`
+    )
   })
 
   ipcMain.handle('tv:listFacts', async (_evt, raw: unknown): Promise<TvShowListFactsResponse> => {
     const parsed = listFactsInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Invalid show ids.' }
-    try {
-      return { ok: true, facts: await fillTvShowListFacts(getAppSettings(), parsed.data.ids) }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(`/v1/tv/list-facts${query({ ids: parsed.data.ids.join(',') })}`)
   })
 
   ipcMain.handle('tv:getShow', async (_evt, raw: unknown): Promise<TvShowResponse> => {
     const parsed = movieInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Invalid show id.' }
-    try {
-      return { ok: true, show: await getTvShowDetails(getAppSettings(), parsed.data.id) }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(`/v1/tv/shows/${parsed.data.id}`)
   })
 
   ipcMain.handle('tv:getSeason', async (_evt, raw: unknown): Promise<TvSeasonResponse> => {
     const parsed = tvSeasonInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Invalid season.' }
-    try {
-      return {
-        ok: true,
-        season: await getTvSeason(getAppSettings(), parsed.data.showId, parsed.data.seasonNumber)
-      }
-    } catch (e) {
-      return { ok: false, error: mapCatalogError(e).error }
-    }
+    return apiJson(`/v1/tv/shows/${parsed.data.showId}/seasons/${parsed.data.seasonNumber}`)
   })
 
   ipcMain.handle(
@@ -796,13 +602,7 @@ export function registerIpcHandlers(): void {
       if (!parsed.success) {
         return { ok: false, error: 'Invalid movie ids.', code: 'VALIDATION' }
       }
-      try {
-        const facts = await fillCatalogMovieListFacts(getAppSettings(), parsed.data.ids)
-        return { ok: true, facts }
-      } catch (e) {
-        const m = mapCatalogError(e)
-        return { ok: false, error: m.error, code: m.code }
-      }
+      return apiJson(`/v1/catalog/list-facts${query({ ids: parsed.data.ids.join(',') })}`)
     }
   )
 
@@ -811,27 +611,6 @@ export function registerIpcHandlers(): void {
     if (!parsed.success) {
       return { ok: false, error: 'Invalid movie id.', code: 'VALIDATION' }
     }
-    const settings = getAppSettings()
-    if (!hasTmdbCredentials(settings)) {
-      return {
-        ok: false,
-        error: 'Add your TMDB credentials in Settings first.',
-        code: 'NO_CREDENTIALS'
-      }
-    }
-    try {
-      const movie = await enrichMovieDetailsWithOmdb(
-        settings,
-        await getMovieDetails(settings, parsed.data.id)
-      )
-      return { ok: true, movie }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('TMDB_HTTP_404')) {
-        return { ok: false, error: 'Movie not found.', code: 'NOT_FOUND' }
-      }
-      const m = mapCatalogError(e)
-      return { ok: false, error: m.error, code: m.code }
-    }
+    return apiJson(`/v1/catalog/movies/${parsed.data.id}`)
   })
 }

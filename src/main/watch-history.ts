@@ -1,47 +1,88 @@
-import type { WatchProgress } from '@shared/watch-history'
-import { getLibrary } from './library/db'
-import {
-  getShowWatchlist as readShowWatchlist,
-  setShowInWatchlist as writeShowWatchlist
-} from './library/shows'
-import {
-  clearWatchProgress as clearStoredWatchProgress,
-  getWatchProgress as readStoredWatchProgress,
-  getWatchlist as readStoredWatchlist,
-  listWatchProgress as listStoredWatchProgress,
-  recordWatchProgress as recordStoredWatchProgress,
-  setInWatchlist as setStoredWatchlist
-} from './library/watch'
+import { FINISHED_FRACTION, type WatchProgress } from '@shared/watch-history'
+import { apiJson } from './api-client'
 
-export function recordWatchProgress(movieId: number, position: number, duration: number): void {
-  recordStoredWatchProgress(getLibrary(), movieId, position, duration)
+type HistoryItem = {
+  mediaType: 'movie' | 'show'
+  tmdbId: number
+  season: number | null
+  episode: number | null
+  position: number
+  duration: number
+  finished: boolean
+  updatedAt: number
 }
 
-export function getWatchProgress(movieId: number): WatchProgress | null {
-  return readStoredWatchProgress(getLibrary(), movieId)
+type HistoryResponse = { ok: true; items: HistoryItem[] } | { ok: false; error: string }
+type WatchlistResponse =
+  | { ok: true; movies: number[]; shows: number[] }
+  | { ok: false; error: string }
+
+function toProgress(item: HistoryItem): WatchProgress {
+  return {
+    movieId: item.tmdbId,
+    position: item.position,
+    duration: item.duration,
+    updatedAt: item.updatedAt,
+    finished: item.finished
+  }
 }
 
-export function listWatchProgress(): WatchProgress[] {
-  return listStoredWatchProgress(getLibrary())
+export async function recordWatchProgress(
+  movieId: number,
+  position: number,
+  duration: number
+): Promise<void> {
+  if (!Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) return
+  const finished = position / duration >= FINISHED_FRACTION
+  await apiJson('/v1/me/history', {
+    method: 'POST',
+    body: JSON.stringify({
+      mediaType: 'movie',
+      tmdbId: movieId,
+      position: finished ? 0 : Math.max(0, position),
+      duration,
+      finished
+    })
+  })
 }
 
-export function clearWatchProgress(movieId: number): void {
-  clearStoredWatchProgress(getLibrary(), movieId)
+export async function getWatchProgress(movieId: number): Promise<WatchProgress | null> {
+  const rows = await listWatchProgress()
+  return rows.find((row) => row.movieId === movieId) ?? null
 }
 
-export function getWatchlist(): number[] {
-  return readStoredWatchlist(getLibrary())
+export async function listWatchProgress(): Promise<WatchProgress[]> {
+  const result = await apiJson<HistoryResponse>('/v1/me/history')
+  if (!result.ok) return []
+  return result.items.filter((item) => item.mediaType === 'movie').map(toProgress)
 }
 
-export function setInWatchlist(movieId: number, inList: boolean): number[] {
-  return setStoredWatchlist(getLibrary(), movieId, inList)
+export async function clearWatchProgress(movieId: number): Promise<void> {
+  await apiJson(`/v1/me/history?mediaType=movie&tmdbId=${movieId}`, { method: 'DELETE' })
 }
 
-/** "My shows": TMDB show ids, most recently added first. */
-export function getShowWatchlist(): number[] {
-  return readShowWatchlist(getLibrary())
+export async function getWatchlist(): Promise<number[]> {
+  const result = await apiJson<WatchlistResponse>('/v1/me/watchlist')
+  return result.ok ? result.movies : []
 }
 
-export function setShowInWatchlist(showId: number, inList: boolean): number[] {
-  return writeShowWatchlist(getLibrary(), showId, inList)
+export async function setInWatchlist(movieId: number, inList: boolean): Promise<number[]> {
+  await apiJson('/v1/me/watchlist', {
+    method: 'PUT',
+    body: JSON.stringify({ mediaType: 'movie', tmdbId: movieId, inList })
+  })
+  return getWatchlist()
+}
+
+export async function getShowWatchlist(): Promise<number[]> {
+  const result = await apiJson<WatchlistResponse>('/v1/me/watchlist')
+  return result.ok ? result.shows : []
+}
+
+export async function setShowInWatchlist(showId: number, inList: boolean): Promise<number[]> {
+  await apiJson('/v1/me/watchlist', {
+    method: 'PUT',
+    body: JSON.stringify({ mediaType: 'show', tmdbId: showId, inList })
+  })
+  return getShowWatchlist()
 }

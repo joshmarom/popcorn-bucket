@@ -6,6 +6,7 @@ import pg from 'pg'
 import { createAuth, requireSession } from './auth'
 import { registerCatalogRoutes } from './catalog-routes'
 import { registerMeRoutes } from './me-routes'
+import { registerSubtitleRoutes } from './subtitle-routes'
 import { registerTorrentRoutes } from './torrent-routes'
 import { migrate } from './migrate'
 import { pgConfig } from './pg-config'
@@ -91,7 +92,9 @@ function mountAuth(app: Hono): void {
     app.use('/v1/discover/*', signedIn)
     app.use('/v1/torrents/*', signedIn)
     app.use('/v1/me/*', signedIn)
+    app.use('/v1/subtitles/*', signedIn)
     registerMeRoutes(app)
+    registerSubtitleRoutes(app)
   } catch (error) {
     console.error('auth init failed')
     console.error(error instanceof Error ? error.message : error)

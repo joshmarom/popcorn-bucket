@@ -5,7 +5,7 @@ import { DownloadsPage } from '@/pages/downloads-page'
 import { GenreBrowsePage } from '@/pages/genre-browse-page'
 import { HomePage } from '@/pages/home-page'
 import { MoviePage } from '@/pages/movie/movie-page'
-import { SettingsPage } from '@/pages/settings-page'
+import { SettingsPage, SignInGate } from '@/pages/settings-page'
 import { LibraryPage } from '@/pages/library-page'
 import { CollectionPage } from '@/pages/collection-page'
 import { TvBrowsePage } from '@/pages/tv-browse-page'
@@ -48,5 +48,9 @@ const router = createHashRouter([
 ])
 
 export function AppRouter(): ReactElement {
-  return <RouterProvider router={router} />
+  return (
+    <SignInGate>
+      <RouterProvider router={router} />
+    </SignInGate>
+  )
 }

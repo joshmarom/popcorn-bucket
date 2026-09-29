@@ -8,15 +8,18 @@ import {
   readSync,
   statSync
 } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import { rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import type { Preferences } from '@shared/preferences'
-import type { EpisodeTarget } from '@shared/tv'
+import type { CatalogMovieResponse } from '@shared/catalog'
+import type { EpisodeTarget, TvShowResponse } from '@shared/tv'
 import { getPreferences, preferenceEvents } from '../preferences-store'
-import { getAppSettings } from '../settings-store'
-import { getMovieDetails, hasTmdbCredentials } from '../tmdb'
-import { getTvShowDetails } from '../tmdb-tv'
-import { computeMovieHash, fetchSubtitle, subtitleCacheRoot } from '../subtitles/opensubtitles'
+import { apiJson } from '../api-client'
+import {
+  computeMovieHash,
+  findCachedSubtitle,
+  subtitleCacheRoot
+} from '../subtitles/opensubtitles'
 import { isValidMagnetUri } from '@shared/torrent'
 import type {
   AddMovieTorrentPayload,
@@ -1032,7 +1035,7 @@ type PlaybackTarget = {
  * Without mpv, files Chromium can decode fall back to the in-app player.
  */
 async function launchPlayback(t: PlaybackTarget): Promise<TorrentStreamStartResponse> {
-  const startSeconds = resumePosition(getWatchProgress(t.rec.movieId))
+  const startSeconds = resumePosition(await getWatchProgress(t.rec.movieId))
   if (isArchiveFileName(t.label) && !findMpvBinary()) {
     return {
       ok: false,
@@ -1092,18 +1095,30 @@ const imdbIdCache = new Map<number, string | null>()
 async function imdbIdForRecord(rec: DownloadRecord): Promise<string | null> {
   const key = rec.episode ? -rec.episode.showId : rec.movieId
   if (imdbIdCache.has(key)) return imdbIdCache.get(key) ?? null
-  const settings = getAppSettings()
-  if (!hasTmdbCredentials(settings)) return null
   try {
     const imdbId = rec.episode
-      ? (await getTvShowDetails(settings, rec.episode.showId)).imdbId
-      : (await getMovieDetails(settings, rec.movieId)).imdbId
+      ? await imdbIdFromShow(rec.episode.showId)
+      : await imdbIdFromMovie(rec.movieId)
     imdbIdCache.set(key, imdbId)
     return imdbId
   } catch {
     return null
   }
 }
+
+async function imdbIdFromMovie(id: number): Promise<string | null> {
+  const result = await apiJson<CatalogMovieResponse>(`/v1/catalog/movies/${id}`)
+  return result.ok ? result.movie.imdbId : null
+}
+
+async function imdbIdFromShow(id: number): Promise<string | null> {
+  const result = await apiJson<TvShowResponse>(`/v1/tv/shows/${id}`)
+  return result.ok ? result.show.imdbId : null
+}
+
+type SubtitleSearchResponse =
+  | { ok: true; fileId: number; language: string; content: string }
+  | { ok: false; error?: string }
 
 /**
  * Downloads a subtitle in the preferred language from OpenSubtitles when the torrent has none
@@ -1114,34 +1129,42 @@ async function externalSubtitlePaths(
   existingSubtitleNames: string[]
 ): Promise<string[]> {
   const language = getPreferences().subtitleLanguage
-  const apiKey = getAppSettings().openSubtitlesApiKey
-  if (!language || !apiKey) return []
+  if (!language) return []
   if (existingSubtitleNames.some((n) => guessSubtitleLanguage(n) === language)) return []
+  const dir = join(subtitleCacheRoot(), String(rec.movieId))
+  const cached = await findCachedSubtitle(dir, language)
+  if (cached) return [cached]
   const imdbId = await imdbIdForRecord(rec)
   if (!imdbId) return []
   const finished = rec.status === 'complete' && rec.playFileAbsPath
-  const path = await fetchSubtitle({
-    apiKey,
-    movieId: rec.movieId,
-    imdbId,
-    language,
-    movieHash: finished ? computeMovieHash(rec.playFileAbsPath!) : null,
-    ...(rec.episode
-      ? { episode: { season: rec.episode.seasonNumber, episode: rec.episode.episodeNumber } }
-      : {})
+  const result = await apiJson<SubtitleSearchResponse>('/v1/subtitles/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      imdbId,
+      language,
+      movieHash: finished ? computeMovieHash(rec.playFileAbsPath!) : null,
+      ...(rec.episode
+        ? { season: rec.episode.seasonNumber, episode: rec.episode.episodeNumber }
+        : {})
+    }),
+    timeoutMs: 20_000
   })
-  return path ? [path] : []
+  if (!result.ok || !result.content) return []
+  mkdirSync(dir, { recursive: true })
+  const out = join(dir, `opensubtitles.${language}.${result.fileId}.srt`)
+  await writeFile(out, result.content, 'utf8')
+  return [out]
 }
 
 mpvEvents.on('progress', (s: MpvPlaybackState) => {
   if (s.tag && s.position != null && s.duration != null) {
-    recordWatchProgress(s.tag.movieId, s.position, s.duration)
+    void recordWatchProgress(s.tag.movieId, s.position, s.duration)
   }
 })
 
 mpvEvents.on('end', (s: MpvPlaybackState) => {
   if (s.tag && s.position != null && s.duration != null) {
-    recordWatchProgress(s.tag.movieId, s.position, s.duration)
+    void recordWatchProgress(s.tag.movieId, s.position, s.duration)
   }
 })
 

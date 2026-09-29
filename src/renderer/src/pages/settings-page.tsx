@@ -1,185 +1,47 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { NETWORK_NOTICE_TEXT } from '@/lib/network-notice'
 import { PreferencesSection } from './preferences-section'
-import type { TorrentClawKeyStatus } from '@shared/app-settings'
-
-const TORRENTCLAW_STATUS_LABEL: Record<TorrentClawKeyStatus, string> = {
-  active: 'Key active',
-  rejected: 'Key rejected (using anonymous access)',
-  anonymous: 'Anonymous'
-}
+import type { AuthStatus } from '@shared/auth'
 
 export function SettingsPage(): ReactElement {
-  const [settingsKey, setSettingsKey] = useState('')
-  const [settingsToken, setSettingsToken] = useState('')
-  const [omdbKey, setOmdbKey] = useState('')
-  const [openSubtitlesKey, setOpenSubtitlesKey] = useState('')
-  const [torrentClawKey, setTorrentClawKey] = useState('')
-  const [torrentClawStatus, setTorrentClawStatus] = useState<TorrentClawKeyStatus>('anonymous')
-  const [settingsSaved, setSettingsSaved] = useState(false)
-  const [keysEncrypted, setKeysEncrypted] = useState(true)
+  const [status, setStatus] = useState<AuthStatus | null>(null)
 
-  const loadSettings = useCallback(async (): Promise<void> => {
-    setKeysEncrypted(await window.api.settings.isEncrypted())
-    const s = await window.api.settings.get()
-    setSettingsKey(s.tmdbApiKey)
-    setSettingsToken(s.tmdbReadAccessToken)
-    setOmdbKey(s.omdbApiKey)
-    setOpenSubtitlesKey(s.openSubtitlesApiKey)
-    setTorrentClawKey(s.torrentClawApiKey)
-    setTorrentClawStatus(await window.api.settings.torrentClawKeyStatus())
+  const load = useCallback(async (): Promise<void> => {
+    setStatus(await window.api.auth.status())
   }, [])
 
   useEffect(() => {
-    void loadSettings()
-  }, [loadSettings])
+    void load()
+    return window.api.auth.onChange(setStatus)
+  }, [load])
 
-  const saveSettings = async (): Promise<void> => {
-    await window.api.settings.set({
-      tmdbApiKey: settingsKey,
-      tmdbReadAccessToken: settingsToken,
-      omdbApiKey: omdbKey,
-      openSubtitlesApiKey: openSubtitlesKey,
-      torrentClawApiKey: torrentClawKey
-    })
-    setTorrentClawStatus(await window.api.settings.torrentClawKeyStatus())
-    setSettingsSaved(true)
+  const signOut = async (): Promise<void> => {
+    setStatus(await window.api.auth.signOut())
   }
 
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 py-6 pb-16">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">API credentials</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
         <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          Paste your <strong className="text-foreground">API Read Access Token</strong>{' '}
-          (recommended) and/or your <strong className="text-foreground">API Key (v3)</strong> from{' '}
-          <a
-            href="https://www.themoviedb.org/settings/api"
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary font-medium underline underline-offset-4"
-          >
-            themoviedb.org/settings/api
-          </a>
-          . Keys are stored locally on this machine only
-          {keysEncrypted ? ', encrypted with your system keychain.' : '.'}
+          Catalog, search, and your lists live on the Popcorn Bucket server. Playback and downloads
+          stay on this computer.
         </p>
-        {!keysEncrypted ? (
-          <p className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
-            This system has no secure storage available, so keys are saved as plain text in the
-            app&apos;s settings file.
+      </div>
+      {status?.signedIn ? (
+        <div className="space-y-3">
+          <p className="text-sm">
+            Signed in as <span className="font-medium">{status.email}</span>
           </p>
-        ) : null}
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="tmdb-token">
-          Read Access Token (Bearer)
-        </label>
-        <Textarea
-          id="tmdb-token"
-          rows={4}
-          value={settingsToken}
-          onChange={(e) => setSettingsToken(e.target.value)}
-          placeholder="eyJhbGciOiJIUzI1NiJ9…"
-          spellCheck={false}
-          className="font-mono text-xs"
-        />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="tmdb-key">
-          API Key (v3)
-        </label>
-        <Input
-          id="tmdb-key"
-          value={settingsKey}
-          onChange={(e) => setSettingsKey(e.target.value)}
-          placeholder="32-character v3 key"
-          spellCheck={false}
-          className="font-mono text-xs"
-        />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="omdb-key">
-          OMDb API key (optional)
-        </label>
-        <Input
-          id="omdb-key"
-          value={omdbKey}
-          onChange={(e) => setOmdbKey(e.target.value)}
-          placeholder="Fills missing metadata from OMDb when needed"
-          spellCheck={false}
-          className="font-mono text-xs"
-        />
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          When TMDB is missing a poster, plot, year, runtime, rating, genres, or cast, the app
-          resolves the IMDb id and merges what OMDb returns. Leave empty to skip. Env:{' '}
-          <code className="bg-muted rounded px-1 py-0.5">OMDB_API_KEY</code>.
-        </p>
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="opensubtitles-key">
-          OpenSubtitles API key (optional)
-        </label>
-        <Input
-          id="opensubtitles-key"
-          value={openSubtitlesKey}
-          onChange={(e) => setOpenSubtitlesKey(e.target.value)}
-          placeholder="From opensubtitles.com → API consumers"
-          spellCheck={false}
-          className="font-mono text-xs"
-        />
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          Fetches subtitles in your preferred language when a torrent has none. Env:{' '}
-          <code className="bg-muted rounded px-1 py-0.5">OPENSUBTITLES_API_KEY</code>.
-        </p>
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="torrentclaw-key">
-          TorrentClaw API key (optional)
-        </label>
-        <Input
-          id="torrentclaw-key"
-          value={torrentClawKey}
-          onChange={(e) => setTorrentClawKey(e.target.value)}
-          placeholder="Free key from torrentclaw.com → Profile → API key"
-          spellCheck={false}
-          className="font-mono text-xs"
-        />
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          Adds TorrentClaw as a torrent source with quality scores and verified file details.
-          Popular, Top 10, Upcoming, Collections, and search suggestions work without a key. Env:{' '}
-          <code className="bg-muted rounded px-1 py-0.5">TORRENTCLAW_API_KEY</code>.
-        </p>
-        <p className="text-xs">
-          Status:{' '}
-          <span
-            className={
-              torrentClawStatus === 'rejected'
-                ? 'text-destructive font-medium'
-                : 'text-foreground font-medium'
-            }
-          >
-            {TORRENTCLAW_STATUS_LABEL[torrentClawStatus]}
-          </span>
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button type="button" onClick={() => void saveSettings()}>
-          Save
-        </Button>
-        {settingsSaved && <span className="text-muted-foreground text-sm">Saved.</span>}
-      </div>
-      <p className="text-muted-foreground text-sm leading-relaxed">
-        Alternatively, set{' '}
-        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
-          TMDB_READ_ACCESS_TOKEN
-        </code>{' '}
-        and <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">TMDB_API_KEY</code>{' '}
-        in the environment before launch; they are used only when a field here is left empty.
-      </p>
+          <Button type="button" variant="outline" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">You are signed out.</p>
+      )}
       <PreferencesSection />
       <section className="space-y-2 border-t border-border pt-6">
         <h2 className="text-lg font-semibold tracking-tight">Network</h2>
@@ -187,4 +49,84 @@ export function SettingsPage(): ReactElement {
       </section>
     </div>
   )
+}
+
+export function SignInGate({ children }: { children: ReactElement }): ReactElement {
+  const [status, setStatus] = useState<AuthStatus | null>(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void window.api.auth.status().then(setStatus)
+    return window.api.auth.onChange(setStatus)
+  }, [])
+
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    const result = await window.api.auth.signIn(email, password)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setStatus({ signedIn: true, email: result.email, name: result.name, role: result.role })
+  }
+
+  if (status == null) {
+    return (
+      <div className="bg-background flex h-screen items-center justify-center text-sm text-muted-foreground">
+        Connecting…
+      </div>
+    )
+  }
+
+  if (!status.signedIn) {
+    return (
+      <div className="bg-background flex h-screen items-center justify-center px-4">
+        <form onSubmit={(event) => void submit(event)} className="w-full max-w-sm space-y-4">
+          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Use your Popcorn Bucket account to load catalog, lists, and torrent search from the
+            server.
+          </p>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="sign-in-email">
+              Email
+            </label>
+            <Input
+              id="sign-in-email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="sign-in-password">
+              Password
+            </label>
+            <Input
+              id="sign-in-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          {error ? <p className="text-destructive text-sm">{error}</p> : null}
+          <Button type="submit" disabled={busy} className="w-full">
+            {busy ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      </div>
+    )
+  }
+
+  return children
 }

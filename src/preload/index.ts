@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppSettings, TorrentClawKeyStatus } from '@shared/app-settings'
+import type { AuthSignInResult, AuthStatus } from '@shared/auth'
 import type {
   CatalogGenreRailsResponse,
   CatalogMovieListFactsResponse,
@@ -59,13 +59,16 @@ const api = {
       }[]
     > => ipcRenderer.invoke('app:getVidkingDiagnostics')
   },
-  settings: {
-    get: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
-    isEncrypted: (): Promise<boolean> => ipcRenderer.invoke('settings:isEncrypted'),
-    torrentClawKeyStatus: (): Promise<TorrentClawKeyStatus> =>
-      ipcRenderer.invoke('settings:torrentClawKeyStatus'),
-    set: (partial: Partial<AppSettings>): Promise<void> =>
-      ipcRenderer.invoke('settings:set', partial)
+  auth: {
+    status: (): Promise<AuthStatus> => ipcRenderer.invoke('auth:status'),
+    signIn: (email: string, password: string): Promise<AuthSignInResult> =>
+      ipcRenderer.invoke('auth:signIn', { email, password }),
+    signOut: (): Promise<AuthStatus> => ipcRenderer.invoke('auth:signOut'),
+    onChange: (cb: (status: AuthStatus) => void): (() => void) => {
+      const listener = (_e: unknown, status: AuthStatus): void => cb(status)
+      ipcRenderer.on('auth:changed', listener)
+      return () => ipcRenderer.removeListener('auth:changed', listener)
+    }
   },
   tv: {
     trendingPage: (opts: { page: number; forceRefresh?: boolean }): Promise<TvListPageResponse> =>

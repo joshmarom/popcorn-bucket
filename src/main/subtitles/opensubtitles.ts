@@ -79,19 +79,13 @@ async function osFetch(apiKey: string, path: string, init?: RequestInit): Promis
  * Prefers an exact file-hash match, then the most downloaded. Returns the cached file path, or
  * null when nothing suitable was found or the service is unreachable.
  */
-export async function fetchSubtitle(params: {
+export async function fetchSubtitleContent(params: {
   apiKey: string
-  movieId: number
   imdbId: string
   language: string
   movieHash: string | null
-  /** For TV: `imdbId` is the show's id and these pick the episode. */
   episode?: { season: number; episode: number }
-}): Promise<string | null> {
-  const dir = join(subtitleCacheRoot(), String(params.movieId))
-  const cached = await findCachedSubtitle(dir, params.language)
-  if (cached) return cached
-
+}): Promise<{ fileId: number; content: string } | null> {
   const imdbNumeric = params.imdbId.replace(/^tt/i, '').replace(/^0+/, '')
   const query = new URLSearchParams({ languages: params.language })
   if (params.episode) {
@@ -129,17 +123,33 @@ export async function fetchSubtitle(params: {
     if (!file.ok) return null
     const text = await file.text()
     if (!text.trim()) return null
-
-    mkdirSync(dir, { recursive: true })
-    const out = join(dir, `opensubtitles.${params.language}.${fileId}.srt`)
-    await writeFile(out, text, 'utf8')
-    return out
+    return { fileId, content: text }
   } catch {
     return null
   }
 }
 
-async function findCachedSubtitle(dir: string, language: string): Promise<string | null> {
+export async function fetchSubtitle(params: {
+  apiKey: string
+  movieId: number
+  imdbId: string
+  language: string
+  movieHash: string | null
+  /** For TV: `imdbId` is the show's id and these pick the episode. */
+  episode?: { season: number; episode: number }
+}): Promise<string | null> {
+  const dir = join(subtitleCacheRoot(), String(params.movieId))
+  const cached = await findCachedSubtitle(dir, params.language)
+  if (cached) return cached
+  const downloaded = await fetchSubtitleContent(params)
+  if (!downloaded) return null
+  mkdirSync(dir, { recursive: true })
+  const out = join(dir, `opensubtitles.${params.language}.${downloaded.fileId}.srt`)
+  await writeFile(out, downloaded.content, 'utf8')
+  return out
+}
+
+export async function findCachedSubtitle(dir: string, language: string): Promise<string | null> {
   if (!existsSync(dir)) return null
   const names = await readdir(dir).catch(() => [] as string[])
   const hit = names.find((n) => n.startsWith(`opensubtitles.${language}.`) && n.endsWith('.srt'))
