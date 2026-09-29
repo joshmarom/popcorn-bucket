@@ -8,7 +8,6 @@ import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { ShowGrid } from '@/components/show-grid'
 import { TvDiscoveryRails } from '@/components/tv-discovery-rails'
 import { TvGenreRails } from '@/components/tv-genre-rails'
-import { TvPersonalRails } from '@/components/tv-personal-rails'
 import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 import { cn } from '@/lib/utils'
@@ -207,7 +206,6 @@ export function TvBrowsePage(): ReactElement {
       </div>
 
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
-        {!searching && <TvPersonalRails />}
         <div ref={headingRef} className="flex scroll-mt-24 flex-wrap items-center gap-2">
           <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
             {searching ? 'Results' : 'Trending'}

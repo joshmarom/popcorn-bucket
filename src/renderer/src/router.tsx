@@ -1,4 +1,4 @@
-import { createHashRouter, RouterProvider, useParams } from 'react-router-dom'
+import { createHashRouter, Navigate, RouterProvider, useParams } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import { RootLayout } from '@/layouts/root-layout'
 import { DownloadsPage } from '@/pages/downloads-page'
@@ -6,7 +6,7 @@ import { GenreBrowsePage } from '@/pages/genre-browse-page'
 import { HomePage } from '@/pages/home-page'
 import { MoviePage } from '@/pages/movie/movie-page'
 import { SettingsPage } from '@/pages/settings-page'
-import { ContinuePage } from '@/pages/continue-page'
+import { LibraryPage } from '@/pages/library-page'
 import { CollectionPage } from '@/pages/collection-page'
 import { TvBrowsePage } from '@/pages/tv-browse-page'
 import { TvShowPage } from '@/pages/tv-show-page'
@@ -36,7 +36,8 @@ const router = createHashRouter([
       { path: 'genre/:genreId', element: <GenreBrowsePage /> },
       { path: 'collection/:collectionId', element: <CollectionRoute /> },
       { path: 'movie/:movieId', element: <MovieRoute /> },
-      { path: 'continue', element: <ContinuePage /> },
+      { path: 'library', element: <LibraryPage /> },
+      { path: 'continue', element: <Navigate to="/library" replace /> },
       { path: 'tv', element: <TvBrowsePage /> },
       { path: 'tv/genre/:genreId', element: <TvGenreRoute /> },
       { path: 'tv/:showId', element: <TvShowPage /> },

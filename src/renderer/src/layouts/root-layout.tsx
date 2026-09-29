@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Download, History, Settings, Tv } from 'lucide-react'
+import { Download, Library, Settings, Tv } from 'lucide-react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useHoverIntent } from '@/hooks/use-hover-intent'
 import { cn } from '@/lib/utils'
@@ -92,18 +92,18 @@ export function RootLayout(): ReactElement {
           className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6"
           aria-label="Main"
         >
-          <SidebarHoverLabel label="Continue watching">
+          <SidebarHoverLabel label="Library">
             {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
               <NavLink
-                to="/continue"
+                to="/library"
                 onMouseEnter={onMouseEnter}
                 onMouseLeave={onMouseLeave}
                 onFocus={onFocus}
                 onBlur={onBlur}
                 className={({ isActive }) => navIconClassName(isActive)}
-                aria-label="Continue watching"
+                aria-label="Library"
               >
-                <History className="size-5" />
+                <Library className="size-5" />
               </NavLink>
             )}
           </SidebarHoverLabel>

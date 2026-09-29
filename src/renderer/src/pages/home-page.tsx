@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button'
 import { MovieCard } from '@/components/movie-card'
 import { MovieGrid } from '@/components/movie-grid'
 import { useMovieListFacts } from '@/components/use-movie-list-facts'
-import { PersonalRails } from '@/components/personal-rails'
 import { DiscoveryRails } from '@/components/discovery-rails'
 import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
@@ -478,7 +477,6 @@ export function HomePage(): ReactElement {
       </div>
 
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
-        {!showingSearch && <PersonalRails />}
         <div
           ref={listHeadingRef}
           className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3"
