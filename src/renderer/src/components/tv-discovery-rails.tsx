@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import { CardScopeContext } from '@/lib/screen-transition'
 import type { TvShowListItem } from '@shared/tv'
 import { hasListPosterUrl, hasMeaningfulListOverview } from '@shared/catalog'
 import { RailHeading, StreamingTopRail } from '@/components/discovery-rails'
@@ -24,10 +25,12 @@ function ShowListRail<T extends TvShowListItem & { rank?: number | null }>({
   const { items } = useDiscoverList(load, id, includeShow)
   if (items.length === 0) return null
   return (
-    <section className="space-y-4" aria-labelledby={id}>
-      <RailHeading id={id} title={title} subtitle={subtitle} />
-      <ShowRail shows={items} />
-    </section>
+    <CardScopeContext.Provider value={id}>
+      <section className="rail-section space-y-4" aria-labelledby={id}>
+        <RailHeading id={id} title={title} subtitle={subtitle} />
+        <ShowRail shows={items} />
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 

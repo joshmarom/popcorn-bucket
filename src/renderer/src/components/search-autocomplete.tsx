@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useScreenTransition } from '@/lib/screen-transition'
+import { useToggleMotion } from '@/lib/surface-motion'
 import { Film, Layers, Tv } from 'lucide-react'
 import type { AutocompleteSuggestion } from '@shared/discovery'
 import { Input } from '@/components/ui/input'
@@ -33,7 +34,7 @@ export function SearchAutocomplete({
   placeholder?: string
   className?: string
 }): ReactElement {
-  const navigate = useNavigate()
+  const { go } = useScreenTransition()
   const listId = useId()
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([])
   const [open, setOpen] = useState(false)
@@ -81,7 +82,7 @@ export function SearchAutocomplete({
     try {
       const res = await window.api.discover.resolveSuggestion(s)
       if (res.ok) {
-        navigate(res.route, { state: { from: 'home' } })
+        go(res.route, null, { from: 'home' })
         return
       }
     } catch {
@@ -94,6 +95,7 @@ export function SearchAutocomplete({
   }
 
   const showList = open && suggestions.length > 0
+  const menu = useToggleMotion(showList)
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
     if (!showList) return
@@ -134,11 +136,16 @@ export function SearchAutocomplete({
           Opening…
         </span>
       ) : null}
-      {showList ? (
+      {menu.present ? (
         <ul
           id={listId}
           role="listbox"
-          className="bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 max-h-[26rem] overflow-y-auto rounded-md border p-1 shadow-lg"
+          data-origin="top-center"
+          className={cn(
+            't-dropdown bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 max-h-[26rem] overflow-y-auto rounded-md border p-1 shadow-lg',
+            menu.phase === 'open' && 'is-open',
+            menu.phase === 'closing' && 'is-closing'
+          )}
         >
           {suggestions.map((s, i) => (
             <li

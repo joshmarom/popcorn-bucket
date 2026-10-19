@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react'
+import { CardScopeContext } from '@/lib/screen-transition'
 import { Link } from 'react-router-dom'
-import { ChevronRight, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
+import { LearnChevron } from '@/components/interaction-motion'
+import { VirtualRails } from '@/components/virtual-rails'
 import type { TvGenreRail } from '@shared/tv'
 import { ShowRail } from '@/components/show-grid'
 import { Button } from '@/components/ui/button'
@@ -9,24 +12,26 @@ import { cn } from '@/lib/utils'
 function GenreRailRow({ rail }: { rail: TvGenreRail }): ReactElement {
   const nameQ = encodeURIComponent(rail.genre.name)
   return (
-    <section className="space-y-4" aria-labelledby={`tv-genre-rail-${rail.genre.id}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
-        <h3 id={`tv-genre-rail-${rail.genre.id}`} className="type-kicker">
-          {rail.genre.name}
-        </h3>
-        <Button
-          variant="link"
-          className="text-muted-foreground hover:text-foreground h-auto p-0 text-sm"
-          asChild
-        >
-          <Link to={`/tv/genre/${rail.genre.id}?name=${nameQ}`}>
-            All in {rail.genre.name}
-            <ChevronRight aria-hidden className="ml-0.5 inline size-4 align-text-bottom" />
-          </Link>
-        </Button>
-      </div>
-      <ShowRail shows={rail.shows} />
-    </section>
+    <CardScopeContext.Provider value={`tv-genre-rail-${rail.genre.id}`}>
+      <section className="space-y-4" aria-labelledby={`tv-genre-rail-${rail.genre.id}`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
+          <h3 id={`tv-genre-rail-${rail.genre.id}`} className="type-kicker">
+            {rail.genre.name}
+          </h3>
+          <Button
+            variant="link"
+            className="t-learn text-muted-foreground hover:text-foreground h-auto p-0 text-sm"
+            asChild
+          >
+            <Link to={`/tv/genre/${rail.genre.id}?name=${nameQ}`}>
+              All in {rail.genre.name}
+              <LearnChevron />
+            </Link>
+          </Button>
+        </div>
+        <ShowRail shows={rail.shows} />
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 
@@ -87,9 +92,11 @@ export function TvGenreRails(): ReactElement {
           {error}
         </p>
       )}
-      {rails.map((rail) => (
-        <GenreRailRow key={rail.genre.id} rail={rail} />
-      ))}
+      <VirtualRails
+        items={rails}
+        getKey={(rail) => rail.genre.id}
+        renderItem={(rail) => <GenreRailRow rail={rail} />}
+      />
     </div>
   )
 }

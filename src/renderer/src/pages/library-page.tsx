@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
+import { CardScopeContext } from '@/lib/screen-transition'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import type { TvShowDetails, TvShowListItem } from '@shared/tv'
 import { isEpisodeMediaKey } from '@shared/tv'
@@ -186,25 +187,27 @@ function Section({
   children: ReactNode
 }): ReactElement {
   return (
-    <section className="space-y-4" aria-labelledby={id}>
-      <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="bg-muted text-foreground flex size-9 shrink-0 items-center justify-center rounded-lg">
-            <Icon className="size-4" aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <h2 id={id} className="type-section">
-              {title}
-            </h2>
-            <p className="text-muted-foreground text-xs">{description}</p>
+    <CardScopeContext.Provider value={id}>
+      <section className="space-y-4" aria-labelledby={id}>
+        <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="bg-muted text-foreground flex size-9 shrink-0 items-center justify-center rounded-lg">
+              <Icon className="size-4" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 id={id} className="type-section">
+                {title}
+              </h2>
+              <p className="text-muted-foreground text-xs">{description}</p>
+            </div>
           </div>
+          <span className="text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums">
+            {count}
+          </span>
         </div>
-        <span className="text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums">
-          {count}
-        </span>
-      </div>
-      {children}
-    </section>
+        {children}
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 

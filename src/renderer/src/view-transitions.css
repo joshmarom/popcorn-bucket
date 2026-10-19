@@ -1,0 +1,147 @@
+:root {
+  --page-slide-dur: 700ms;
+  --page-fade-dur: 560ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-exit: 420ms;
+  --duration-enter: 700ms;
+  --duration-move: 920ms;
+}
+
+@keyframes vt-page-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    translate: 0 0;
+  }
+  to {
+    opacity: 0;
+    filter: blur(var(--page-blur));
+    translate: var(--slide-offset) 0;
+  }
+}
+
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--page-blur));
+    translate: var(--slide-offset) 0;
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    translate: 0 0;
+  }
+}
+
+:root:active-view-transition-type(nav-forward)::view-transition-old(root) {
+  --slide-offset: calc(var(--page-slide-distance) * -1 * var(--page-exit-enabled));
+  animation: var(--page-slide-dur) var(--page-slide-ease) both vt-page-out;
+}
+
+:root:active-view-transition-type(nav-forward)::view-transition-new(root) {
+  --slide-offset: calc(var(--page-slide-distance) * var(--page-exit-enabled));
+  animation: var(--page-slide-dur) var(--page-fade-ease) both vt-page-in;
+}
+
+:root:active-view-transition-type(nav-back)::view-transition-old(root) {
+  --slide-offset: calc(var(--page-slide-distance) * var(--page-exit-enabled));
+  animation: var(--page-slide-dur) var(--page-slide-ease) both vt-page-out;
+}
+
+:root:active-view-transition-type(nav-back)::view-transition-new(root) {
+  --slide-offset: calc(var(--page-slide-distance) * -1 * var(--page-exit-enabled));
+  animation: var(--page-slide-dur) var(--page-fade-ease) both vt-page-in;
+}
+
+:root:active-view-transition-type(nav-fade)::view-transition-old(root) {
+  --slide-offset: 0;
+  animation: var(--page-fade-dur) var(--page-fade-ease) both vt-page-out;
+}
+
+:root:active-view-transition-type(nav-fade)::view-transition-new(root) {
+  --slide-offset: 0;
+  animation: var(--page-fade-dur) var(--page-fade-ease) both vt-page-in;
+}
+
+::view-transition-group(persistent-nav) {
+  animation: none;
+  z-index: 100;
+}
+
+::view-transition-old(persistent-nav),
+::view-transition-new(persistent-nav) {
+  animation: none;
+}
+
+::view-transition-group(.morph) {
+  animation-duration: var(--duration-move);
+  animation-timing-function: var(--page-slide-ease);
+}
+
+::view-transition-image-pair(.morph) {
+  animation-name: via-blur;
+}
+
+@keyframes via-blur {
+  30% {
+    filter: blur(var(--page-blur));
+  }
+}
+
+/* Detail content replacing its placeholder: the shared poster, title, and facts glide to their
+   final places while everything else cross-fades, with the old layer leaving a little sooner. */
+:root {
+  --reveal-swap-out: 260ms;
+  --reveal-swap-in: 420ms;
+  --reveal-swap-move: 480ms;
+  --reveal-swap-rise: 6px;
+}
+
+@keyframes vt-reveal-out {
+  to {
+    opacity: 0;
+    filter: blur(var(--page-blur));
+  }
+}
+
+@keyframes vt-reveal-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--page-blur));
+    translate: 0 var(--reveal-swap-rise);
+  }
+}
+
+:root:active-view-transition-type(detail-reveal)::view-transition-old(root) {
+  animation: var(--reveal-swap-out) ease-out both vt-reveal-out;
+}
+
+:root:active-view-transition-type(detail-reveal)::view-transition-new(root) {
+  animation: var(--reveal-swap-in) var(--page-fade-ease) both vt-reveal-in;
+}
+
+:root:active-view-transition-type(detail-reveal)::view-transition-group(.morph) {
+  animation-duration: var(--reveal-swap-move);
+}
+
+:root:active-view-transition-type(detail-reveal)::view-transition-image-pair(.morph) {
+  animation-name: none;
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

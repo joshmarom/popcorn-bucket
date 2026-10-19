@@ -1,6 +1,10 @@
 import { useContext, useEffect, useMemo, useState, type ReactElement } from 'react'
+import { DetailReveal, MovieDetailPlaceholder } from '@/components/detail-placeholder'
+import { useDetailReveal } from '@/hooks/use-detail-reveal'
+import { PanelReveal } from '@/components/interaction-motion'
 import { resumePosition } from '@shared/watch-history'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { partStyle, posterStyle, titleStyle, useScreenTransition } from '@/lib/screen-transition'
 import type { MediaErrorDetail } from '@vidstack/react'
 import { useShallow } from 'zustand/react/shallow'
 import { createMoviePageStore, getRankedSources } from './movie-page-store'
@@ -18,11 +22,11 @@ import { NetworkNoticeDialog } from './network-notice-dialog'
 
 function MoviePageContent(): ReactElement {
   const store = useContext(MoviePageStoreContext)
+  const location = useLocation()
+  const { poster, go } = useScreenTransition()
   if (store == null) {
     throw new Error('MoviePageContent requires MoviePageStoreContext')
   }
-
-  const navigate = useNavigate()
 
   const s = useMoviePageStore(useShallow((x) => x))
 
@@ -103,81 +107,124 @@ function MoviePageContent(): ReactElement {
     s.deleteConfirmId != null
       ? (s.downloads.find((x) => x.downloadId === s.deleteConfirmId)?.displayTitle ?? '')
       : ''
+  const navState = location.state as {
+    vtPosterUrl?: string | null
+    vtTitle?: string | null
+    vtMeta?: string | null
+    vtGenres?: string[] | null
+  } | null
+  const previewPoster = navState?.vtPosterUrl ?? null
+  const previewTitle = navState?.vtTitle ?? s.detail?.title ?? null
+  const posterName = `poster-movie-${s.movieId}`
+  const headingName = `title-movie-${s.movieId}`
+  const previewSrc = s.detail?.posterUrl ?? previewPoster
+  const [tabsMoved, setTabsMoved] = useState(false)
+  const showDetail = useDetailReveal(Boolean(s.detail), posterName)
 
   return (
-    <MoviePageShell backdropImageUrl={backdropImageUrl} onBack={() => navigate(-1)}>
-      {s.loading && <p className="text-muted-foreground text-sm">Loading…</p>}
+    <MoviePageShell backdropImageUrl={backdropImageUrl} onBack={() => go(-1, posterName)}>
       {s.error && (
         <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
           {s.error}
         </p>
       )}
 
-      {s.detail && (
-        <>
-          <MovieDetailTabs tab={s.tab} onTabChange={s.setTab} />
-
-          {s.tab === 'overview' && (
-            <MovieOverviewTab
-              detail={s.detail}
-              overviewSubTab={s.overviewSubTab}
-              onOverviewSubTabChange={s.setOverviewSubTab}
-              posterActions={
-                <QuickPlayBar
-                  quickPlay={s.quickPlay}
-                  best={rankedSources.ranked[0] ?? null}
-                  existingDownload={existingDownload}
-                  bufferingDownload={bufferingDownload}
-                  playBusy={s.playBusyDownloadId != null}
-                  resumeSeconds={resumeSeconds}
-                  inWatchlist={inWatchlist}
-                  onToggleWatchlist={() => {
-                    const next = !inWatchlist
-                    setInWatchlist(next)
-                    void window.api.watchlist.set(s.movieId, next)
-                  }}
-                  onPlay={() => void s.playBest()}
-                  onShowSources={() => s.setTab('sources')}
-                  onUseVidking={() => s.setTab('vidking')}
-                  onDismiss={s.resetQuickPlay}
-                />
-              }
-            />
-          )}
-
-          {s.tab === 'sources' && (
-            <div className="space-y-4">
-              <MovieDownloadsSection
-                downloads={s.downloads}
-                downloadsRefreshBusy={s.downloadsRefreshBusy}
-                playError={s.playError}
-                playDialogOpen={s.playDialogOpen}
-                playBusyDownloadId={s.playBusyDownloadId}
-                pauseBusyDownloadId={s.pauseBusyDownloadId}
-                onRefresh={s.refreshDownloadsList}
-                onPlay={(downloadId) => void s.beginPlayback(downloadId)}
-                onPause={(downloadId) => void s.setDownloadPaused(downloadId, true)}
-                onResume={(downloadId) => void s.setDownloadPaused(downloadId, false)}
-                onDeleteClick={s.setDeleteConfirmId}
-              />
-              <MovieTorrentSourcesSection
-                detailPresent
-                torrentLoading={s.torrentLoading}
-                torrentData={s.torrentData}
-                rankedSources={rankedSources}
-                addFeedback={s.addFeedback}
-                addBusyMagnet={s.addBusyMagnet}
-                onRefreshSources={s.refreshTorrentSources}
-                onQueueDownload={(row) => void s.queueDownload(row)}
-                onCopyMagnet={(uri) => void s.copyMagnet(uri)}
-                onOpenDetails={(url) => void s.openDetails(url)}
+      <DetailReveal
+        revealed={showDetail}
+        placeholder={
+          <MovieDetailPlaceholder
+            title={previewTitle}
+            meta={navState?.vtMeta}
+            genres={navState?.vtGenres ?? undefined}
+            partStyle={(part) => partStyle(part, posterName, poster)}
+            posterSrc={previewSrc}
+            posterStyle={posterStyle(posterName, poster)}
+            titleStyle={previewTitle ? titleStyle(headingName, poster) : undefined}
+          />
+        }
+      >
+        {showDetail && s.detail && (
+          <>
+            <div className="mb-4">
+              <MovieDetailTabs
+                tab={s.tab}
+                onTabChange={(tab) => {
+                  setTabsMoved(true)
+                  s.setTab(tab)
+                }}
               />
             </div>
-          )}
 
-          {s.tab === 'vidking' && <MovieVidkingTab detail={s.detail} />}
-        </>
-      )}
+            {s.tab === 'overview' && (
+              <PanelReveal instant={!tabsMoved}>
+                <MovieOverviewTab
+                  detail={s.detail}
+                  overviewSubTab={s.overviewSubTab}
+                  onOverviewSubTabChange={s.setOverviewSubTab}
+                  posterActions={
+                    <QuickPlayBar
+                      quickPlay={s.quickPlay}
+                      best={rankedSources.ranked[0] ?? null}
+                      existingDownload={existingDownload}
+                      bufferingDownload={bufferingDownload}
+                      playBusy={s.playBusyDownloadId != null}
+                      resumeSeconds={resumeSeconds}
+                      inWatchlist={inWatchlist}
+                      onToggleWatchlist={() => {
+                        const next = !inWatchlist
+                        setInWatchlist(next)
+                        void window.api.watchlist.set(s.movieId, next)
+                      }}
+                      onPlay={() => void s.playBest()}
+                      onShowSources={() => s.setTab('sources')}
+                      onUseVidking={() => s.setTab('vidking')}
+                      onDismiss={s.resetQuickPlay}
+                    />
+                  }
+                />
+              </PanelReveal>
+            )}
+
+            {s.tab === 'sources' && (
+              <PanelReveal instant={!tabsMoved}>
+                <div className="space-y-4">
+                  <MovieDownloadsSection
+                    downloads={s.downloads}
+                    downloadsRefreshBusy={s.downloadsRefreshBusy}
+                    playError={s.playError}
+                    playDialogOpen={s.playDialogOpen}
+                    playBusyDownloadId={s.playBusyDownloadId}
+                    pauseBusyDownloadId={s.pauseBusyDownloadId}
+                    onRefresh={s.refreshDownloadsList}
+                    onPlay={(downloadId) => void s.beginPlayback(downloadId)}
+                    onPause={(downloadId) => void s.setDownloadPaused(downloadId, true)}
+                    onResume={(downloadId) => void s.setDownloadPaused(downloadId, false)}
+                    onDeleteClick={s.setDeleteConfirmId}
+                  />
+                  <MovieTorrentSourcesSection
+                    detailPresent
+                    torrentLoading={s.torrentLoading}
+                    torrentData={s.torrentData}
+                    rankedSources={rankedSources}
+                    addFeedback={s.addFeedback}
+                    addBusyMagnet={s.addBusyMagnet}
+                    onRefreshSources={s.refreshTorrentSources}
+                    onQueueDownload={(row) => void s.queueDownload(row)}
+                    onCopyMagnet={(uri) => void s.copyMagnet(uri)}
+                    onOpenDetails={(url) => void s.openDetails(url)}
+                  />
+                </div>
+              </PanelReveal>
+            )}
+
+            {s.tab === 'vidking' && (
+              <PanelReveal instant={!tabsMoved}>
+                <MovieVidkingTab detail={s.detail} />
+              </PanelReveal>
+            )}
+          </>
+        )}
+      </DetailReveal>
 
       <DeleteDownloadDialog
         open={s.deleteConfirmId != null}
@@ -229,13 +276,13 @@ function MoviePageLoaded({ movieId }: { movieId: number }): ReactElement {
 
 export function MoviePage(): ReactElement {
   const { movieId } = useParams<{ movieId: string }>()
-  const navigate = useNavigate()
+  const { go } = useScreenTransition()
   const id = movieId != null ? Number.parseInt(movieId, 10) : Number.NaN
   const invalidId = !Number.isFinite(id) || id < 1
 
   if (invalidId) {
     return (
-      <MoviePageShell backdropImageUrl={null} onBack={() => navigate(-1)}>
+      <MoviePageShell backdropImageUrl={null} onBack={() => go(-1)}>
         <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
           Invalid movie id.
         </p>

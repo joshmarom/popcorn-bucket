@@ -11,7 +11,9 @@ export function ShowCard({
   rank,
   note,
   progress,
-  linkState
+  linkState,
+  index = 0,
+  eager
 }: {
   show: TvShowListItem
   facts: TvShowListFacts | null
@@ -20,6 +22,8 @@ export function ShowCard({
   note?: string | null
   progress?: number | null
   linkState?: unknown
+  index?: number
+  eager?: boolean
 }): ReactElement {
   const first = facts?.firstAirYear ?? show.firstAirYear
   const years = yearSpan(first, facts?.lastAirYear ?? null, facts?.tmdbStatus ?? null)
@@ -48,6 +52,8 @@ export function ShowCard({
       rank={rank}
       note={note}
       progress={progress}
+      index={index}
+      eager={eager}
     />
   )
 }

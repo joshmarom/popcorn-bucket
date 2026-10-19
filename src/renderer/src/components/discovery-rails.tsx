@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { CardScopeContext } from '@/lib/screen-transition'
 import { Link } from 'react-router-dom'
 import { Layers } from 'lucide-react'
 import {
@@ -80,10 +81,12 @@ function ListRail({
   const { items } = useDiscoverList(load, id, shouldIncludeCatalogListItem)
   if (items.length === 0) return null
   return (
-    <section className="space-y-4" aria-labelledby={id}>
-      <RailHeading id={id} title={title} subtitle={subtitle} />
-      <MovieRail items={items} />
-    </section>
+    <CardScopeContext.Provider value={id}>
+      <section className="rail-section space-y-4" aria-labelledby={id}>
+        <RailHeading id={id} title={title} subtitle={subtitle} />
+        <MovieRail items={items} />
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 
@@ -136,33 +139,35 @@ export function StreamingTopRail<T>({
   const label = STREAMING_SERVICES.find((s) => s.id === service)?.label ?? ''
 
   return (
-    <section className="space-y-4" aria-labelledby={id}>
-      <RailHeading id={id} title={`Top 10 on ${label}${titleSuffix}`}>
-        <div role="tablist" aria-label="Streaming service" className="flex flex-wrap gap-1">
-          {services.map((s) => (
-            <Button
-              key={s.id}
-              type="button"
-              role="tab"
-              aria-selected={s.id === service}
-              variant={s.id === service ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={() => setService(s.id)}
-            >
-              {s.label}
-            </Button>
-          ))}
-        </div>
-      </RailHeading>
-      {items.length > 0 ? (
-        renderItems(items)
-      ) : (
-        <p className="text-muted-foreground py-8 text-sm">
-          {loading ? 'Loading…' : `No ${label} chart right now.`}
-        </p>
-      )}
-    </section>
+    <CardScopeContext.Provider value={id}>
+      <section className="rail-section space-y-4" aria-labelledby={id}>
+        <RailHeading id={id} title={`Top 10 on ${label}${titleSuffix}`}>
+          <div role="tablist" aria-label="Streaming service" className="flex flex-wrap gap-1">
+            {services.map((s) => (
+              <Button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={s.id === service}
+                variant={s.id === service ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setService(s.id)}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+        </RailHeading>
+        {items.length > 0 ? (
+          renderItems(items)
+        ) : (
+          <p className="text-muted-foreground py-8 text-sm">
+            {loading ? 'Loading…' : `No ${label} chart right now.`}
+          </p>
+        )}
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 
@@ -186,7 +191,7 @@ function CollectionCard({ c }: { c: DiscoverCollection }): ReactElement {
             <Layers aria-hidden className="size-6" />
           </div>
         )}
-        <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums shadow-sm backdrop-blur-sm">
+        <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums shadow-sm">
           <Layers aria-hidden className="size-3" />
           {c.movieCount}
         </span>
@@ -217,16 +222,18 @@ function CollectionsRail(): ReactElement | null {
   }, [])
   if (collections.length === 0) return null
   return (
-    <section className="space-y-4" aria-labelledby="discover-collections">
-      <RailHeading id="discover-collections" title="Collections" subtitle="Sagas and series" />
-      <ul className={MOVIE_RAIL_CLASS}>
-        {collections.map((c) => (
-          <li key={c.id} className={MOVIE_RAIL_ITEM_CLASS}>
-            <CollectionCard c={c} />
-          </li>
-        ))}
-      </ul>
-    </section>
+    <CardScopeContext.Provider value="discover-collections">
+      <section className="rail-section space-y-4" aria-labelledby="discover-collections">
+        <RailHeading id="discover-collections" title="Collections" subtitle="Sagas and series" />
+        <ul className={MOVIE_RAIL_CLASS}>
+          {collections.map((c) => (
+            <li key={c.id} className={MOVIE_RAIL_ITEM_CLASS}>
+              <CollectionCard c={c} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 

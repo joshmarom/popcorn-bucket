@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
+import { LearnChevron } from '@/components/interaction-motion'
 import type { TvShowListItem } from '@shared/tv'
 import { Button } from '@/components/ui/button'
+import { PosterGridPlaceholder } from '@/components/movie-grid'
 import { ShowGrid } from '@/components/show-grid'
 import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
@@ -81,7 +83,7 @@ export function TvGenrePage(): ReactElement {
       </h1>
       <p className="text-muted-foreground text-sm">Most popular on TMDB first.</p>
 
-      {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
+      {loading && items.length === 0 && !error && <PosterGridPlaceholder />}
       {error && (
         <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
           {error}
@@ -117,12 +119,13 @@ export function TvGenrePage(): ReactElement {
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="t-learn"
                   disabled={!data?.hasMore || loading}
                   onClick={() => setPage(page + 1)}
                   aria-label="Next page"
                 >
                   Next
-                  <ChevronRight aria-hidden className="size-4" />
+                  <LearnChevron />
                 </Button>
               </div>
             </div>

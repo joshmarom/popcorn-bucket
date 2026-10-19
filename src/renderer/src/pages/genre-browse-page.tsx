@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { CatalogMovieListItem } from '@shared/catalog'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
+import { LearnChevron } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
-import { MovieGrid } from '@/components/movie-grid'
+import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 
 function parseListPage(raw: string | null): number {
@@ -110,7 +111,7 @@ export function GenreBrowsePage(): ReactElement {
         Ranked by torrent availability, TMDB popularity, and rating.
       </p>
 
-      {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
+      {loading && items.length === 0 && !error && <PosterGridPlaceholder />}
       {error && (
         <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
           {error}
@@ -146,12 +147,13 @@ export function GenreBrowsePage(): ReactElement {
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="t-learn"
                   disabled={currentPage >= totalPages}
                   onClick={() => setListPage(currentPage + 1)}
                   aria-label="Next page"
                 >
                   Next
-                  <ChevronRight aria-hidden className="size-4" />
+                  <LearnChevron />
                 </Button>
               </div>
             </div>

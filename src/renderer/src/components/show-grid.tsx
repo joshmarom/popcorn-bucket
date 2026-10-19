@@ -14,9 +14,9 @@ export function ShowGrid({ shows }: { shows: TvShowListItem[] }): ReactElement {
   const items = useShowListFacts(shows)
   return (
     <ul className={MOVIE_GRID_CLASS}>
-      {items.map((s) => (
+      {items.map((s, index) => (
         <li key={s.id}>
-          <ShowCard show={s} facts={s.facts} linkState={{ from: 'tv' }} />
+          <ShowCard show={s} facts={s.facts} index={index} eager linkState={{ from: 'tv' }} />
         </li>
       ))}
     </ul>
@@ -28,10 +28,11 @@ export function ShowRail({ shows }: { shows: RailShow[] }): ReactElement {
   const items = useShowListFacts(shows)
   return (
     <ul className={MOVIE_RAIL_CLASS}>
-      {items.map((s) => (
+      {items.map((s, index) => (
         <li key={s.id} className={MOVIE_RAIL_ITEM_CLASS}>
           <ShowCard
             size="sm"
+            index={index}
             show={s}
             facts={s.facts}
             rank={s.rank}

@@ -1,22 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { CardScopeContext } from '@/lib/screen-transition'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   shouldIncludeCatalogListItem,
   type CatalogGenreRail,
   type CatalogMovieListItem
 } from '@shared/catalog'
-import {
-  ArrowDownWideNarrow,
-  ArrowUpNarrowWide,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw
-} from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronLeft, RefreshCw } from 'lucide-react'
+import { IconSwap, LearnChevron } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
 import { MovieCard } from '@/components/movie-card'
-import { MovieGrid } from '@/components/movie-grid'
+import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
 import { useMovieListFacts } from '@/components/use-movie-list-facts'
 import { DiscoveryRails } from '@/components/discovery-rails'
+import { VirtualRails } from '@/components/virtual-rails'
 import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
@@ -131,40 +128,43 @@ function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
   const movies = useMovieListFacts(rail.movies)
   const nameQ = encodeURIComponent(rail.genre.name)
   return (
-    <section className="space-y-4" aria-labelledby={`genre-rail-${rail.genre.id}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
-        <h3 id={`genre-rail-${rail.genre.id}`} className="type-kicker">
-          {rail.genre.name}
-        </h3>
-        <Button
-          variant="link"
-          className="text-muted-foreground hover:text-foreground h-auto p-0 text-sm"
-          asChild
-        >
-          <Link to={`/genre/${rail.genre.id}?name=${nameQ}`}>
-            All in {rail.genre.name}
-            <ChevronRight aria-hidden className="ml-0.5 inline size-4 align-text-bottom" />
-          </Link>
-        </Button>
-      </div>
-      <ul className={MOVIE_RAIL_CLASS}>
-        {movies.map((m) => (
-          <li key={m.id} className={MOVIE_RAIL_ITEM_CLASS}>
-            <MovieCard
-              size="sm"
-              href={`/movie/${m.id}`}
-              linkState={{ from: 'home' }}
-              title={m.title}
-              posterUrl={m.posterUrl}
-              releaseYear={m.releaseYear}
-              runtime={m.runtime}
-              genres={m.genres}
-              voteAverage={m.voteAverage}
-            />
-          </li>
-        ))}
-      </ul>
-    </section>
+    <CardScopeContext.Provider value={`genre-rail-${rail.genre.id}`}>
+      <section className="space-y-4" aria-labelledby={`genre-rail-${rail.genre.id}`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
+          <h3 id={`genre-rail-${rail.genre.id}`} className="type-kicker">
+            {rail.genre.name}
+          </h3>
+          <Button
+            variant="link"
+            className="t-learn text-muted-foreground hover:text-foreground h-auto p-0 text-sm"
+            asChild
+          >
+            <Link to={`/genre/${rail.genre.id}?name=${nameQ}`}>
+              All in {rail.genre.name}
+              <LearnChevron />
+            </Link>
+          </Button>
+        </div>
+        <ul className={MOVIE_RAIL_CLASS}>
+          {movies.map((m, index) => (
+            <li key={m.id} className={MOVIE_RAIL_ITEM_CLASS}>
+              <MovieCard
+                size="sm"
+                index={index}
+                href={`/movie/${m.id}`}
+                linkState={{ from: 'home' }}
+                title={m.title}
+                posterUrl={m.posterUrl}
+                releaseYear={m.releaseYear}
+                runtime={m.runtime}
+                genres={m.genres}
+                voteAverage={m.voteAverage}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </CardScopeContext.Provider>
   )
 }
 
@@ -456,7 +456,7 @@ export function HomePage(): ReactElement {
 
   return (
     <div className="pb-8">
-      <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10 border-b border-border px-4 py-4 backdrop-blur-sm">
+      <div className="bg-background sticky top-0 z-10 border-b border-border px-4 py-4">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
           <SearchAutocomplete
             className="w-full max-w-md"
@@ -541,11 +541,11 @@ export function HomePage(): ReactElement {
                   }
                   aria-label={sortOrder === 'asc' ? 'Sort descending' : 'Sort ascending'}
                 >
-                  {sortOrder === 'asc' ? (
-                    <ArrowUpNarrowWide aria-hidden />
-                  ) : (
-                    <ArrowDownWideNarrow aria-hidden />
-                  )}
+                  <IconSwap
+                    state={sortOrder === 'asc' ? 'a' : 'b'}
+                    a={<ArrowUpNarrowWide aria-hidden />}
+                    b={<ArrowDownWideNarrow aria-hidden />}
+                  />
                 </Button>
               </div>
             </div>
@@ -559,6 +559,7 @@ export function HomePage(): ReactElement {
         {!listLoading && !list.error && list.items.length === 0 && showingSearch && (
           <p className="text-muted-foreground text-sm">No titles match that search.</p>
         )}
+        {listLoading && list.items.length === 0 && !list.error && <PosterGridPlaceholder />}
         {list.items.length > 0 && (
           <>
             <MovieGrid items={list.items} />
@@ -587,12 +588,13 @@ export function HomePage(): ReactElement {
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="t-learn"
                     disabled={!list.hasNext || listLoading}
                     onClick={() => setListPage(list.page + 1)}
                     aria-label="Next page"
                   >
                     Next
-                    <ChevronRight aria-hidden className="size-4" />
+                    <LearnChevron />
                   </Button>
                 </div>
               </div>
@@ -630,9 +632,13 @@ export function HomePage(): ReactElement {
                 {genreRailsError}
               </p>
             )}
-            {!genreRailsLoading &&
-              !genreRailsError &&
-              genreRails.map((rail) => <GenreRailRow key={rail.genre.id} rail={rail} />)}
+            {!genreRailsLoading && !genreRailsError && (
+              <VirtualRails
+                items={genreRails}
+                getKey={(rail) => rail.genre.id}
+                renderItem={(rail) => <GenreRailRow rail={rail} />}
+              />
+            )}
           </div>
         )}
       </div>

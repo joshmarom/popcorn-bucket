@@ -1,7 +1,12 @@
 import type { ReactElement } from 'react'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { SlidingTabs } from '@/components/interaction-motion'
 import type { DetailTab } from './movie-types'
+
+const TABS: { id: DetailTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'sources', label: 'Sources' },
+  { id: 'vidking', label: 'VidCore' }
+]
 
 export function MovieDetailTabs({
   tab,
@@ -10,35 +15,5 @@ export function MovieDetailTabs({
   tab: DetailTab
   onTabChange: (t: DetailTab) => void
 }): ReactElement {
-  return (
-    <div className="flex flex-wrap gap-2 border-b border-border pb-2">
-      <Button
-        type="button"
-        variant={tab === 'overview' ? 'default' : 'ghost'}
-        size="sm"
-        className={cn(tab !== 'overview' && 'text-muted-foreground')}
-        onClick={() => onTabChange('overview')}
-      >
-        Overview
-      </Button>
-      <Button
-        type="button"
-        variant={tab === 'sources' ? 'default' : 'ghost'}
-        size="sm"
-        className={cn(tab !== 'sources' && 'text-muted-foreground')}
-        onClick={() => onTabChange('sources')}
-      >
-        Sources
-      </Button>
-      <Button
-        type="button"
-        variant={tab === 'vidking' ? 'default' : 'ghost'}
-        size="sm"
-        className={cn(tab !== 'vidking' && 'text-muted-foreground')}
-        onClick={() => onTabChange('vidking')}
-      >
-        VidCore
-      </Button>
-    </div>
-  )
+  return <SlidingTabs label="Movie details" tabs={TABS} value={tab} onChange={onTabChange} />
 }

@@ -3,6 +3,7 @@ import type { CatalogMovieListFacts, CatalogMovieListItem } from '@shared/catalo
 
 const CHUNK = 40
 
+const cache = new Map<number, CatalogMovieListFacts>()
 const waiters = new Map<number, Array<(fact: CatalogMovieListFacts | null) => void>>()
 let flushScheduled = false
 
@@ -24,6 +25,7 @@ async function loadFacts(ids: number[]): Promise<CatalogMovieListFacts[]> {
 }
 
 function deliver(id: number, fact: CatalogMovieListFacts | null): void {
+  if (fact) cache.set(id, fact)
   const pending = waiters.get(id) ?? []
   waiters.delete(id)
   for (const resolve of pending) resolve(fact)
@@ -69,13 +71,18 @@ function requestFacts(ids: number[]): Promise<CatalogMovieListFacts[]> {
   )
 }
 
-/** Merges runtime and genres fetched for the cards on screen into the list rows. */
+/**
+ * Merges runtime and genres fetched for the cards on screen into the list rows. Facts are kept
+ * for the session, so rails that remount while scrolling do not ask again.
+ */
 export function useMovieListFacts<T extends CatalogMovieListItem>(items: T[]): T[] {
   const [facts, setFacts] = useState<Map<number, CatalogMovieListFacts>>(() => new Map())
 
   const missingKey = [
     ...new Set(
-      items.filter((item) => needsFacts(item) && !facts.has(item.id)).map((item) => item.id)
+      items
+        .filter((item) => needsFacts(item) && !facts.has(item.id) && !cache.has(item.id))
+        .map((item) => item.id)
     )
   ].join(',')
 
@@ -97,7 +104,7 @@ export function useMovieListFacts<T extends CatalogMovieListItem>(items: T[]): T
   }, [missingKey])
 
   return items.map((item) => {
-    const fact = facts.get(item.id)
+    const fact = facts.get(item.id) ?? cache.get(item.id)
     if (!fact) return item
     return {
       ...item,

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, RefreshCw } from 'lucide-react'
+import { LearnChevron } from '@/components/interaction-motion'
 import type { TvShowListItem } from '@shared/tv'
 import { hasListPosterUrl, hasMeaningfulListOverview } from '@shared/catalog'
 import { Button } from '@/components/ui/button'
 import { SearchAutocomplete } from '@/components/search-autocomplete'
+import { PosterGridPlaceholder } from '@/components/movie-grid'
 import { ShowGrid } from '@/components/show-grid'
 import { TvDiscoveryRails } from '@/components/tv-discovery-rails'
 import { TvGenreRails } from '@/components/tv-genre-rails'
@@ -187,7 +189,7 @@ export function TvBrowsePage(): ReactElement {
 
   return (
     <div className="pb-8">
-      <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10 border-b border-border px-4 py-4 backdrop-blur-sm">
+      <div className="bg-background sticky top-0 z-10 border-b border-border px-4 py-4">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
           <h1 className="type-page">TV shows</h1>
           <SearchAutocomplete
@@ -226,6 +228,7 @@ export function TvBrowsePage(): ReactElement {
           )}
         </div>
         {list.error && <p className="text-destructive text-sm">{list.error}</p>}
+        {list.loading && list.items.length === 0 && !list.error && <PosterGridPlaceholder />}
         {!list.loading && !list.error && list.items.length === 0 && (
           <p className="text-muted-foreground text-sm">
             {searching ? 'No shows match that search.' : 'No shows to show.'}
@@ -259,12 +262,13 @@ export function TvBrowsePage(): ReactElement {
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="t-learn"
                     disabled={!list.hasNext || list.loading}
                     onClick={() => setPage(list.page + 1)}
                     aria-label="Next page"
                   >
                     Next
-                    <ChevronRight aria-hidden className="size-4" />
+                    <LearnChevron />
                   </Button>
                 </div>
               </div>

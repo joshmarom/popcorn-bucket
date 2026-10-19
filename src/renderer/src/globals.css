@@ -1,4 +1,6 @@
 @import './fonts.css';
+@import './view-transitions.css';
+@import './interaction-motion.css';
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -232,5 +234,12 @@
     font-size: 1rem;
     line-height: 1.45;
     font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Off-screen rails skip layout and paint; `auto` keeps the last measured height so the
+     scrollbar does not jump when they come back. */
+  .rail-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 352px;
   }
 }

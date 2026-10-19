@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { posterStyle, titleStyle, useScreenTransition } from '@/lib/screen-transition'
+import { DetailReveal, ShowDetailPlaceholder } from '@/components/detail-placeholder'
+import { useDetailReveal } from '@/hooks/use-detail-reveal'
 import { Bookmark, BookmarkCheck, Loader2, Play } from 'lucide-react'
+import { IconSwap } from '@/components/interaction-motion'
 import { seasonLabel } from '@shared/tv-meta'
 import { rankEpisodeSources, type RankedSources } from '@shared/release-ranking'
 import {
@@ -58,8 +62,12 @@ function mergeResults(lists: TorrentSource[][]): TorrentSource[] {
 export function TvShowPage(): ReactElement {
   const { showId: raw } = useParams<{ showId: string }>()
   const showId = Number.parseInt(raw ?? '', 10)
-  const navigate = useNavigate()
-
+  const location = useLocation()
+  const { poster, go } = useScreenTransition()
+  const posterName = `poster-tv-${showId}`
+  const headingName = `title-tv-${showId}`
+  const navState = location.state as { vtPosterUrl?: string | null; vtTitle?: string | null } | null
+  const previewPoster = navState?.vtPosterUrl ?? null
   const [show, setShow] = useState<TvShowDetails | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [seasonNumber, setSeasonNumber] = useState<number | null>(null)
@@ -345,227 +353,253 @@ export function TvShowPage(): ReactElement {
       ? (season.episodes.find((ep) => ep.episodeNumber === vidcoreEpisode) ?? null)
       : null
 
+  const showDetail = useDetailReveal(Boolean(show), posterName)
+
   if (!Number.isFinite(showId)) {
     return (
-      <MoviePageShell backdropImageUrl={null} onBack={() => navigate(-1)}>
+      <MoviePageShell backdropImageUrl={null} onBack={() => go(-1, posterName)}>
         <p className="text-destructive text-sm">Invalid show id.</p>
       </MoviePageShell>
     )
   }
 
+  const previewTitle = navState?.vtTitle ?? show?.name ?? null
   return (
-    <MoviePageShell backdropImageUrl={show?.backdropUrl ?? null} onBack={() => navigate(-1)}>
+    <MoviePageShell backdropImageUrl={show?.backdropUrl ?? null} onBack={() => go(-1, posterName)}>
       {error && <p className="text-destructive text-sm">{error}</p>}
-      {!show && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
-      {show && (
-        <div className="space-y-6">
-          <div className="flex items-start gap-6">
-            {show.posterUrl && (
-              <img src={show.posterUrl} alt="" className="hidden w-40 rounded-md sm:block" />
+      <DetailReveal
+        revealed={showDetail}
+        placeholder={
+          <ShowDetailPlaceholder
+            title={previewTitle}
+            posterSrc={show?.posterUrl ?? previewPoster}
+            posterStyle={posterStyle(posterName, poster)}
+            titleStyle={previewTitle ? titleStyle(headingName, poster) : undefined}
+          />
+        }
+      >
+        {show && (
+          <div className="space-y-6">
+            <div className="flex items-start gap-6">
+              {show.posterUrl && (
+                <img
+                  src={show.posterUrl}
+                  alt=""
+                  className="hidden w-40 rounded-md sm:block"
+                  style={posterStyle(posterName, poster)}
+                />
+              )}
+              <div className="min-w-0 space-y-2">
+                <h1 className="type-display" style={titleStyle(headingName, poster)}>
+                  {show.name}
+                </h1>
+                <p className="type-meta text-muted-foreground">
+                  {[show.firstAirYear, seasonLabel(show.seasons.length)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                <p className="type-prose">{show.overview}</p>
+                <Button
+                  type="button"
+                  variant={inMyShows ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="gap-1.5"
+                  aria-pressed={inMyShows}
+                  onClick={() => {
+                    const next = !inMyShows
+                    setInMyShows(next)
+                    void window.api.showWatchlist.set(show.id, next)
+                  }}
+                >
+                  <IconSwap
+                    state={inMyShows ? 'b' : 'a'}
+                    a={<Bookmark className="size-3.5" />}
+                    b={<BookmarkCheck className="size-3.5" />}
+                  />
+                  {inMyShows ? 'In My shows' : 'Add to My shows'}
+                </Button>
+                <TvCastTrailers cast={show.cast ?? []} trailers={show.trailers ?? []} />
+              </div>
+            </div>
+
+            {(nextEpisode || nextSeasonNumber != null) && (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-card/60 px-4 py-3">
+                <span className="text-sm">
+                  Up next:{' '}
+                  {nextEpisode
+                    ? `${episodeCode(nextEpisode.seasonNumber, nextEpisode.episodeNumber)} · ${nextEpisode.name}`
+                    : `Season ${nextSeasonNumber}`}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    if (nextEpisode) void playEpisode(nextEpisode)
+                    else if (nextSeasonNumber != null) setSeasonNumber(nextSeasonNumber)
+                  }}
+                >
+                  <Play className="size-3.5" />
+                  {nextEpisode ? 'Play' : 'Open season'}
+                </Button>
+              </div>
             )}
-            <div className="min-w-0 space-y-2">
-              <h1 className="type-display">{show.name}</h1>
-              <p className="type-meta text-muted-foreground">
-                {[show.firstAirYear, seasonLabel(show.seasons.length)].filter(Boolean).join(' · ')}
-              </p>
-              <p className="type-prose">{show.overview}</p>
-              <Button
-                type="button"
-                variant={inMyShows ? 'secondary' : 'outline'}
-                size="sm"
-                className="gap-1.5"
-                aria-pressed={inMyShows}
-                onClick={() => {
-                  const next = !inMyShows
-                  setInMyShows(next)
-                  void window.api.showWatchlist.set(show.id, next)
-                }}
-              >
-                {inMyShows ? (
-                  <BookmarkCheck className="size-3.5" />
-                ) : (
-                  <Bookmark className="size-3.5" />
-                )}
-                {inMyShows ? 'In My shows' : 'Add to My shows'}
-              </Button>
-              <TvCastTrailers cast={show.cast ?? []} trailers={show.trailers ?? []} />
+
+            {vidcoreEpisode != null && seasonNumber != null && (
+              <div ref={vidcoreAnchorRef}>
+                <VidcorePlayer
+                  title={
+                    vidcoreTarget
+                      ? `${show.name} · ${episodeCode(vidcoreTarget.seasonNumber, vidcoreTarget.episodeNumber)} · ${vidcoreTarget.name}`
+                      : `${show.name} · ${episodeCode(seasonNumber, vidcoreEpisode)}`
+                  }
+                  src={`https://vidcore.org/embed/tv/${show.id}/${seasonNumber}/${vidcoreEpisode}`}
+                />
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 border-b border-border pb-2">
+              {show.seasons.map((s) => (
+                <Button
+                  key={s.seasonNumber}
+                  type="button"
+                  size="sm"
+                  variant={s.seasonNumber === seasonNumber ? 'default' : 'ghost'}
+                  className={cn(s.seasonNumber !== seasonNumber && 'text-muted-foreground')}
+                  onClick={() => {
+                    if (s.seasonNumber !== seasonNumber) setVidcoreEpisode(null)
+                    setSeasonNumber(s.seasonNumber)
+                  }}
+                >
+                  {s.name}
+                </Button>
+              ))}
             </div>
-          </div>
 
-          {(nextEpisode || nextSeasonNumber != null) && (
-            <div className="flex items-center gap-3 rounded-lg border border-border bg-card/60 px-4 py-3">
-              <span className="text-sm">
-                Up next:{' '}
-                {nextEpisode
-                  ? `${episodeCode(nextEpisode.seasonNumber, nextEpisode.episodeNumber)} · ${nextEpisode.name}`
-                  : `Season ${nextSeasonNumber}`}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => {
-                  if (nextEpisode) void playEpisode(nextEpisode)
-                  else if (nextSeasonNumber != null) setSeasonNumber(nextSeasonNumber)
-                }}
-              >
-                <Play className="size-3.5" />
-                {nextEpisode ? 'Play' : 'Open season'}
-              </Button>
-            </div>
-          )}
-
-          {vidcoreEpisode != null && seasonNumber != null && (
-            <div ref={vidcoreAnchorRef}>
-              <VidcorePlayer
-                title={
-                  vidcoreTarget
-                    ? `${show.name} · ${episodeCode(vidcoreTarget.seasonNumber, vidcoreTarget.episodeNumber)} · ${vidcoreTarget.name}`
-                    : `${show.name} · ${episodeCode(seasonNumber, vidcoreEpisode)}`
-                }
-                src={`https://vidcore.org/embed/tv/${show.id}/${seasonNumber}/${vidcoreEpisode}`}
-              />
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2 border-b border-border pb-2">
-            {show.seasons.map((s) => (
-              <Button
-                key={s.seasonNumber}
-                type="button"
-                size="sm"
-                variant={s.seasonNumber === seasonNumber ? 'default' : 'ghost'}
-                className={cn(s.seasonNumber !== seasonNumber && 'text-muted-foreground')}
-                onClick={() => {
-                  if (s.seasonNumber !== seasonNumber) setVidcoreEpisode(null)
-                  setSeasonNumber(s.seasonNumber)
-                }}
-              >
-                {s.name}
-              </Button>
-            ))}
-          </div>
-
-          {!season && <p className="text-muted-foreground text-sm">Loading episodes…</p>}
-          {season && (
-            <ul className="space-y-2">
-              {season.episodes.map((ep) => {
-                const key = episodeMediaKey(ep.id)
-                const st = status[key] ?? { phase: 'idle' }
-                const progress = history.get(key)
-                const dl = downloads.find((d) => d.movieId === key && d.status !== 'error')
-                const busy = st.phase === 'searching' || st.phase === 'buffering'
-                const resume = resumePosition(progress)
-                return (
-                  <li
-                    key={ep.id}
-                    className="space-y-3 rounded-lg border border-border bg-card/40 p-3"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="bg-muted relative hidden aspect-video w-36 shrink-0 overflow-hidden rounded sm:block">
-                        {ep.stillUrl && (
-                          <img src={ep.stillUrl} alt="" className="size-full object-cover" />
-                        )}
-                        {progress && progress.duration > 0 && (
-                          <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
-                            <div
-                              className="bg-primary h-full"
-                              style={{
-                                width: `${progress.finished ? 100 : (progress.position / progress.duration) * 100}%`
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {episodeCode(ep.seasonNumber, ep.episodeNumber)} · {ep.name}
-                        </p>
-                        <p className="text-muted-foreground line-clamp-2 text-xs">{ep.overview}</p>
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          {st.phase === 'searching' && 'Finding the best copy…'}
-                          {st.phase === 'buffering' &&
-                            (dl && dl.status !== 'pending_metadata' && dl.status !== 'queued'
-                              ? `Buffering ${Math.round(dl.progress * 100)}% · ${dl.numPeers} peers`
-                              : 'Connecting to peers…')}
-                          {st.phase === 'error' && (
-                            <span className="text-destructive">{st.message}</span>
+            {!season && <p className="text-muted-foreground text-sm">Loading episodes…</p>}
+            {season && (
+              <ul className="space-y-2">
+                {season.episodes.map((ep) => {
+                  const key = episodeMediaKey(ep.id)
+                  const st = status[key] ?? { phase: 'idle' }
+                  const progress = history.get(key)
+                  const dl = downloads.find((d) => d.movieId === key && d.status !== 'error')
+                  const busy = st.phase === 'searching' || st.phase === 'buffering'
+                  const resume = resumePosition(progress)
+                  return (
+                    <li
+                      key={ep.id}
+                      className="space-y-3 rounded-lg border border-border bg-card/40 p-3"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="bg-muted relative hidden aspect-video w-36 shrink-0 overflow-hidden rounded sm:block">
+                          {ep.stillUrl && (
+                            <img src={ep.stillUrl} alt="" className="size-full object-cover" />
                           )}
-                          {st.phase === 'idle' && progress?.finished && 'Watched'}
-                          {st.phase === 'idle' &&
-                            !progress?.finished &&
-                            dl?.status === 'complete' &&
-                            'Downloaded'}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={
-                            vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
-                              ? 'secondary'
-                              : 'outline'
-                          }
-                          onClick={() => setVidcoreEpisode(ep.episodeNumber)}
-                        >
-                          VidCore
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={sourcesFor === ep.id ? 'secondary' : 'outline'}
-                          onClick={() => {
-                            if (sourcesFor === ep.id) {
-                              setSourcesFor(null)
-                              return
+                          {progress && progress.duration > 0 && (
+                            <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
+                              <div
+                                className="bg-primary h-full"
+                                style={{
+                                  width: `${progress.finished ? 100 : (progress.position / progress.duration) * 100}%`
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {episodeCode(ep.seasonNumber, ep.episodeNumber)} · {ep.name}
+                          </p>
+                          <p className="text-muted-foreground line-clamp-2 text-xs">
+                            {ep.overview}
+                          </p>
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            {st.phase === 'searching' && 'Finding the best copy…'}
+                            {st.phase === 'buffering' &&
+                              (dl && dl.status !== 'pending_metadata' && dl.status !== 'queued'
+                                ? `Buffering ${Math.round(dl.progress * 100)}% · ${dl.numPeers} peers`
+                                : 'Connecting to peers…')}
+                            {st.phase === 'error' && (
+                              <span className="text-destructive">{st.message}</span>
+                            )}
+                            {st.phase === 'idle' && progress?.finished && 'Watched'}
+                            {st.phase === 'idle' &&
+                              !progress?.finished &&
+                              dl?.status === 'complete' &&
+                              'Downloaded'}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={
+                              vidcoreEpisode === ep.episodeNumber &&
+                              seasonNumber === ep.seasonNumber
+                                ? 'secondary'
+                                : 'outline'
                             }
-                            void searchEpisodeSources(ep)
-                          }}
-                        >
-                          Sources
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={busy}
-                          onClick={() => void playEpisode(ep)}
-                        >
-                          {busy ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <Play className="size-3.5" />
-                          )}
-                          {resume > 0 ? 'Resume' : 'Play'}
-                        </Button>
+                            onClick={() => setVidcoreEpisode(ep.episodeNumber)}
+                          >
+                            VidCore
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={sourcesFor === ep.id ? 'secondary' : 'outline'}
+                            onClick={() => {
+                              if (sourcesFor === ep.id) {
+                                setSourcesFor(null)
+                                return
+                              }
+                              void searchEpisodeSources(ep)
+                            }}
+                          >
+                            Sources
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="gap-1.5"
+                            disabled={busy}
+                            onClick={() => void playEpisode(ep)}
+                          >
+                            {busy ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Play className="size-3.5" />
+                            )}
+                            {resume > 0 ? 'Resume' : 'Play'}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    {sourcesFor === ep.id && (
-                      <MovieTorrentSourcesSection
-                        detailPresent
-                        torrentLoading={sourcesLoading}
-                        torrentData={sourcesData}
-                        rankedSources={rankedSources}
-                        addFeedback={sourceFeedback}
-                        addBusyMagnet={sourceBusyMagnet}
-                        onRefreshSources={() => void searchEpisodeSources(ep, true)}
-                        onQueueDownload={(row) => void queueEpisodeSource(ep, row)}
-                        onCopyMagnet={(uri) => {
-                          if (isValidMagnetUri(uri)) void navigator.clipboard.writeText(uri)
-                        }}
-                        onOpenDetails={(url) => {
-                          if (isSafeTorrentDetailsUrl(url)) void window.api.app.openExternal(url)
-                        }}
-                      />
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-      )}
+                      {sourcesFor === ep.id && (
+                        <MovieTorrentSourcesSection
+                          detailPresent
+                          torrentLoading={sourcesLoading}
+                          torrentData={sourcesData}
+                          rankedSources={rankedSources}
+                          addFeedback={sourceFeedback}
+                          addBusyMagnet={sourceBusyMagnet}
+                          onRefreshSources={() => void searchEpisodeSources(ep, true)}
+                          onQueueDownload={(row) => void queueEpisodeSource(ep, row)}
+                          onCopyMagnet={(uri) => {
+                            if (isValidMagnetUri(uri)) void navigator.clipboard.writeText(uri)
+                          }}
+                          onOpenDetails={(url) => {
+                            if (isSafeTorrentDetailsUrl(url)) void window.api.app.openExternal(url)
+                          }}
+                        />
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </DetailReveal>
 
       <NetworkNoticeDialog
         open={pendingNotice != null}

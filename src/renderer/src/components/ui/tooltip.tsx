@@ -1,6 +1,8 @@
 import * as React from 'react'
+import { useCallback } from 'react'
 import { Tooltip as TooltipPrimitive } from 'radix-ui'
 
+import { assignRef, useSurfaceMotion } from '@/lib/surface-motion'
 import { cn } from '@/lib/utils'
 
 function TooltipProvider({
@@ -21,15 +23,26 @@ function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimiti
 function TooltipContent({
   className,
   sideOffset = 6,
+  ref,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+  const { setHost, setSurface } = useSurfaceMotion('tooltip')
+  const nodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setHost(node)
+      setSurface(node)
+      assignRef(ref, node)
+    },
+    [ref, setHost, setSurface]
+  )
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
+        ref={nodeRef}
         className={cn(
-          'bg-popover text-popover-foreground z-50 max-w-xs origin-[--radix-tooltip-content-transform-origin] rounded-md border px-3 py-1.5 text-xs shadow-md',
+          't-layer-host t-tip bg-popover text-popover-foreground z-50 max-w-xs rounded-md border px-3 py-1.5 text-xs shadow-md',
           className
         )}
         {...props}

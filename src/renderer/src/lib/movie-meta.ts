@@ -4,6 +4,17 @@ export function releaseYearFromDate(releaseDate: string | null): number | null {
   return Number.isInteger(year) && year > 0 ? year : null
 }
 
+/** "2024 · 2h 10m", the same line the poster cards show. */
+export function movieBasics(releaseDate: string | null, runtime: number | null): string {
+  const year = releaseYearFromDate(releaseDate)
+  return [
+    year != null ? String(year) : null,
+    runtime != null && runtime > 0 ? formatRuntime(runtime) : null
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 export function formatRuntime(minutes: number): string {
   const rounded = Math.round(minutes)
   const hours = Math.floor(rounded / 60)

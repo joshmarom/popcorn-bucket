@@ -1,7 +1,6 @@
 import type { CatalogCastMember, CatalogTrailer } from '@shared/catalog'
 import { useState, type ReactElement } from 'react'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { PanelReveal, SlidingTabs } from '@/components/interaction-motion'
 import { embedliteTrailerSrc } from './movie/embedlite-trailer'
 
 export function TvCastTrailers({
@@ -12,32 +11,26 @@ export function TvCastTrailers({
   trailers: CatalogTrailer[]
 }): ReactElement {
   const [tab, setTab] = useState<'cast' | 'trailers'>('cast')
+  const [tabMoved, setTabMoved] = useState(false)
 
   return (
     <div className="space-y-4 border-t border-border pt-4">
-      <div className="flex flex-wrap gap-2 border-b border-border pb-2">
-        <Button
-          type="button"
-          variant={tab === 'cast' ? 'default' : 'ghost'}
-          size="sm"
-          className={cn(tab !== 'cast' && 'text-muted-foreground')}
-          onClick={() => setTab('cast')}
-        >
-          Cast
-        </Button>
-        <Button
-          type="button"
-          variant={tab === 'trailers' ? 'default' : 'ghost'}
-          size="sm"
-          className={cn(tab !== 'trailers' && 'text-muted-foreground')}
-          onClick={() => setTab('trailers')}
-        >
-          Trailers
-        </Button>
-      </div>
+      <SlidingTabs
+        label="Cast and trailers"
+        tabs={[
+          { id: 'cast', label: 'Cast' },
+          { id: 'trailers', label: 'Trailers' }
+        ]}
+        value={tab}
+        onChange={(next) => {
+          setTabMoved(true)
+          setTab(next)
+        }}
+      />
 
-      {tab === 'cast' &&
-        (cast.length > 0 ? (
+      {tab === 'cast' && (
+        <PanelReveal instant={!tabMoved}>
+        {cast.length > 0 ? (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {cast.map((person, index) => (
               <li key={`${person.name}-${index}`} className="flex min-w-0 items-center gap-3">
@@ -57,10 +50,13 @@ export function TvCastTrailers({
           </ul>
         ) : (
           <p className="text-muted-foreground text-sm">No cast listed.</p>
-        ))}
+        )}
+        </PanelReveal>
+      )}
 
-      {tab === 'trailers' &&
-        (trailers.length > 0 ? (
+      {tab === 'trailers' && (
+        <PanelReveal instant={!tabMoved}>
+        {trailers.length > 0 ? (
           <div className="relative min-w-0 w-full max-w-full">
             <div
               role="region"
@@ -98,7 +94,9 @@ export function TvCastTrailers({
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">No trailers available.</p>
-        ))}
+        )}
+        </PanelReveal>
+      )}
     </div>
   )
 }

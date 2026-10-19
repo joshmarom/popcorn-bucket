@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { Bookmark, BookmarkCheck, Loader2, Play } from 'lucide-react'
 import type { RankedTorrentSource } from '@shared/release-ranking'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
+import { IconSwap } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { releaseSummary } from '@/lib/release-summary'
@@ -103,7 +104,11 @@ export function QuickPlayBar({
         aria-pressed={inWatchlist}
         onClick={onToggleWatchlist}
       >
-        {inWatchlist ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
+        <IconSwap
+          state={inWatchlist ? 'b' : 'a'}
+          a={<Bookmark className="size-4" />}
+          b={<BookmarkCheck className="size-4" />}
+        />
         {inWatchlist ? 'In my list' : 'My list'}
       </Button>
       {(quickPlay.phase === 'no-sources' || quickPlay.phase === 'error') && (

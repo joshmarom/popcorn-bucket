@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import type { DiscoverCollection, DiscoverMovieItem } from '@shared/discovery'
 import { Button } from '@/components/ui/button'
-import { MovieGrid } from '@/components/movie-grid'
+import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
 
 export function CollectionPage(): ReactElement {
   const { collectionId } = useParams<{ collectionId: string }>()
@@ -68,7 +68,7 @@ export function CollectionPage(): ReactElement {
             ) : null}
           </div>
         ) : null}
-        {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
+        {loading && movies.length === 0 && !error && <PosterGridPlaceholder />}
         {error && (
           <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
             {error}
