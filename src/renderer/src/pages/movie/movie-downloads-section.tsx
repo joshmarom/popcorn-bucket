@@ -52,7 +52,7 @@ export function MovieDownloadsSection({
       )}
       {downloads.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No downloads yet. Use Download on an indexer result below.
+          No downloads yet. Use Play on a source below.
         </p>
       ) : (
         <div className="space-y-3">
