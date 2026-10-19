@@ -59,14 +59,12 @@ export function CollectionPage(): ReactElement {
         </Button>
         {collection ? (
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{collection.name}</h1>
-            <p className="text-muted-foreground text-sm">
+            <h1 className="type-display">{collection.name}</h1>
+            <p className="type-meta text-muted-foreground">
               {collection.movieCount} {collection.movieCount === 1 ? 'movie' : 'movies'}
             </p>
             {collection.overview ? (
-              <p className="text-muted-foreground max-w-3xl text-sm leading-relaxed">
-                {collection.overview}
-              </p>
+              <p className="type-prose text-muted-foreground">{collection.overview}</p>
             ) : null}
           </div>
         ) : null}

@@ -131,12 +131,9 @@ function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
   const movies = useMovieListFacts(rail.movies)
   const nameQ = encodeURIComponent(rail.genre.name)
   return (
-    <section className="space-y-2" aria-labelledby={`genre-rail-${rail.genre.id}`}>
+    <section className="space-y-4" aria-labelledby={`genre-rail-${rail.genre.id}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
-        <h3
-          id={`genre-rail-${rail.genre.id}`}
-          className="text-muted-foreground text-sm font-medium tracking-wide uppercase"
-        >
+        <h3 id={`genre-rail-${rail.genre.id}`} className="type-kicker">
           {rail.genre.name}
         </h3>
         <Button
@@ -476,15 +473,13 @@ export function HomePage(): ReactElement {
         )}
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
+      <div className="mx-auto max-w-6xl space-y-12 px-4 pt-8">
         <div
           ref={listHeadingRef}
           className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-              {list.heading}
-            </h2>
+            <h2 className="type-kicker">{list.heading}</h2>
             {!showingSearch && (
               <Button
                 type="button"
@@ -604,13 +599,11 @@ export function HomePage(): ReactElement {
             )}
           </>
         )}
-        {!showingSearch && <DiscoveryRails className="mt-12" />}
+        {!showingSearch && <DiscoveryRails />}
         {!showingSearch && (
-          <div className="border-border mt-12 space-y-10 border-t pt-10">
+          <div className="border-border space-y-12 border-t pt-12">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-                Browse by genre
-              </h2>
+              <h2 className="type-kicker">Browse by genre</h2>
               <Button
                 type="button"
                 variant="outline"

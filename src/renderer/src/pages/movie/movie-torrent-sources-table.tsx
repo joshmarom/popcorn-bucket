@@ -25,7 +25,7 @@ export function MovieTorrentSourcesTable({
         role="region"
         aria-label="Torrent sources"
         tabIndex={0}
-        className="max-h-[min(55vh,28rem)] bg-black/30 overflow-auto rounded-md border border-border [scrollbar-width:thin]"
+        className="bg-card/60 max-h-[min(55vh,28rem)] overflow-auto rounded-md border border-border [scrollbar-width:thin]"
       >
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10">

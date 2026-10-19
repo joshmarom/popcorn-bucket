@@ -97,13 +97,13 @@ export function GenreBrowsePage(): ReactElement {
   useScrollToOnPageChange(headingRef, currentPage)
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 pb-12">
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 pb-16">
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="outline" size="sm" type="button" asChild>
           <Link to="/">Back</Link>
         </Button>
       </div>
-      <h1 ref={headingRef} className="scroll-mt-4 text-2xl font-semibold tracking-tight">
+      <h1 ref={headingRef} className="type-page scroll-mt-4">
         {heading}
       </h1>
       <p className="text-muted-foreground text-sm">

@@ -131,19 +131,19 @@ export function MoviePageShell({
   return (
     <div className="relative flex min-h-full flex-col">
       <BackdropSlideshow key={urls.join('\n')} urls={urls} />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 to-black/90" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent to-background" />
       <Button
         variant="outline"
         size="icon"
         type="button"
-        className="absolute top-4 left-4 z-10 size-9 border-white/25 bg-black/55 text-white shadow-md backdrop-blur-sm hover:bg-black/75 hover:text-white"
+        className="absolute top-4 left-4 z-20 size-9 border-border bg-background/80 text-foreground shadow-md backdrop-blur-sm hover:bg-background hover:text-foreground"
         aria-label="Go back"
         onClick={onBack}
       >
         <ArrowLeft className="size-4" aria-hidden />
       </Button>
       <div className="relative z-10 my-auto flex w-full justify-center px-4 py-8 sm:px-6">
-        <div className="w-full max-w-6xl rounded-2xl bg-black/60 p-8 pb-12 backdrop-blur-sm">
+        <div className="border-border bg-background/85 w-full max-w-6xl rounded-2xl border p-8 pb-12 shadow-lg backdrop-blur-sm">
           {children}
         </div>
       </div>

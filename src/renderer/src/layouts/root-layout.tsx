@@ -9,7 +9,7 @@ import popcornUrl from '../../../../resources/popcorn.png?url'
 
 function navIconClassName(isActive: boolean): string {
   return cn(
-    'flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background hover:bg-accent hover:text-accent-foreground',
+    'flex size-12 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar hover:bg-accent hover:text-accent-foreground',
     isActive && 'bg-accent text-foreground'
   )
 }
@@ -66,7 +66,7 @@ function SidebarHoverLabel({
 export function RootLayout(): ReactElement {
   return (
     <div className="bg-background flex h-screen overflow-hidden border-border">
-      <aside className="border-border border-r flex h-full min-h-0 w-[4.5rem] shrink-0 flex-col items-center py-3">
+      <aside className="border-sidebar-border bg-sidebar flex h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4">
         <div className="flex shrink-0 flex-col items-center">
           <SidebarHoverLabel label="Home">
             {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
@@ -103,7 +103,7 @@ export function RootLayout(): ReactElement {
                 className={({ isActive }) => navIconClassName(isActive)}
                 aria-label="Library"
               >
-                <Library className="size-5" />
+                <Library className="size-6" />
               </NavLink>
             )}
           </SidebarHoverLabel>
@@ -119,7 +119,7 @@ export function RootLayout(): ReactElement {
                 className={({ isActive }) => navIconClassName(isActive)}
                 aria-label="TV shows"
               >
-                <Tv className="size-5" />
+                <Tv className="size-6" />
               </NavLink>
             )}
           </SidebarHoverLabel>
@@ -135,7 +135,7 @@ export function RootLayout(): ReactElement {
                 className={({ isActive }) => navIconClassName(isActive)}
                 aria-label="Downloads"
               >
-                <Download className="size-5" />
+                <Download className="size-6" />
               </NavLink>
             )}
           </SidebarHoverLabel>
@@ -151,7 +151,7 @@ export function RootLayout(): ReactElement {
                 className={({ isActive }) => navIconClassName(isActive)}
                 aria-label="Settings"
               >
-                <Settings className="size-5" />
+                <Settings className="size-6" />
               </NavLink>
             )}
           </SidebarHoverLabel>

@@ -9,12 +9,9 @@ import { cn } from '@/lib/utils'
 function GenreRailRow({ rail }: { rail: TvGenreRail }): ReactElement {
   const nameQ = encodeURIComponent(rail.genre.name)
   return (
-    <section className="space-y-2" aria-labelledby={`tv-genre-rail-${rail.genre.id}`}>
+    <section className="space-y-4" aria-labelledby={`tv-genre-rail-${rail.genre.id}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
-        <h3
-          id={`tv-genre-rail-${rail.genre.id}`}
-          className="text-muted-foreground text-sm font-medium tracking-wide uppercase"
-        >
+        <h3 id={`tv-genre-rail-${rail.genre.id}`} className="type-kicker">
           {rail.genre.name}
         </h3>
         <Button
@@ -66,11 +63,9 @@ export function TvGenreRails(): ReactElement {
   }, [])
 
   return (
-    <div className="border-border mt-12 space-y-10 border-t pt-10">
+    <div className="border-border mt-12 space-y-12 border-t pt-12">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-          Browse by genre
-        </h2>
+        <h2 className="type-kicker">Browse by genre</h2>
         <Button
           type="button"
           variant="outline"

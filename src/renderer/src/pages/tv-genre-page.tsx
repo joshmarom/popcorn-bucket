@@ -72,11 +72,11 @@ export function TvGenrePage(): ReactElement {
   const rangeEnd = rangeStart === 0 ? 0 : rangeStart + items.length - 1
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 pb-12">
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 pb-16">
       <Button variant="outline" size="sm" type="button" asChild>
         <Link to="/tv">Back</Link>
       </Button>
-      <h1 ref={headingRef} className="scroll-mt-4 text-2xl font-semibold tracking-tight">
+      <h1 ref={headingRef} className="type-page scroll-mt-4">
         {name || 'TV genre'}
       </h1>
       <p className="text-muted-foreground text-sm">Most popular on TMDB first.</p>

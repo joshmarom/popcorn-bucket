@@ -36,11 +36,11 @@ export function MovieOverviewTab({
       </div>
       <div className="min-w-0 space-y-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">{detail.title}</h1>
+          <h1 className="type-display">{detail.title}</h1>
           {detail.tagline && (
-            <p className="text-muted-foreground mt-2 text-sm italic">{detail.tagline}</p>
+            <p className="type-tagline text-muted-foreground mt-2">{detail.tagline}</p>
           )}
-          <p className="text-muted-foreground mt-2 text-sm">
+          <p className="type-meta text-muted-foreground mt-2">
             {[detail.releaseDate, detail.runtime != null ? `${detail.runtime} min` : null]
               .filter(Boolean)
               .join(' · ')}
@@ -62,7 +62,7 @@ export function MovieOverviewTab({
             ))}
           </div>
         )}
-        <p className="text-foreground max-w-prose leading-relaxed">{detail.overview}</p>
+        <p className="type-prose text-foreground">{detail.overview}</p>
 
         <div className="space-y-4 border-t border-border pt-4">
           <div className="flex flex-wrap gap-2 border-b border-border pb-2">

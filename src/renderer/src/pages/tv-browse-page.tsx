@@ -189,7 +189,7 @@ export function TvBrowsePage(): ReactElement {
     <div className="pb-8">
       <div className="bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10 border-b border-border px-4 py-4 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">TV shows</h1>
+          <h1 className="type-page">TV shows</h1>
           <SearchAutocomplete
             className="w-full max-w-md"
             placeholder="Search TV shows…"
@@ -205,11 +205,9 @@ export function TvBrowsePage(): ReactElement {
         )}
       </div>
 
-      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4">
+      <div className="mx-auto max-w-6xl space-y-12 px-4 pt-8">
         <div ref={headingRef} className="flex scroll-mt-24 flex-wrap items-center gap-2">
-          <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-            {searching ? 'Results' : 'Trending'}
-          </h2>
+          <h2 className="type-kicker">{searching ? 'Results' : 'Trending'}</h2>
           {!searching && (
             <Button
               type="button"

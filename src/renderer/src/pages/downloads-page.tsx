@@ -249,10 +249,10 @@ export function DownloadsPage(): ReactElement {
   const deleteRows = deleteTarget?.kind === 'one' ? [deleteTarget.row] : watched
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-4 md:p-6">
+    <div className="mx-auto max-w-4xl space-y-12 p-4 md:p-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-foreground text-2xl font-semibold tracking-tight">Downloads</h1>
+          <h1 className="type-page text-foreground">Downloads</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Finished movies stop sharing and play from your disk.
           </p>
@@ -285,9 +285,7 @@ export function DownloadsPage(): ReactElement {
 
       {active.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
-            In progress
-          </h2>
+          <h2 className="type-kicker">In progress</h2>
           {active.map(renderRow)}
         </section>
       )}
@@ -295,7 +293,7 @@ export function DownloadsPage(): ReactElement {
       {library.length > 0 && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
+            <h2 className="type-kicker">
               Library · {library.length} movie{library.length === 1 ? '' : 's'} ·{' '}
               {formatBytes(libraryBytes)}
             </h2>

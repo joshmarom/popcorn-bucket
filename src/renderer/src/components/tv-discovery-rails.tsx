@@ -24,7 +24,7 @@ function ShowListRail<T extends TvShowListItem & { rank?: number | null }>({
   const { items } = useDiscoverList(load, id, includeShow)
   if (items.length === 0) return null
   return (
-    <section className="space-y-2" aria-labelledby={id}>
+    <section className="space-y-4" aria-labelledby={id}>
       <RailHeading id={id} title={title} subtitle={subtitle} />
       <ShowRail shows={items} />
     </section>
@@ -34,7 +34,7 @@ function ShowListRail<T extends TvShowListItem & { rank?: number | null }>({
 /** TV rails from TorrentClaw and TMDB. Each rail hides itself when its source has nothing. */
 export function TvDiscoveryRails({ className }: { className?: string }): ReactElement {
   return (
-    <div className={cn('space-y-10', className)}>
+    <div className={cn('space-y-12', className)}>
       <ShowListRail
         id="tv-popular"
         title="Popular on torrents"

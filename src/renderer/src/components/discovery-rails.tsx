@@ -32,10 +32,10 @@ export function RailHeading({
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 id={id} className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
+        <h3 id={id} className="type-kicker">
           {title}
         </h3>
-        {subtitle ? <span className="text-muted-foreground/70 text-xs">{subtitle}</span> : null}
+        {subtitle ? <span className="text-muted-foreground text-xs">{subtitle}</span> : null}
       </div>
       {children}
     </div>
@@ -80,7 +80,7 @@ function ListRail({
   const { items } = useDiscoverList(load, id, shouldIncludeCatalogListItem)
   if (items.length === 0) return null
   return (
-    <section className="space-y-2" aria-labelledby={id}>
+    <section className="space-y-4" aria-labelledby={id}>
       <RailHeading id={id} title={title} subtitle={subtitle} />
       <MovieRail items={items} />
     </section>
@@ -136,7 +136,7 @@ export function StreamingTopRail<T>({
   const label = STREAMING_SERVICES.find((s) => s.id === service)?.label ?? ''
 
   return (
-    <section className="space-y-2" aria-labelledby={id}>
+    <section className="space-y-4" aria-labelledby={id}>
       <RailHeading id={id} title={`Top 10 on ${label}${titleSuffix}`}>
         <div role="tablist" aria-label="Streaming service" className="flex flex-wrap gap-1">
           {services.map((s) => (
@@ -172,7 +172,7 @@ function CollectionCard({ c }: { c: DiscoverCollection }): ReactElement {
       to={`/collection/${c.id}`}
       className="group block rounded-lg text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/60"
     >
-      <div className="bg-muted ring-border/70 relative aspect-[2/3] overflow-hidden rounded-lg shadow-sm ring-1 transition duration-200 ease-out group-hover:-translate-y-1 group-hover:shadow-xl">
+      <div className="bg-muted ring-border/70 relative aspect-[2/3] overflow-hidden rounded-lg shadow-sm ring-1 transition duration-200 ease-out group-hover:-translate-y-1 group-hover:shadow-md">
         {c.posterUrl ? (
           <img
             className="size-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.04]"
@@ -186,12 +186,15 @@ function CollectionCard({ c }: { c: DiscoverCollection }): ReactElement {
             <Layers aria-hidden className="size-6" />
           </div>
         )}
-        <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur-sm">
+        <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums shadow-sm backdrop-blur-sm">
           <Layers aria-hidden className="size-3" />
           {c.movieCount}
         </span>
       </div>
-      <h3 className="mt-1.5 line-clamp-2 px-0.5 text-xs leading-snug font-medium" title={c.name}>
+      <h3
+        className="mt-1.5 line-clamp-2 px-0.5 text-sm leading-snug font-medium text-balance"
+        title={c.name}
+      >
         {c.name.replace(/\s+Collection$/i, '')}
       </h3>
     </Link>
@@ -214,7 +217,7 @@ function CollectionsRail(): ReactElement | null {
   }, [])
   if (collections.length === 0) return null
   return (
-    <section className="space-y-2" aria-labelledby="discover-collections">
+    <section className="space-y-4" aria-labelledby="discover-collections">
       <RailHeading id="discover-collections" title="Collections" subtitle="Sagas and series" />
       <ul className={MOVIE_RAIL_CLASS}>
         {collections.map((c) => (
@@ -230,7 +233,7 @@ function CollectionsRail(): ReactElement | null {
 /** Home rails from TorrentClaw. Each rail hides itself when TorrentClaw has nothing for it. */
 export function DiscoveryRails({ className }: { className?: string }): ReactElement {
   return (
-    <div className={cn('space-y-10', className)}>
+    <div className={cn('space-y-12', className)}>
       <ListRail
         id="discover-popular"
         title="Popular on torrents"

@@ -53,7 +53,7 @@ export function UntrackedDownloadsSection({
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
+        <h2 className="type-kicker">
           Found on disk · {items.length} · {formatBytes(total)}
         </h2>
         <p className="text-muted-foreground mt-1 text-xs">

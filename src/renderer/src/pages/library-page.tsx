@@ -193,7 +193,7 @@ function Section({
             <Icon className="size-4" aria-hidden />
           </span>
           <div className="min-w-0">
-            <h2 id={id} className="text-base font-semibold tracking-tight">
+            <h2 id={id} className="type-section">
               {title}
             </h2>
             <p className="text-muted-foreground text-xs">{description}</p>
@@ -226,13 +226,13 @@ export function LibraryPage(): ReactElement {
     data != null && data.continueMovies.length > 0 && data.continueShows.length > 0
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 pb-16">
+    <div className="mx-auto max-w-6xl px-4 py-12 pb-16">
       <header className="flex items-center gap-4">
         <div className="bg-card border-border flex size-12 shrink-0 items-center justify-center rounded-2xl border">
           <Library className="size-6" aria-hidden />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Library</h1>
+          <h1 className="type-page">Library</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Pick up where you left off, and everything you saved for later.
           </p>
@@ -255,8 +255,8 @@ export function LibraryPage(): ReactElement {
       )}
 
       {data != null && !empty && (
-        <div className="mt-8 space-y-10">
-          <div className="grid max-w-xl grid-cols-3 gap-3">
+        <div className="mt-12 space-y-12">
+          <div className="grid max-w-xl grid-cols-3 gap-4">
             <Stat value={continueCount} label="In progress" />
             <Stat value={data.listMovies.length} label="My list" />
             <Stat value={data.myShows.length} label="My shows" />
@@ -273,21 +273,13 @@ export function LibraryPage(): ReactElement {
               <div className="space-y-8">
                 {data.continueMovies.length > 0 && (
                   <div className="space-y-3">
-                    {bothContinue && (
-                      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                        Movies
-                      </h3>
-                    )}
+                    {bothContinue && <h3 className="type-kicker">Movies</h3>}
                     <MoviePosterGrid movies={data.continueMovies} />
                   </div>
                 )}
                 {data.continueShows.length > 0 && (
                   <div className="space-y-3">
-                    {bothContinue && (
-                      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                        Shows
-                      </h3>
-                    )}
+                    {bothContinue && <h3 className="type-kicker">Shows</h3>}
                     <ShowPosterGrid shows={data.continueShows} />
                   </div>
                 )}

@@ -56,13 +56,13 @@ export function TorrentQualityBadge({
       <TooltipTrigger asChild>
         <span className="inline-flex items-center gap-1">
           {quality.verified ? (
-            <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[11px]">
+            <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-xs">
               <BadgeCheck aria-hidden className="size-3" />
               Verified
             </Badge>
           ) : null}
           {quality.score != null ? (
-            <span className="text-muted-foreground text-[11px] tabular-nums">{quality.score}</span>
+            <span className="text-muted-foreground text-xs tabular-nums">{quality.score}</span>
           ) : null}
         </span>
       </TooltipTrigger>

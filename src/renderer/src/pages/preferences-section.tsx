@@ -24,8 +24,8 @@ function NumberField({
   onChange: (n: number) => void
 }): ReactElement {
   return (
-    <div className="space-y-1">
-      <label className="text-sm font-medium" htmlFor={id}>
+    <div className="space-y-2">
+      <label className="type-label" htmlFor={id}>
         {label}
       </label>
       <Input
@@ -77,11 +77,11 @@ export function PreferencesSection(): ReactElement {
   }
 
   return (
-    <section className="space-y-4 border-t border-border pt-6">
-      <h2 className="text-lg font-semibold tracking-tight">Playback and downloads</h2>
+    <section className="space-y-6 border-t border-border pt-8">
+      <h2 className="type-section">Playback and downloads</h2>
 
-      <div className="space-y-1">
-        <label className="text-sm font-medium" htmlFor="pref-resolution">
+      <div className="space-y-2">
+        <label className="type-label" htmlFor="pref-resolution">
           Preferred quality
         </label>
         <select
@@ -100,8 +100,8 @@ export function PreferencesSection(): ReactElement {
         <p className="text-muted-foreground text-xs">Play picks the closest match to this.</p>
       </div>
 
-      <div className="space-y-1">
-        <span className="text-sm font-medium">Download folder</span>
+      <div className="space-y-2">
+        <span className="type-label">Download folder</span>
         <div className="flex items-center gap-2">
           <p className="bg-muted min-w-0 flex-1 truncate rounded-md px-3 py-2 font-mono text-xs">
             {prefs.downloadDir || defaultDir}
@@ -155,8 +155,8 @@ export function PreferencesSection(): ReactElement {
         />
       </div>
 
-      <div className="space-y-1">
-        <label className="text-sm font-medium" htmlFor="pref-sub-lang">
+      <div className="space-y-2">
+        <label className="type-label" htmlFor="pref-sub-lang">
           Subtitle language
         </label>
         <select
