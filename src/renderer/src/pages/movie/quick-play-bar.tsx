@@ -112,7 +112,7 @@ export function QuickPlayBar({
             <p>
               No good copy found.{' '}
               <button type="button" className="text-primary underline" onClick={onUseVidking}>
-                Try VidKing
+                Try VidCore
               </button>{' '}
               or{' '}
               <button type="button" className="text-primary underline" onClick={onShowSources}>

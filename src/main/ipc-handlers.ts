@@ -290,7 +290,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('app:openVidkingEmbed', (evt, raw: unknown): void => {
     if (typeof raw !== 'string' || !isVidkingEmbedUrl(raw)) {
-      throw new Error('Invalid VidSrc embed URL.')
+      throw new Error('Invalid VidCore embed URL.')
     }
     const parent = BrowserWindow.fromWebContents(evt.sender)
     openOrFocusVidkingEmbed(raw, parent)

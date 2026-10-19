@@ -14,6 +14,7 @@ import {
   type TvShowDetails
 } from '@shared/tv'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
+import { VidcorePlayer } from '@/components/vidcore-player'
 import { Button } from '@/components/ui/button'
 import { acknowledgeNetworkNotice, hasAcknowledgedNetworkNotice } from '@/lib/network-notice'
 import { cn } from '@/lib/utils'
@@ -55,6 +56,8 @@ export function TvShowPage(): ReactElement {
   const [show, setShow] = useState<TvShowDetails | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [seasonNumber, setSeasonNumber] = useState<number | null>(null)
+  const [vidcoreEpisode, setVidcoreEpisode] = useState<number | null>(null)
+  const vidcoreAnchorRef = useRef<HTMLDivElement>(null)
   const [season, setSeason] = useState<TvSeasonDetails | null>(null)
   const [downloads, setDownloads] = useState<MovieTorrentDownloadSnapshot[]>([])
   const [history, setHistory] = useState<Map<number, WatchProgress>>(new Map())
@@ -79,6 +82,7 @@ export function TvShowPage(): ReactElement {
 
   useEffect(() => {
     if (!Number.isFinite(showId)) return
+    setVidcoreEpisode(null)
     void window.api.tv.getShow(showId).then((res) => {
       if (!res.ok) {
         setError(res.error)
@@ -233,6 +237,16 @@ export function TvShowPage(): ReactElement {
     return show.seasons.find((s) => s.seasonNumber > lastPlayed.seasonNumber)?.seasonNumber ?? null
   }, [show, lastPlayed, season, nextEpisode, history])
 
+  useEffect(() => {
+    if (vidcoreEpisode == null) return
+    vidcoreAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [vidcoreEpisode, seasonNumber])
+
+  const vidcoreTarget =
+    vidcoreEpisode != null && season?.seasonNumber === seasonNumber
+      ? (season.episodes.find((ep) => ep.episodeNumber === vidcoreEpisode) ?? null)
+      : null
+
   if (!Number.isFinite(showId)) {
     return (
       <MoviePageShell backdropImageUrl={null} onBack={() => navigate(-1)}>
@@ -302,6 +316,19 @@ export function TvShowPage(): ReactElement {
             </div>
           )}
 
+          {vidcoreEpisode != null && seasonNumber != null && (
+            <div ref={vidcoreAnchorRef}>
+              <VidcorePlayer
+                title={
+                  vidcoreTarget
+                    ? `${show.name} · ${episodeCode(vidcoreTarget.seasonNumber, vidcoreTarget.episodeNumber)} · ${vidcoreTarget.name}`
+                    : `${show.name} · ${episodeCode(seasonNumber, vidcoreEpisode)}`
+                }
+                src={`https://vidcore.org/embed/tv/${show.id}/${seasonNumber}/${vidcoreEpisode}`}
+              />
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2 border-b border-border pb-2">
             {show.seasons.map((s) => (
               <Button
@@ -310,7 +337,10 @@ export function TvShowPage(): ReactElement {
                 size="sm"
                 variant={s.seasonNumber === seasonNumber ? 'default' : 'ghost'}
                 className={cn(s.seasonNumber !== seasonNumber && 'text-muted-foreground')}
-                onClick={() => setSeasonNumber(s.seasonNumber)}
+                onClick={() => {
+                  if (s.seasonNumber !== seasonNumber) setVidcoreEpisode(null)
+                  setSeasonNumber(s.seasonNumber)
+                }}
               >
                 {s.name}
               </Button>
@@ -368,6 +398,18 @@ export function TvShowPage(): ReactElement {
                           'Downloaded'}
                       </p>
                     </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
+                          ? 'secondary'
+                          : 'outline'
+                      }
+                      onClick={() => setVidcoreEpisode(ep.episodeNumber)}
+                    >
+                      VidCore
+                    </Button>
                     <Button
                       type="button"
                       size="sm"
