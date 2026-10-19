@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react'
+import { Suspense, useState, type ReactElement } from 'react'
 import { ScrollContainerContext } from '@/lib/scroll-container'
 import { NavLink, Outlet } from 'react-router-dom'
 import { ScreenTransitionProvider } from '@/lib/screen-transition'
@@ -170,7 +170,15 @@ export function RootLayout(): ReactElement {
           className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain"
         >
           <ScrollContainerContext.Provider value={scrollElement}>
-            <Outlet />
+            <Suspense
+              fallback={
+                <div className="text-muted-foreground p-8 text-sm" aria-busy="true">
+                  Loading…
+                </div>
+              }
+            >
+              <Outlet />
+            </Suspense>
           </ScrollContainerContext.Provider>
         </main>
       </div>

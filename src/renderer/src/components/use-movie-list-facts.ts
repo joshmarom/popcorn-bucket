@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CatalogMovieListFacts, CatalogMovieListItem } from '@shared/catalog'
 
 const CHUNK = 40
@@ -12,16 +12,25 @@ function needsFacts(item: CatalogMovieListItem): boolean {
 }
 
 async function loadFacts(ids: number[]): Promise<CatalogMovieListFacts[]> {
-  const facts: CatalogMovieListFacts[] = []
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    try {
-      const res = await window.api.catalog.listFacts(ids.slice(i, i + CHUNK))
-      if (res.ok) facts.push(...res.facts)
-    } catch {
-      // This chunk stays blank; the cards keep the list payload.
-    }
-  }
-  return facts
+  const slices: number[][] = []
+  for (let i = 0; i < ids.length; i += CHUNK) slices.push(ids.slice(i, i + CHUNK))
+  const batches = await Promise.all(
+    slices.map(async (slice) => {
+      try {
+        const res = await window.api.catalog.listFacts(slice)
+        return res.ok ? res.facts : []
+      } catch {
+        return []
+      }
+    })
+  )
+  return batches.flat()
+}
+
+export async function primeMovieListFacts(ids: number[]): Promise<void> {
+  const missing = ids.filter((id) => !cache.has(id))
+  if (missing.length === 0) return
+  for (const fact of await loadFacts(missing)) cache.set(fact.id, fact)
 }
 
 function deliver(id: number, fact: CatalogMovieListFacts | null): void {
@@ -38,20 +47,17 @@ function scheduleFlush(): void {
     flushScheduled = false
     const ids = [...waiters.keys()]
     if (ids.length === 0) return
-    void (async (): Promise<void> => {
-      try {
-        for (let i = 0; i < ids.length; i += CHUNK) {
-          const slice = ids.slice(i, i + CHUNK)
-          const loaded = await loadFacts(slice)
-          const byId = new Map(loaded.map((fact) => [fact.id, fact]))
-          for (const id of slice) deliver(id, byId.get(id) ?? null)
-        }
-      } catch {
+    void loadFacts(ids).then(
+      (loaded) => {
+        const byId = new Map(loaded.map((fact) => [fact.id, fact]))
+        for (const id of ids) deliver(id, byId.get(id) ?? null)
+      },
+      () => {
         for (const id of ids) {
           if (waiters.has(id)) deliver(id, null)
         }
       }
-    })()
+    )
   })
 }
 
@@ -103,14 +109,32 @@ export function useMovieListFacts<T extends CatalogMovieListItem>(items: T[]): T
     }
   }, [missingKey])
 
-  return items.map((item) => {
-    const fact = facts.get(item.id) ?? cache.get(item.id)
-    if (!fact) return item
-    return {
-      ...item,
-      runtime: item.runtime ?? fact.runtime,
-      genres: item.genres.length > 0 ? item.genres : fact.genres,
-      voteAverage: item.voteAverage ?? fact.voteAverage
-    }
-  })
+  const signature = `${items.map((item) => stableValue(item)).join('\n')}\n${stableValue(
+    items.map((item) => facts.get(item.id) ?? cache.get(item.id) ?? null)
+  )}`
+  const rows = useMemo(() => {
+    return items.map((item) => {
+      const fact = facts.get(item.id) ?? cache.get(item.id)
+      if (!fact) return item
+      return {
+        ...item,
+        runtime: item.runtime ?? fact.runtime,
+        genres: item.genres.length > 0 ? item.genres : fact.genres,
+        voteAverage: item.voteAverage ?? fact.voteAverage
+      }
+    })
+    // signature covers the list payload and loaded facts, so unchanged renders reuse these rows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature])
+  return rows
+}
+
+function stableValue(value: unknown): string {
+  if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(stableValue).join(',')}]`
+  const record = value as Record<string, unknown>
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${key}:${stableValue(record[key])}`)
+    .join(',')}}`
 }

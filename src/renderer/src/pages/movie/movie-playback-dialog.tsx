@@ -11,6 +11,21 @@ import {
   type MediaPlayerInstance
 } from '@vidstack/react'
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default'
+import '@vidstack/react/player/styles/default/theme.css'
+import '@vidstack/react/player/styles/default/layouts/video.css'
+
+export type MoviePlaybackDialogProps = {
+  open: boolean
+  playUrl: string | null
+  playLabel: string
+  playSubtitles: TorrentSubtitleTrack[]
+  playError: string | null
+  startSeconds: number
+  onOpenChange: (open: boolean) => void
+  onPlayerError: (detail: MediaErrorDetail) => void
+  /** Called every few seconds and on close with the current position. */
+  onProgress: (position: number, duration: number) => void
+}
 
 function isLocalAppStreamUrl(url: string): boolean {
   return /^https?:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url) || url.startsWith('pb-media:')
@@ -26,18 +41,7 @@ export function MoviePlaybackDialog({
   onOpenChange,
   onPlayerError,
   onProgress
-}: {
-  open: boolean
-  playUrl: string | null
-  playLabel: string
-  playSubtitles: TorrentSubtitleTrack[]
-  playError: string | null
-  startSeconds: number
-  onOpenChange: (open: boolean) => void
-  onPlayerError: (detail: MediaErrorDetail) => void
-  /** Called every few seconds and on close with the current position. */
-  onProgress: (position: number, duration: number) => void
-}): ReactElement {
+}: MoviePlaybackDialogProps): ReactElement {
   const playerRef = useRef<MediaPlayerInstance>(null)
   const lastReport = useRef(0)
   const report = (force: boolean): void => {

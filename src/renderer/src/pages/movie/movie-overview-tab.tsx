@@ -9,7 +9,7 @@ import {
   partStyle,
   posterStyle,
   titleStyle,
-  useScreenTransition
+  useActivePoster
 } from '@/lib/screen-transition'
 import { embedliteTrailerSrc } from './embedlite-trailer'
 import type { OverviewSubTab } from './movie-types'
@@ -25,7 +25,7 @@ export function MovieOverviewTab({
   onOverviewSubTabChange: (t: OverviewSubTab) => void
   posterActions?: ReactNode
 }): ReactElement {
-  const { poster } = useScreenTransition()
+  const poster = useActivePoster()
   const [subtabMoved, setSubtabMoved] = useState(false)
   const posterName = `poster-movie-${detail.id}`
   const headingName = `title-movie-${detail.id}`

@@ -1,13 +1,20 @@
-import { useContext, useEffect, useMemo, useState, type ReactElement } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { DetailReveal, MovieDetailPlaceholder } from '@/components/detail-placeholder'
 import { useDetailReveal } from '@/hooks/use-detail-reveal'
 import { PanelReveal } from '@/components/interaction-motion'
 import { resumePosition } from '@shared/watch-history'
 import { useLocation, useParams } from 'react-router-dom'
-import { partStyle, posterStyle, titleStyle, useScreenTransition } from '@/lib/screen-transition'
+import {
+  partStyle,
+  posterStyle,
+  titleStyle,
+  useActivePoster,
+  useScreenTransition
+} from '@/lib/screen-transition'
 import type { MediaErrorDetail } from '@vidstack/react'
 import { useShallow } from 'zustand/react/shallow'
-import { createMoviePageStore, getRankedSources } from './movie-page-store'
+import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
+import { createMoviePageStore, getRankedSources, type QuickPlayState } from './movie-page-store'
 import { QuickPlayBar } from './quick-play-bar'
 import { MoviePageStoreContext, useMoviePageStore } from './movie-page-store-context'
 import { DeleteDownloadDialog } from './delete-download-dialog'
@@ -15,20 +22,135 @@ import { MovieDetailTabs } from './movie-detail-tabs'
 import { MovieDownloadsSection } from './movie-downloads-section'
 import { MovieOverviewTab } from './movie-overview-tab'
 import { MoviePageShell } from './movie-page-shell'
-import { MoviePlaybackDialog } from './movie-playback-dialog'
+import { LazyMoviePlaybackDialog } from './lazy-movie-playback-dialog'
 import { MovieTorrentSourcesSection } from './movie-torrent-sources-section'
 import { MovieVidkingTab } from './movie-vidking-tab'
 import { NetworkNoticeDialog } from './network-notice-dialog'
+import type { RankedTorrentSource } from '@shared/release-ranking'
+
+function pickExistingDownload(
+  downloads: MovieTorrentDownloadSnapshot[]
+): MovieTorrentDownloadSnapshot | null {
+  return (
+    downloads.find((d) => d.status === 'complete' && d.canPlay) ??
+    downloads.find((d) => d.status !== 'error') ??
+    null
+  )
+}
+
+function pickBufferingDownload(
+  downloads: MovieTorrentDownloadSnapshot[],
+  quickPlay: QuickPlayState
+): MovieTorrentDownloadSnapshot | null {
+  if (quickPlay.phase !== 'buffering') return null
+  return downloads.find((d) => d.downloadId === quickPlay.downloadId) ?? null
+}
+
+function ConnectedQuickPlayBar({
+  best,
+  resumeSeconds,
+  inWatchlist,
+  onToggleWatchlist
+}: {
+  best: RankedTorrentSource | null
+  resumeSeconds: number
+  inWatchlist: boolean
+  onToggleWatchlist: () => void
+}): ReactElement {
+  const quickPlay = useMoviePageStore((s) => s.quickPlay)
+  const playBusy = useMoviePageStore((s) => s.playBusyDownloadId != null)
+  const existingDownload = useMoviePageStore((s) => pickExistingDownload(s.downloads))
+  const bufferingDownload = useMoviePageStore((s) =>
+    pickBufferingDownload(s.downloads, s.quickPlay)
+  )
+  const playBest = useMoviePageStore((s) => s.playBest)
+  const setTab = useMoviePageStore((s) => s.setTab)
+  const resetQuickPlay = useMoviePageStore((s) => s.resetQuickPlay)
+  return (
+    <QuickPlayBar
+      quickPlay={quickPlay}
+      best={best}
+      existingDownload={existingDownload}
+      bufferingDownload={bufferingDownload}
+      playBusy={playBusy}
+      resumeSeconds={resumeSeconds}
+      inWatchlist={inWatchlist}
+      onToggleWatchlist={onToggleWatchlist}
+      onPlay={() => void playBest()}
+      onShowSources={() => setTab('sources')}
+      onUseVidking={() => setTab('vidking')}
+      onDismiss={resetQuickPlay}
+    />
+  )
+}
+
+function MovieDownloadsLive(): ReactElement {
+  const downloads = useMoviePageStore((s) => s.downloads)
+  const downloadsRefreshBusy = useMoviePageStore((s) => s.downloadsRefreshBusy)
+  const playError = useMoviePageStore((s) => s.playError)
+  const playDialogOpen = useMoviePageStore((s) => s.playDialogOpen)
+  const playBusyDownloadId = useMoviePageStore((s) => s.playBusyDownloadId)
+  const pauseBusyDownloadId = useMoviePageStore((s) => s.pauseBusyDownloadId)
+  const refreshDownloadsList = useMoviePageStore((s) => s.refreshDownloadsList)
+  const beginPlayback = useMoviePageStore((s) => s.beginPlayback)
+  const setDownloadPaused = useMoviePageStore((s) => s.setDownloadPaused)
+  const setDeleteConfirmId = useMoviePageStore((s) => s.setDeleteConfirmId)
+  return (
+    <MovieDownloadsSection
+      downloads={downloads}
+      downloadsRefreshBusy={downloadsRefreshBusy}
+      playError={playError}
+      playDialogOpen={playDialogOpen}
+      playBusyDownloadId={playBusyDownloadId}
+      pauseBusyDownloadId={pauseBusyDownloadId}
+      onRefresh={refreshDownloadsList}
+      onPlay={(downloadId) => void beginPlayback(downloadId)}
+      onPause={(downloadId) => void setDownloadPaused(downloadId, true)}
+      onResume={(downloadId) => void setDownloadPaused(downloadId, false)}
+      onDeleteClick={setDeleteConfirmId}
+    />
+  )
+}
+
+function MovieDeleteDownloadDialog(): ReactElement {
+  const deleteConfirmId = useMoviePageStore((s) => s.deleteConfirmId)
+  const deleteBusy = useMoviePageStore((s) => s.deleteBusy)
+  const titleToDelete = useMoviePageStore((s) =>
+    s.deleteConfirmId == null
+      ? ''
+      : (s.downloads.find((row) => row.downloadId === s.deleteConfirmId)?.displayTitle ?? '')
+  )
+  const setDeleteConfirmId = useMoviePageStore((s) => s.setDeleteConfirmId)
+  const confirmRemoveDownload = useMoviePageStore((s) => s.confirmRemoveDownload)
+  return (
+    <DeleteDownloadDialog
+      open={deleteConfirmId != null}
+      deleteBusy={deleteBusy}
+      titleToDelete={titleToDelete}
+      onOpenChange={(open) => {
+        if (!open && !deleteBusy) setDeleteConfirmId(null)
+      }}
+      onCancel={() => setDeleteConfirmId(null)}
+      onConfirm={() => void confirmRemoveDownload()}
+    />
+  )
+}
 
 function MoviePageContent(): ReactElement {
   const store = useContext(MoviePageStoreContext)
   const location = useLocation()
-  const { poster, go } = useScreenTransition()
+  const poster = useActivePoster()
+  const { go } = useScreenTransition()
   if (store == null) {
     throw new Error('MoviePageContent requires MoviePageStoreContext')
   }
 
-  const s = useMoviePageStore(useShallow((x) => x))
+  const s = useMoviePageStore(
+    useShallow(({ downloads, ...rest }) => {
+      void downloads
+      return rest
+    })
+  )
 
   useEffect(() => {
     void store.getState().loadCatalog()
@@ -48,18 +170,22 @@ function MoviePageContent(): ReactElement {
     const offEnd = window.api.mpv.onEnd(refresh)
     return offEnd
   }, [s.movieId])
+  const playDialogWasOpen = useRef(false)
   useEffect(() => {
-    if (!s.playDialogOpen) {
+    const wasOpen = playDialogWasOpen.current
+    playDialogWasOpen.current = s.playDialogOpen
+    if (wasOpen && !s.playDialogOpen) {
       void window.api.history.get(s.movieId).then((p) => setResumeSeconds(resumePosition(p)))
     }
   }, [s.playDialogOpen, s.movieId])
 
   useEffect(() => {
     return window.api.torrent.onDownloadsUpdate((rows) => {
-      store.setState({ downloads: rows.filter((r) => r.movieId === s.movieId) })
+      const movieId = store.getState().movieId
+      store.setState({ downloads: rows.filter((r) => r.movieId === movieId) })
       store.getState().advanceQuickPlay()
     })
-  }, [s.movieId, store])
+  }, [store])
 
   useEffect(() => {
     void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {
@@ -84,16 +210,6 @@ function MoviePageContent(): ReactElement {
     () => getRankedSources(s.torrentData, s.detail, s.rankingPrefs),
     [s.torrentData, s.detail, s.rankingPrefs]
   )
-  const existingDownload =
-    s.downloads.find((d) => d.status === 'complete' && d.canPlay) ??
-    s.downloads.find((d) => d.status !== 'error') ??
-    null
-  const bufferingDownload =
-    s.quickPlay.phase === 'buffering'
-      ? (s.downloads.find(
-          (d) => s.quickPlay.phase === 'buffering' && d.downloadId === s.quickPlay.downloadId
-        ) ?? null)
-      : null
 
   const backdropSlides = s.detail?.backdropUrls
   const backdropImageUrl =
@@ -103,10 +219,6 @@ function MoviePageContent(): ReactElement {
         ? backdropSlides
         : (s.detail.backdropUrl ?? s.detail.posterUrl)
 
-  const deleteTitle =
-    s.deleteConfirmId != null
-      ? (s.downloads.find((x) => x.downloadId === s.deleteConfirmId)?.displayTitle ?? '')
-      : ''
   const navState = location.state as {
     vtPosterUrl?: string | null
     vtTitle?: string | null
@@ -162,12 +274,8 @@ function MoviePageContent(): ReactElement {
                   overviewSubTab={s.overviewSubTab}
                   onOverviewSubTabChange={s.setOverviewSubTab}
                   posterActions={
-                    <QuickPlayBar
-                      quickPlay={s.quickPlay}
+                    <ConnectedQuickPlayBar
                       best={rankedSources.ranked[0] ?? null}
-                      existingDownload={existingDownload}
-                      bufferingDownload={bufferingDownload}
-                      playBusy={s.playBusyDownloadId != null}
                       resumeSeconds={resumeSeconds}
                       inWatchlist={inWatchlist}
                       onToggleWatchlist={() => {
@@ -175,10 +283,6 @@ function MoviePageContent(): ReactElement {
                         setInWatchlist(next)
                         void window.api.watchlist.set(s.movieId, next)
                       }}
-                      onPlay={() => void s.playBest()}
-                      onShowSources={() => s.setTab('sources')}
-                      onUseVidking={() => s.setTab('vidking')}
-                      onDismiss={s.resetQuickPlay}
                     />
                   }
                 />
@@ -188,19 +292,7 @@ function MoviePageContent(): ReactElement {
             {s.tab === 'sources' && (
               <PanelReveal instant={!tabsMoved}>
                 <div className="space-y-4">
-                  <MovieDownloadsSection
-                    downloads={s.downloads}
-                    downloadsRefreshBusy={s.downloadsRefreshBusy}
-                    playError={s.playError}
-                    playDialogOpen={s.playDialogOpen}
-                    playBusyDownloadId={s.playBusyDownloadId}
-                    pauseBusyDownloadId={s.pauseBusyDownloadId}
-                    onRefresh={s.refreshDownloadsList}
-                    onPlay={(downloadId) => void s.beginPlayback(downloadId)}
-                    onPause={(downloadId) => void s.setDownloadPaused(downloadId, true)}
-                    onResume={(downloadId) => void s.setDownloadPaused(downloadId, false)}
-                    onDeleteClick={s.setDeleteConfirmId}
-                  />
+                  <MovieDownloadsLive />
                   <MovieTorrentSourcesSection
                     detailPresent
                     torrentLoading={s.torrentLoading}
@@ -226,16 +318,7 @@ function MoviePageContent(): ReactElement {
         )}
       </DetailReveal>
 
-      <DeleteDownloadDialog
-        open={s.deleteConfirmId != null}
-        deleteBusy={s.deleteBusy}
-        titleToDelete={deleteTitle}
-        onOpenChange={(open) => {
-          if (!open && !s.deleteBusy) s.setDeleteConfirmId(null)
-        }}
-        onCancel={() => s.setDeleteConfirmId(null)}
-        onConfirm={() => void s.confirmRemoveDownload()}
-      />
+      <MovieDeleteDownloadDialog />
 
       <NetworkNoticeDialog
         open={s.networkNoticeRow != null}
@@ -243,7 +326,7 @@ function MoviePageContent(): ReactElement {
         onConfirm={s.confirmNetworkNotice}
       />
 
-      <MoviePlaybackDialog
+      <LazyMoviePlaybackDialog
         open={s.playDialogOpen}
         playUrl={s.playUrl}
         playLabel={s.playLabel}

@@ -21,7 +21,7 @@ import {
   posterTransitionName,
   titleStyle,
   titleTransitionName,
-  useScreenTransition
+  usePosterForSource
 } from '@/lib/screen-transition'
 import { cn } from '@/lib/utils'
 
@@ -98,9 +98,8 @@ export function MovieCard({
   const small = size === 'sm'
   const sharedName = posterTransitionName(href)
   const titleName = titleTransitionName(href)
-  const transition = useScreenTransition()
   const sourceKey = cardSourceKey(useContext(CardScopeContext), href)
-  const poster = transition.source === sourceKey ? transition.poster : null
+  const poster = usePosterForSource(sourceKey)
   const morphParts = sharedName?.startsWith('poster-movie-') ? sharedName : null
   const [loaded, setLoaded] = useState<{ src: string; instant: boolean } | null>(null)
   const [failedSrc, setFailedSrc] = useState<string | null>(null)

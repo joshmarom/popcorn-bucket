@@ -1,16 +1,25 @@
 import { createHashRouter, Navigate, RouterProvider, useParams } from 'react-router-dom'
-import type { ReactElement } from 'react'
+import { lazy, type ReactElement } from 'react'
 import { RootLayout } from '@/layouts/root-layout'
-import { DownloadsPage } from '@/pages/downloads-page'
 import { GenreBrowsePage } from '@/pages/genre-browse-page'
 import { HomePage } from '@/pages/home-page'
-import { MoviePage } from '@/pages/movie/movie-page'
-import { SettingsPage } from '@/pages/settings-page'
 import { LibraryPage } from '@/pages/library-page'
 import { CollectionPage } from '@/pages/collection-page'
 import { TvBrowsePage } from '@/pages/tv-browse-page'
-import { TvShowPage } from '@/pages/tv-show-page'
 import { TvGenrePage } from '@/pages/tv-genre-page'
+
+const MoviePage = lazy(() =>
+  import('@/pages/movie/movie-page').then((mod) => ({ default: mod.MoviePage }))
+)
+const TvShowPage = lazy(() =>
+  import('@/pages/tv-show-page').then((mod) => ({ default: mod.TvShowPage }))
+)
+const DownloadsPage = lazy(() =>
+  import('@/pages/downloads-page').then((mod) => ({ default: mod.DownloadsPage }))
+)
+const SettingsPage = lazy(() =>
+  import('@/pages/settings-page').then((mod) => ({ default: mod.SettingsPage }))
+)
 
 function MovieRoute(): ReactElement {
   const { movieId } = useParams()

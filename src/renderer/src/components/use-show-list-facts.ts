@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { TvShowListFacts, TvShowListItem } from '@shared/tv'
 
 const CHUNK = 40
@@ -8,16 +8,25 @@ const waiters = new Map<number, Array<(fact: TvShowListFacts | null) => void>>()
 let flushScheduled = false
 
 async function loadFacts(ids: number[]): Promise<TvShowListFacts[]> {
-  const facts: TvShowListFacts[] = []
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    try {
-      const res = await window.api.tv.listFacts(ids.slice(i, i + CHUNK))
-      if (res.ok) facts.push(...res.facts)
-    } catch {
-      // This chunk stays blank; the cards keep the list payload.
-    }
-  }
-  return facts
+  const slices: number[][] = []
+  for (let i = 0; i < ids.length; i += CHUNK) slices.push(ids.slice(i, i + CHUNK))
+  const batches = await Promise.all(
+    slices.map(async (slice) => {
+      try {
+        const res = await window.api.tv.listFacts(slice)
+        return res.ok ? res.facts : []
+      } catch {
+        return []
+      }
+    })
+  )
+  return batches.flat()
+}
+
+export async function primeShowListFacts(ids: number[]): Promise<void> {
+  const missing = ids.filter((id) => !cache.has(id))
+  if (missing.length === 0) return
+  for (const fact of await loadFacts(missing)) cache.set(fact.id, fact)
 }
 
 function deliver(id: number, fact: TvShowListFacts | null): void {
@@ -91,13 +100,31 @@ export function useShowListFacts<T extends TvShowListItem>(items: T[]): ShowWith
     }
   }, [missingKey])
 
-  return items.map((item) => {
-    const fact = facts.get(item.id) ?? cache.get(item.id) ?? null
-    return {
-      ...item,
-      genres: item.genres.length > 0 ? item.genres : (fact?.genres ?? []),
-      voteAverage: item.voteAverage ?? fact?.voteAverage ?? null,
-      facts: fact
-    }
-  })
+  const signature = `${items.map((item) => stableValue(item)).join('\n')}\n${stableValue(
+    items.map((item) => facts.get(item.id) ?? cache.get(item.id) ?? null)
+  )}`
+  const rows = useMemo(() => {
+    return items.map((item) => {
+      const fact = facts.get(item.id) ?? cache.get(item.id) ?? null
+      return {
+        ...item,
+        genres: item.genres.length > 0 ? item.genres : (fact?.genres ?? []),
+        voteAverage: item.voteAverage ?? fact?.voteAverage ?? null,
+        facts: fact
+      }
+    })
+    // signature covers the list payload and loaded facts, so unchanged renders reuse these rows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature])
+  return rows
+}
+
+function stableValue(value: unknown): string {
+  if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(stableValue).join(',')}]`
+  const record = value as Record<string, unknown>
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${key}:${stableValue(record[key])}`)
+    .join(',')}}`
 }

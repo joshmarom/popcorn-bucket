@@ -5,7 +5,7 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactElement,
   type ReactNode
@@ -24,15 +24,44 @@ type StartViewTransition = (update: {
 }) => ViewTransitionHandle
 
 type ScreenTransitionValue = {
-  poster: string | null
-  /** The card that started the last poster transition, so copies of it elsewhere stay put. */
-  source: string | null
   go: (to: To | number, poster?: string | null, state?: unknown, source?: string | null) => void
   /**
    * Swaps a detail page's placeholder for its content inside a view transition, after any
    * running one ends. Returns a cancel function.
    */
   reveal: (poster: string, update: () => void) => () => void
+}
+
+type PosterSnap = { poster: string | null; source: string | null }
+
+let posterSnap: PosterSnap = { poster: null, source: null }
+const posterListeners = new Set<() => void>()
+
+function emitPoster(next: PosterSnap): void {
+  if (next.poster === posterSnap.poster && next.source === posterSnap.source) return
+  posterSnap = next
+  for (const listener of posterListeners) listener()
+}
+
+function subscribePoster(listener: () => void): () => void {
+  posterListeners.add(listener)
+  return () => posterListeners.delete(listener)
+}
+
+function posterSnapshot(): string | null {
+  return posterSnap.poster
+}
+
+/** Poster name driving the current view transition, if any. */
+export function useActivePoster(): string | null {
+  return useSyncExternalStore(subscribePoster, posterSnapshot)
+}
+
+/** Poster name only when this card started the transition. Other cards stay put. */
+export function usePosterForSource(sourceKey: string): string | null {
+  return useSyncExternalStore(subscribePoster, () =>
+    posterSnap.source === sourceKey ? posterSnap.poster : null
+  )
 }
 
 const ScreenTransitionContext = createContext<ScreenTransitionValue | null>(null)
@@ -149,19 +178,17 @@ function runViewTransition(
 export function ScreenTransitionProvider({ children }: { children: ReactNode }): ReactElement {
   const navigate = useNavigate()
   const location = useLocation()
-  const [poster, setPoster] = useState<string | null>(null)
-  const [source, setSource] = useState<string | null>(null)
   const active = useRef<ViewTransitionHandle | null>(null)
 
   const track = useCallback((transition: ViewTransitionHandle | null) => {
     active.current = transition
     if (!transition) {
-      setPoster(null)
+      emitPoster({ poster: null, source: posterSnap.source })
       return
     }
     void transition.finished.finally(() => {
       if (active.current === transition) active.current = null
-      setPoster(null)
+      emitPoster({ poster: null, source: posterSnap.source })
     })
   }, [])
 
@@ -182,13 +209,15 @@ export function ScreenTransitionProvider({ children }: { children: ReactNode }):
       const posterName = nextPoster || null
       if (posterName) {
         flushSync(() => {
-          if (nextSource !== undefined) setSource(nextSource)
-          setPoster(posterName)
+          emitPoster({
+            poster: posterName,
+            source: nextSource !== undefined ? nextSource : posterSnap.source
+          })
         })
       }
       const transition = runViewTransition(() => {
         flushSync(() => {
-          if (!posterName) setPoster(null)
+          if (!posterName) emitPoster({ poster: null, source: posterSnap.source })
           if (typeof to === 'number') navigate(to)
           else navigate(to, { state })
         })
@@ -203,7 +232,7 @@ export function ScreenTransitionProvider({ children }: { children: ReactNode }):
       let cancelled = false
       const run = (): void => {
         if (cancelled) return
-        flushSync(() => setPoster(posterName))
+        flushSync(() => emitPoster({ poster: posterName, source: posterSnap.source }))
         track(runViewTransition(() => flushSync(update), 'detail-reveal'))
       }
       const start = (): void => {
@@ -221,7 +250,7 @@ export function ScreenTransitionProvider({ children }: { children: ReactNode }):
     [track]
   )
 
-  const value = useMemo(() => ({ poster, source, go, reveal }), [poster, source, go, reveal])
+  const value = useMemo(() => ({ go, reveal }), [go, reveal])
 
   useEffect(() => {
     const onClick = (event: MouseEvent): void => {

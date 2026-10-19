@@ -95,10 +95,11 @@ export function DownloadsPage(): ReactElement {
     const rows = deleteTarget.kind === 'one' ? [deleteTarget.row] : watched
     setDeleteBusy(true)
     try {
-      for (const row of rows) {
-        const res = await window.api.torrent.removeMovieDownload(row.movieId, row.downloadId)
-        if (!res.ok) setActionError(res.error)
-      }
+      const results = await Promise.all(
+        rows.map((row) => window.api.torrent.removeMovieDownload(row.movieId, row.downloadId))
+      )
+      const failed = results.find((res) => !res.ok)
+      if (failed && !failed.ok) setActionError(failed.error)
       setDeleteTarget(null)
       await loadDownloads()
     } finally {

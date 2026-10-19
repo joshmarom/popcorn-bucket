@@ -8,7 +8,8 @@ import { Bookmark, Library, Play, Tv, X, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MovieCard } from '@/components/movie-card'
 import { ShowCard } from '@/components/show-card'
-import { useShowListFacts } from '@/components/use-show-list-facts'
+import { primeShowListFacts, useShowListFacts } from '@/components/use-show-list-facts'
+import { primeMovieListFacts } from '@/components/use-movie-list-facts'
 import { MOVIE_GRID_CLASS } from '@/lib/movie-layout'
 import { releaseYearFromDate } from '@/lib/movie-meta'
 import { episodeNote, formatRemaining, loadShows, showsInProgress } from '@/lib/show-progress'
@@ -103,7 +104,12 @@ function useLibrary(): LibraryData | null {
       const inProgress = showsInProgress(history, downloads)
       const movieIds = [...new Set([...continueIds, ...listIds])]
       const detailsIds = [...new Set([...inProgress.map((p) => p.showId), ...showIds])]
-      const [movies, shows] = await Promise.all([loadMovies(movieIds), loadShows(detailsIds)])
+      const [movies, shows] = await Promise.all([
+        loadMovies(movieIds),
+        loadShows(detailsIds),
+        primeMovieListFacts(movieIds),
+        primeShowListFacts(detailsIds)
+      ])
       if (cancelled) return
 
       setData({
