@@ -41,35 +41,30 @@ export function VidcorePlayer({ title, src }: { title: string; src: string }): R
     const el = webviewRef.current
     if (!el || !playerFullscreen) return
 
-    const openedOverflow: HTMLElement[] = []
-    let node = el.parentElement
-    while (node && node !== document.documentElement) {
-      if (getComputedStyle(node).overflow !== 'visible') {
-        openedOverflow.push(node)
-        node.style.overflow = 'visible'
-      }
-      node = node.parentElement
-    }
+    // The back button and tabs live in stacking contexts above this card
+    // (z-20, backdrop-filter). A z-index on the webview cannot escape those,
+    // so the player is hoisted to the document while it is fullscreen.
+    const marker = document.createComment('vidcore-fullscreen')
+    el.parentNode?.insertBefore(marker, el)
+    document.body.appendChild(el)
 
     const place = (): void => {
       el.style.position = 'fixed'
-      el.style.zIndex = '100'
+      el.style.zIndex = '2147483646'
       el.style.margin = '0'
-      el.style.top = '0px'
-      el.style.left = '0px'
+      el.style.top = '0'
+      el.style.left = '0'
       el.style.width = `${window.innerWidth}px`
       el.style.height = `${window.innerHeight}px`
-      const rect = el.getBoundingClientRect()
-      if (rect.top !== 0 || rect.left !== 0) {
-        el.style.top = `${-rect.top}px`
-        el.style.left = `${-rect.left}px`
-      }
+      el.style.background = '#000'
     }
 
     place()
     window.addEventListener('resize', place)
     return () => {
       window.removeEventListener('resize', place)
+      if (marker.parentNode) marker.parentNode.insertBefore(el, marker)
+      marker.remove()
       el.style.position = ''
       el.style.zIndex = ''
       el.style.margin = ''
@@ -77,7 +72,7 @@ export function VidcorePlayer({ title, src }: { title: string; src: string }): R
       el.style.left = ''
       el.style.width = ''
       el.style.height = ''
-      for (const ancestor of openedOverflow) ancestor.style.overflow = ''
+      el.style.background = ''
     }
   }, [playerFullscreen, playerKey])
 
