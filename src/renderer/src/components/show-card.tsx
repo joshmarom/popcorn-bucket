@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import type { TvShowListFacts, TvShowListItem } from '@shared/tv'
 import { SHOW_STATUS_LABEL, seasonLabel, showStatus, yearSpan } from '@shared/tv-meta'
 import { MovieCard } from '@/components/movie-card'
@@ -13,7 +13,8 @@ export function ShowCard({
   progress,
   linkState,
   index = 0,
-  eager
+  eager,
+  action
 }: {
   show: TvShowListItem
   facts: TvShowListFacts | null
@@ -24,6 +25,7 @@ export function ShowCard({
   linkState?: unknown
   index?: number
   eager?: boolean
+  action?: ReactNode
 }): ReactElement {
   const first = facts?.firstAirYear ?? show.firstAirYear
   const years = yearSpan(first, facts?.lastAirYear ?? null, facts?.tmdbStatus ?? null)
@@ -54,6 +56,7 @@ export function ShowCard({
       progress={progress}
       index={index}
       eager={eager}
+      action={action}
     />
   )
 }

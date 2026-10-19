@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import { CardScopeContext } from '@/lib/screen-transition'
 import type { CatalogMovieDetails } from '@shared/catalog'
 import type { TvShowDetails, TvShowListItem } from '@shared/tv'
 import { isEpisodeMediaKey } from '@shared/tv'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
-import { Bookmark, Library, Play, Tv, type LucideIcon } from 'lucide-react'
+import { Bookmark, Library, Play, Tv, X, type LucideIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { MovieCard } from '@/components/movie-card'
 import { ShowCard } from '@/components/show-card'
 import { useShowListFacts } from '@/components/use-show-list-facts'
@@ -22,9 +23,16 @@ type PosterMovie = {
   voteAverage: number | null
   progress: number | null
   note: string | null
+  /** Saved position, kept so removing it from Continue watching can be undone. */
+  history: WatchProgress | null
 }
 
-type LibraryShow = TvShowListItem & { note?: string | null; progress?: number | null }
+type LibraryShow = TvShowListItem & {
+  note?: string | null
+  progress?: number | null
+  /** Resumable episodes, cleared when the show is removed from Continue watching. */
+  entries?: WatchProgress[]
+}
 
 type LibraryData = {
   continueMovies: PosterMovie[]
@@ -70,7 +78,8 @@ function toPosterMovie(movie: CatalogMovieDetails, progress: WatchProgress | nul
     genres: movie.genres,
     voteAverage: movie.voteAverage,
     progress: resumable && progress ? watchedShare(progress) : null,
-    note: resumable && progress ? formatRemaining(progress) : null
+    note: resumable && progress ? formatRemaining(progress) : null,
+    history: progress
   }
 }
 
@@ -116,7 +125,7 @@ function useLibrary(): LibraryData | null {
                 genres: []
               }
           const share = watchedShare(p.progress)
-          return [{ ...item, note: episodeNote(p), progress: share }]
+          return [{ ...item, note: episodeNote(p), progress: share, entries: p.entries }]
         }),
         listMovies: listIds.flatMap((id) => {
           const movie = movies.get(id)
@@ -136,39 +145,209 @@ function useLibrary(): LibraryData | null {
   return data
 }
 
-function MoviePosterGrid({ movies }: { movies: PosterMovie[] }): ReactElement {
+/** How one library list adds and drops a title. `restore` undoes `remove`. */
+type ListOps<T> = {
+  /** Shown on the tile that replaces a removed card, e.g. "My list". */
+  list: string
+  remove: (item: T) => Promise<unknown>
+  restore: (item: T) => Promise<unknown>
+}
+
+type Removals = {
+  isRemoved: (key: string) => boolean
+  toggle: (key: string, op: () => Promise<unknown>, removing: boolean) => void
+}
+
+/** Titles removed during this visit stay in place as undo tiles until the page is left. */
+function useRemovals(): Removals {
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(() => new Set())
+  const set = useCallback((key: string, on: boolean) => {
+    setRemoved((prev) => {
+      const next = new Set(prev)
+      if (on) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [])
+  const toggle = useCallback(
+    (key: string, op: () => Promise<unknown>, removing: boolean) => {
+      set(key, removing)
+      op().catch(() => set(key, !removing))
+    },
+    [set]
+  )
+  return { isRemoved: (key) => removed.has(key), toggle }
+}
+
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }): ReactElement {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="focus-visible:ring-ring/60 absolute top-2 left-2 z-10 flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-0 shadow-sm outline-none transition duration-200 ease-out group-hover:-translate-y-1 group-hover:opacity-100 group-has-[a:focus-visible]:-translate-y-1 group-has-[a:focus-visible]:opacity-100 hover:bg-black/90 focus-visible:opacity-100 focus-visible:ring-[3px]"
+    >
+      <X className="size-4" aria-hidden />
+    </button>
+  )
+}
+
+function RemovableItem({
+  title,
+  list,
+  removed,
+  onRemove,
+  onUndo,
+  children
+}: {
+  title: string
+  list: string
+  removed: boolean
+  onRemove: () => void
+  onUndo: () => void
+  children: (action: ReactNode) => ReactNode
+}): ReactElement {
+  if (!removed) {
+    return (
+      <>{children(<RemoveButton label={`Remove ${title} from ${list}`} onClick={onRemove} />)}</>
+    )
+  }
+  return (
+    <div className="relative">
+      <div inert className="opacity-30 grayscale">
+        {children(null)}
+      </div>
+      <div
+        role="status"
+        className="absolute inset-x-0 top-0 flex aspect-[2/3] flex-col items-center justify-center gap-3 p-3 text-center"
+      >
+        <p className="text-sm font-medium text-balance">Removed from {list}</p>
+        <Button type="button" size="sm" variant="secondary" onClick={onUndo}>
+          Undo
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function MoviePosterGrid({
+  id,
+  movies,
+  ops,
+  removals
+}: {
+  id: string
+  movies: PosterMovie[]
+  ops: ListOps<PosterMovie>
+  removals: Removals
+}): ReactElement {
   return (
     <ul className={MOVIE_GRID_CLASS}>
-      {movies.map((movie) => (
-        <li key={movie.id}>
-          <MovieCard
-            href={`/movie/${movie.id}`}
-            title={movie.title}
-            posterUrl={movie.posterUrl}
-            releaseYear={movie.releaseYear}
-            runtime={movie.runtime}
-            genres={movie.genres}
-            voteAverage={movie.voteAverage}
-            progress={movie.progress}
-            note={movie.note}
-          />
-        </li>
-      ))}
+      {movies.map((movie) => {
+        const key = `${id}:${movie.id}`
+        return (
+          <li key={movie.id}>
+            <RemovableItem
+              title={movie.title}
+              list={ops.list}
+              removed={removals.isRemoved(key)}
+              onRemove={() => removals.toggle(key, () => ops.remove(movie), true)}
+              onUndo={() => removals.toggle(key, () => ops.restore(movie), false)}
+            >
+              {(action) => (
+                <MovieCard
+                  href={`/movie/${movie.id}`}
+                  title={movie.title}
+                  posterUrl={movie.posterUrl}
+                  releaseYear={movie.releaseYear}
+                  runtime={movie.runtime}
+                  genres={movie.genres}
+                  voteAverage={movie.voteAverage}
+                  progress={movie.progress}
+                  note={movie.note}
+                  action={action}
+                />
+              )}
+            </RemovableItem>
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
-function ShowPosterGrid({ shows }: { shows: LibraryShow[] }): ReactElement {
+function ShowPosterGrid({
+  id,
+  shows,
+  ops,
+  removals
+}: {
+  id: string
+  shows: LibraryShow[]
+  ops: ListOps<LibraryShow>
+  removals: Removals
+}): ReactElement {
   const items = useShowListFacts(shows)
   return (
     <ul className={MOVIE_GRID_CLASS}>
-      {items.map((show) => (
-        <li key={show.id}>
-          <ShowCard show={show} facts={show.facts} note={show.note} progress={show.progress} />
-        </li>
-      ))}
+      {items.map((show) => {
+        const key = `${id}:${show.id}`
+        return (
+          <li key={show.id}>
+            <RemovableItem
+              title={show.name}
+              list={ops.list}
+              removed={removals.isRemoved(key)}
+              onRemove={() => removals.toggle(key, () => ops.remove(show), true)}
+              onUndo={() => removals.toggle(key, () => ops.restore(show), false)}
+            >
+              {(action) => (
+                <ShowCard
+                  show={show}
+                  facts={show.facts}
+                  note={show.note}
+                  progress={show.progress}
+                  action={action}
+                />
+              )}
+            </RemovableItem>
+          </li>
+        )
+      })}
     </ul>
   )
+}
+
+function reportAll(entries: WatchProgress[]): Promise<unknown> {
+  return Promise.all(
+    entries.map((p) => window.api.history.report(p.movieId, p.position, p.duration))
+  )
+}
+
+const CONTINUE_MOVIE_OPS: ListOps<PosterMovie> = {
+  list: 'Continue watching',
+  remove: (movie) => window.api.history.clear(movie.id),
+  restore: (movie) => reportAll(movie.history ? [movie.history] : [])
+}
+
+const CONTINUE_SHOW_OPS: ListOps<LibraryShow> = {
+  list: 'Continue watching',
+  remove: (show) =>
+    Promise.all((show.entries ?? []).map((p) => window.api.history.clear(p.movieId))),
+  restore: (show) => reportAll(show.entries ?? [])
+}
+
+const MY_LIST_OPS: ListOps<PosterMovie> = {
+  list: 'My list',
+  remove: (movie) => window.api.watchlist.set(movie.id, false),
+  restore: (movie) => window.api.watchlist.set(movie.id, true)
+}
+
+const MY_SHOWS_OPS: ListOps<LibraryShow> = {
+  list: 'My shows',
+  remove: (show) => window.api.showWatchlist.set(show.id, false),
+  restore: (show) => window.api.showWatchlist.set(show.id, true)
 }
 
 function Section({
@@ -222,7 +401,13 @@ function Stat({ value, label }: { value: number; label: string }): ReactElement 
 
 export function LibraryPage(): ReactElement {
   const data = useLibrary()
-  const continueCount = (data?.continueMovies.length ?? 0) + (data?.continueShows.length ?? 0)
+  const removals = useRemovals()
+  const kept = <T extends { id: number }>(id: string, items: T[] | undefined): number =>
+    (items ?? []).filter((item) => !removals.isRemoved(`${id}:${item.id}`)).length
+  const continueCount =
+    kept('continue-movies', data?.continueMovies) + kept('continue-shows', data?.continueShows)
+  const listCount = kept('my-list', data?.listMovies)
+  const showsCount = kept('my-shows', data?.myShows)
   const empty =
     data != null && continueCount === 0 && data.listMovies.length === 0 && data.myShows.length === 0
   const bothContinue =
@@ -261,8 +446,8 @@ export function LibraryPage(): ReactElement {
         <div className="mt-12 space-y-12">
           <div className="grid max-w-xl grid-cols-3 gap-4">
             <Stat value={continueCount} label="In progress" />
-            <Stat value={data.listMovies.length} label="My list" />
-            <Stat value={data.myShows.length} label="My shows" />
+            <Stat value={listCount} label="My list" />
+            <Stat value={showsCount} label="My shows" />
           </div>
 
           {continueCount > 0 && (
@@ -277,13 +462,23 @@ export function LibraryPage(): ReactElement {
                 {data.continueMovies.length > 0 && (
                   <div className="space-y-3">
                     {bothContinue && <h3 className="type-kicker">Movies</h3>}
-                    <MoviePosterGrid movies={data.continueMovies} />
+                    <MoviePosterGrid
+                      id="continue-movies"
+                      movies={data.continueMovies}
+                      ops={CONTINUE_MOVIE_OPS}
+                      removals={removals}
+                    />
                   </div>
                 )}
                 {data.continueShows.length > 0 && (
                   <div className="space-y-3">
                     {bothContinue && <h3 className="type-kicker">Shows</h3>}
-                    <ShowPosterGrid shows={data.continueShows} />
+                    <ShowPosterGrid
+                      id="continue-shows"
+                      shows={data.continueShows}
+                      ops={CONTINUE_SHOW_OPS}
+                      removals={removals}
+                    />
                   </div>
                 )}
               </div>
@@ -296,9 +491,14 @@ export function LibraryPage(): ReactElement {
               icon={Bookmark}
               title="My list"
               description="Movies you saved"
-              count={data.listMovies.length}
+              count={listCount}
             >
-              <MoviePosterGrid movies={data.listMovies} />
+              <MoviePosterGrid
+                id="my-list"
+                movies={data.listMovies}
+                ops={MY_LIST_OPS}
+                removals={removals}
+              />
             </Section>
           )}
 
@@ -308,9 +508,14 @@ export function LibraryPage(): ReactElement {
               icon={Tv}
               title="My shows"
               description="Shows you saved"
-              count={data.myShows.length}
+              count={showsCount}
             >
-              <ShowPosterGrid shows={data.myShows} />
+              <ShowPosterGrid
+                id="my-shows"
+                shows={data.myShows}
+                ops={MY_SHOWS_OPS}
+                removals={removals}
+              />
             </Section>
           )}
         </div>

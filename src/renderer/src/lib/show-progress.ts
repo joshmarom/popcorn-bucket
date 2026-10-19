@@ -8,6 +8,8 @@ export type ShowInProgress = {
   seasonNumber: number
   episodeNumber: number
   progress: WatchProgress
+  /** Every episode of the show with resumable progress, latest first. */
+  entries: WatchProgress[]
 }
 
 /**
@@ -23,13 +25,19 @@ export function showsInProgress(
   for (const progress of sorted) {
     if (!isEpisodeMediaKey(progress.movieId) || resumePosition(progress) <= 0) continue
     const episode = downloads.find((d) => d.movieId === progress.movieId)?.episode
-    if (!episode || byShow.has(episode.showId)) continue
+    if (!episode) continue
+    const existing = byShow.get(episode.showId)
+    if (existing) {
+      existing.entries.push(progress)
+      continue
+    }
     byShow.set(episode.showId, {
       showId: episode.showId,
       showName: episode.showName,
       seasonNumber: episode.seasonNumber,
       episodeNumber: episode.episodeNumber,
-      progress
+      progress,
+      entries: [progress]
     })
   }
   return [...byShow.values()]
