@@ -7,6 +7,10 @@ import type { AuthStatus } from '@shared/auth'
 
 export function SettingsPage(): ReactElement {
   const [status, setStatus] = useState<AuthStatus | null>(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
     setStatus(await window.api.auth.status())
@@ -21,13 +25,27 @@ export function SettingsPage(): ReactElement {
     setStatus(await window.api.auth.signOut())
   }
 
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    const result = await window.api.auth.signIn(email, password)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    setPassword('')
+    setStatus({ signedIn: true, email: result.email, name: result.name, role: result.role })
+  }
+
   return (
-    <div className="mx-auto max-w-lg space-y-6 px-4 py-6 pb-16">
+    <div className="mx-auto max-w-md space-y-8 px-4 py-8 pb-16">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
-        <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-          Catalog, search, and your lists live on the Popcorn Bucket server. Playback and downloads
-          stay on this computer.
+        <h1 className="type-page">Account</h1>
+        <p className="type-prose text-muted-foreground mt-2">
+          Catalog, search, and playback work without an account. Sign in to use your account’s lists
+          and watch history. Without an account, they stay on this computer.
         </p>
       </div>
       {status?.signedIn ? (
@@ -40,61 +58,9 @@ export function SettingsPage(): ReactElement {
           </Button>
         </div>
       ) : (
-        <p className="text-muted-foreground text-sm">You are signed out.</p>
-      )}
-      <PreferencesSection />
-      <section className="space-y-2 border-t border-border pt-6">
-        <h2 className="text-lg font-semibold tracking-tight">Network</h2>
-        <p className="text-muted-foreground text-sm leading-relaxed">{NETWORK_NOTICE_TEXT}</p>
-      </section>
-    </div>
-  )
-}
-
-export function SignInGate({ children }: { children: ReactElement }): ReactElement {
-  const [status, setStatus] = useState<AuthStatus | null>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    void window.api.auth.status().then(setStatus)
-    return window.api.auth.onChange(setStatus)
-  }, [])
-
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    const result = await window.api.auth.signIn(email, password)
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setStatus({ signedIn: true, email: result.email, name: result.name, role: result.role })
-  }
-
-  if (status == null) {
-    return (
-      <div className="bg-background flex h-screen items-center justify-center text-sm text-muted-foreground">
-        Connecting…
-      </div>
-    )
-  }
-
-  if (!status.signedIn) {
-    return (
-      <div className="bg-background flex h-screen items-center justify-center px-4">
-        <form onSubmit={(event) => void submit(event)} className="w-full max-w-sm space-y-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Use your Popcorn Bucket account to load catalog, lists, and torrent search from the
-            server.
-          </p>
+        <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="sign-in-email">
+            <label className="type-label" htmlFor="sign-in-email">
               Email
             </label>
             <Input
@@ -107,7 +73,7 @@ export function SignInGate({ children }: { children: ReactElement }): ReactEleme
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="sign-in-password">
+            <label className="type-label" htmlFor="sign-in-password">
               Password
             </label>
             <Input
@@ -120,13 +86,16 @@ export function SignInGate({ children }: { children: ReactElement }): ReactEleme
             />
           </div>
           {error ? <p className="text-destructive text-sm">{error}</p> : null}
-          <Button type="submit" disabled={busy} className="w-full">
+          <Button type="submit" disabled={busy || status == null}>
             {busy ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
-      </div>
-    )
-  }
-
-  return children
+      )}
+      <PreferencesSection />
+      <section className="space-y-4 border-t border-border pt-8">
+        <h2 className="type-section">Network</h2>
+        <p className="type-prose text-muted-foreground">{NETWORK_NOTICE_TEXT}</p>
+      </section>
+    </div>
+  )
 }

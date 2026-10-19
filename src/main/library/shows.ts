@@ -1,3 +1,4 @@
+import type { CatalogCastMember, CatalogTrailer } from '@shared/catalog'
 import { movieScore } from '@shared/movie-score'
 import type { TvShowDetails, TvShowListItem } from '@shared/tv'
 import type { LibraryDb } from './db'
@@ -36,6 +37,8 @@ export type LibraryShowDetails = {
   titleOriginal?: string | null
   originCountry?: string[]
   seasons?: TvShowDetails['seasons']
+  cast?: CatalogCastMember[]
+  trailers?: CatalogTrailer[]
   /** Card facts from the full TMDB record; written together with `facts_at`. */
   facts?: {
     genres: string[]
@@ -231,6 +234,13 @@ export function upsertShowDetails(db: LibraryDb, show: LibraryShowDetails): void
     posterUrl: show.posterUrl,
     backdropUrl: show.backdropUrl
   })
+  if (show.cast !== undefined || show.trailers !== undefined) {
+    db.prepare('UPDATE shows SET cast_json = ?, trailers_json = ? WHERE tmdb_id = ?').run(
+      JSON.stringify(show.cast ?? []),
+      JSON.stringify(show.trailers ?? []),
+      show.tmdbId
+    )
+  }
   if (show.seasons && show.seasons.length > 0) {
     saveShowSeasonSummaries(db, show.tmdbId, show.seasons)
   }
@@ -420,13 +430,58 @@ export function rankShows(db: LibraryDb, opts: { limit: number; now?: number }):
 export type StoredShowDetails = {
   details: TvShowDetails
   detailsAt: number | null
+  /** False when this row was saved before cast and trailers were stored. */
+  extrasStored: boolean
+}
+
+function parseCast(json: string | null): CatalogCastMember[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((row) => {
+      if (!row || typeof row !== 'object') return []
+      const member = row as { name?: unknown; character?: unknown; profileUrl?: unknown }
+      if (typeof member.name !== 'string' || !member.name.trim()) return []
+      return [
+        {
+          name: member.name,
+          character: typeof member.character === 'string' ? member.character : '',
+          profileUrl: typeof member.profileUrl === 'string' ? member.profileUrl : null
+        }
+      ]
+    })
+  } catch {
+    return []
+  }
+}
+
+function parseTrailers(json: string | null): CatalogTrailer[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((row) => {
+      if (!row || typeof row !== 'object') return []
+      const trailer = row as { name?: unknown; youtubeKey?: unknown }
+      if (typeof trailer.youtubeKey !== 'string' || !trailer.youtubeKey.trim()) return []
+      return [
+        {
+          name: typeof trailer.name === 'string' && trailer.name.trim() ? trailer.name : 'Trailer',
+          youtubeKey: trailer.youtubeKey.trim()
+        }
+      ]
+    })
+  } catch {
+    return []
+  }
 }
 
 export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShowDetails | null {
   const row = db
     .prepare(
       `SELECT tmdb_id, name, overview, first_air_date, year, poster_url, backdrop_url,
-              imdb_id, details_at
+              imdb_id, details_at, cast_json, trailers_json
        FROM shows WHERE tmdb_id = ?`
     )
     .get(tmdbId) as
@@ -440,6 +495,8 @@ export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShow
         backdrop_url: string | null
         imdb_id: string | null
         details_at: number | null
+        cast_json: string | null
+        trailers_json: string | null
       }
     | undefined
   if (!row) return null
@@ -457,6 +514,7 @@ export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShow
   }[]
   return {
     detailsAt: row.details_at,
+    extrasStored: row.cast_json != null && row.trailers_json != null,
     details: {
       id: row.tmdb_id,
       name: row.name,
@@ -465,6 +523,8 @@ export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShow
       posterUrl: row.poster_url,
       backdropUrl: row.backdrop_url,
       imdbId: row.imdb_id,
+      cast: parseCast(row.cast_json),
+      trailers: parseTrailers(row.trailers_json),
       seasons: seasons.map((season) => ({
         seasonNumber: season.season_number,
         name: season.name || `Season ${season.season_number}`,

@@ -40,6 +40,8 @@ export type TvShowListResponse =
   | { ok: true; results: TvShowListItem[] }
   | { ok: false; error: string }
 
+import type { CatalogCastMember, CatalogTrailer } from './catalog'
+
 export type TvSeasonSummary = {
   seasonNumber: number
   name: string
@@ -55,6 +57,8 @@ export type TvShowDetails = {
   posterUrl: string | null
   backdropUrl: string | null
   imdbId: string | null
+  cast: CatalogCastMember[]
+  trailers: CatalogTrailer[]
   /** Specials (season 0) are left out. */
   seasons: TvSeasonSummary[]
 }

@@ -232,7 +232,13 @@ CREATE TABLE media_assets (
 );
 `
 
-const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6]
+/** Cast and trailers for the show page, stored the same way as movie details. */
+const SCHEMA_V7 = `
+ALTER TABLE shows ADD COLUMN cast_json TEXT;
+ALTER TABLE shows ADD COLUMN trailers_json TEXT;
+`
+
+const MIGRATIONS = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7]
 
 let singleton: LibraryDb | null = null
 

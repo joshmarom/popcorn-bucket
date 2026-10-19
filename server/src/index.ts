@@ -90,12 +90,7 @@ function mountAuth(app: Hono): void {
     const auth = createAuth()
     const signedIn = requireSession(auth)
     app.on(['GET', 'POST'], '/v1/auth/*', (c) => auth.handler(c.req.raw))
-    app.use('/v1/catalog/*', signedIn)
-    app.use('/v1/tv/*', signedIn)
-    app.use('/v1/discover/*', signedIn)
-    app.use('/v1/torrents/*', signedIn)
     app.use('/v1/me/*', signedIn)
-    app.use('/v1/subtitles/*', signedIn)
     registerMeRoutes(app)
     registerSubtitleRoutes(app)
   } catch (error) {

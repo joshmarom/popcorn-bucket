@@ -11,7 +11,13 @@ import { getLibrary } from './library/db'
 import { upsertShowDetails, upsertShowListRows, readStoredShowDetails } from './library/shows'
 import { readStoredTvSeason, saveTvSeason } from './library/tv-episodes'
 import { isDetailsFresh } from './catalog-fresh'
-import { backdropUrl, posterUrl, tmdbFetchJson } from './tmdb'
+import {
+  backdropUrl,
+  filterTrailersToLandscape,
+  pickTrailerCandidatesFromVideos,
+  posterUrl,
+  tmdbFetchJson
+} from './tmdb'
 import { hydrateFromTorrentClaw, hydrateSeasonFromTorrentClaw } from './torrentclaw/discovery'
 
 const yearOf = (date: string | null | undefined): number | null => {
@@ -261,6 +267,32 @@ const tvDetailsSchema = z.object({
     .object({ air_date: z.string().nullable().optional() })
     .nullable()
     .optional(),
+  credits: z
+    .object({
+      cast: z.array(
+        z.object({
+          name: z.string(),
+          character: z.string().nullable().optional(),
+          profile_path: z.string().nullable().optional()
+        })
+      )
+    })
+    .optional(),
+  videos: z
+    .object({
+      results: z
+        .array(
+          z.object({
+            key: z.string(),
+            name: z.string(),
+            site: z.string(),
+            type: z.string(),
+            official: z.boolean().optional()
+          })
+        )
+        .optional()
+    })
+    .optional(),
   seasons: z
     .array(
       z.object({
@@ -281,7 +313,12 @@ export async function getTvShowDetails(
   const db = getLibrary()
   if (!opts?.forceRefresh) {
     const stored = readStoredShowDetails(db, id)
-    if (stored && isDetailsFresh(stored.detailsAt) && stored.details.seasons.length > 0) {
+    if (
+      stored &&
+      stored.extrasStored &&
+      isDetailsFresh(stored.detailsAt) &&
+      stored.details.seasons.length > 0
+    ) {
       return stored.details
     }
   }
@@ -309,12 +346,20 @@ async function fetchTvShowDetailsFromTmdb(
   const json = await tmdbFetchJson(
     settings,
     `/tv/${id}`,
-    { append_to_response: 'external_ids' },
+    { append_to_response: 'external_ids,credits,videos' },
     { cacheTtlMs: 1000 * 60 * 60 * 6 }
   )
   const parsed = tvDetailsSchema.safeParse(json)
   if (!parsed.success) throw new Error('BAD_RESPONSE')
   const d = parsed.data
+  const cast = (d.credits?.cast ?? []).slice(0, 12).map((person) => ({
+    name: person.name,
+    character: person.character ?? '',
+    profileUrl: posterUrl(person.profile_path ?? null, 'w185')
+  }))
+  const trailers = await filterTrailersToLandscape(
+    pickTrailerCandidatesFromVideos(d.videos?.results)
+  )
   try {
     upsertShowDetails(getLibrary(), {
       tmdbId: d.id,
@@ -343,7 +388,9 @@ async function fetchTvShowDetailsFromTmdb(
         tmdbStatus: d.status?.trim() || null,
         lastAirDate: d.last_air_date?.trim() || null,
         lastEpisodeAirDate: d.last_episode_to_air?.air_date?.trim() || null
-      }
+      },
+      cast,
+      trailers
     })
   } catch (error) {
     console.error('Could not save TMDB show details to the library', error)
@@ -356,6 +403,8 @@ async function fetchTvShowDetailsFromTmdb(
     posterUrl: posterUrl(d.poster_path ?? null, 'w342'),
     backdropUrl: backdropUrl(d.backdrop_path ?? null),
     imdbId: d.external_ids?.imdb_id ?? null,
+    cast,
+    trailers,
     seasons: (d.seasons ?? [])
       .filter((s) => s.season_number > 0)
       .map((s) => ({

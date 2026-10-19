@@ -275,7 +275,7 @@ function nameLooksLikeVerticalTrailer(name: string): boolean {
 
 type TmdbVideoRow = NonNullable<z.infer<typeof movieVideosSchema>['results']>[number]
 
-function pickTrailerCandidatesFromVideos(
+export function pickTrailerCandidatesFromVideos(
   results: z.infer<typeof movieVideosSchema>['results'] | undefined
 ): CatalogTrailer[] {
   const rows: TmdbVideoRow[] = results ?? []
@@ -298,7 +298,9 @@ function pickTrailerCandidatesFromVideos(
   }))
 }
 
-async function filterTrailersToLandscape(trailers: CatalogTrailer[]): Promise<CatalogTrailer[]> {
+export async function filterTrailersToLandscape(
+  trailers: CatalogTrailer[]
+): Promise<CatalogTrailer[]> {
   const max = 12
   const verdicts = await Promise.all(trailers.map((t) => youtubeOEmbedAspectVerdict(t.youtubeKey)))
   const out: CatalogTrailer[] = []

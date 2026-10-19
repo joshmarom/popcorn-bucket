@@ -2,8 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useNavigate, useParams } from 'react-router-dom'
 import { Bookmark, BookmarkCheck, Loader2, Play } from 'lucide-react'
 import { seasonLabel } from '@shared/tv-meta'
-import { rankEpisodeSources } from '@shared/release-ranking'
-import type { TorrentSource } from '@shared/torrent'
+import { rankEpisodeSources, type RankedSources } from '@shared/release-ranking'
+import {
+  isSafeTorrentDetailsUrl,
+  isValidMagnetUri,
+  type TorrentSearchResponse,
+  type TorrentSource
+} from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import type { TorrentSubtitleTrack } from '@shared/torrent-stream'
 import {
@@ -20,7 +25,9 @@ import { acknowledgeNetworkNotice, hasAcknowledgedNetworkNotice } from '@/lib/ne
 import { cn } from '@/lib/utils'
 import { MoviePageShell } from './movie/movie-page-shell'
 import { MoviePlaybackDialog } from './movie/movie-playback-dialog'
+import { MovieTorrentSourcesSection } from './movie/movie-torrent-sources-section'
 import { NetworkNoticeDialog } from './movie/network-notice-dialog'
+import { TvCastTrailers } from './tv-cast-trailers'
 
 type EpisodeStatus =
   | { phase: 'idle' }
@@ -66,6 +73,12 @@ export function TvShowPage(): ReactElement {
   const [pendingNotice, setPendingNotice] = useState<(() => void) | null>(null)
   const [lastPlayed, setLastPlayed] = useState<TvEpisode | null>(null)
   const [inMyShows, setInMyShows] = useState(false)
+  const [sourcesFor, setSourcesFor] = useState<number | null>(null)
+  const [sourcesLoading, setSourcesLoading] = useState(false)
+  const [sourcesData, setSourcesData] = useState<TorrentSearchResponse | null>(null)
+  const [rankedSources, setRankedSources] = useState<RankedSources>({ ranked: [], excluded: [] })
+  const [sourceBusyMagnet, setSourceBusyMagnet] = useState<string | null>(null)
+  const [sourceFeedback, setSourceFeedback] = useState<string | null>(null)
   useEffect(() => {
     if (!Number.isFinite(showId)) return
     void window.api.showWatchlist.get().then((ids) => setInMyShows(ids.includes(showId)))
@@ -221,6 +234,91 @@ export function TvShowPage(): ReactElement {
     [show, downloads, startPlayback]
   )
 
+  const searchEpisodeSources = useCallback(
+    async (ep: TvEpisode, forceRefresh = false): Promise<void> => {
+      if (!show) return
+      setSourcesFor(ep.id)
+      setSourcesLoading(true)
+      setSourceFeedback(null)
+      const code = episodeCode(ep.seasonNumber, ep.episodeNumber)
+      const pack = `S${String(ep.seasonNumber).padStart(2, '0')}`
+      const searches = await Promise.all(
+        [`${show.name} ${code}`, `${show.name} ${pack}`].map((title) =>
+          window.api.torrent.search({
+            title,
+            releaseDate: null,
+            imdbId: show.imdbId,
+            forceRefresh
+          })
+        )
+      )
+      const rows = mergeResults(searches.map((result) => (result.ok ? result.results : [])))
+      const failed = searches.find((result) => !result.ok)
+      const prefs = await window.api.prefs.get()
+      setRankedSources(
+        rankEpisodeSources(
+          rows,
+          { showName: show.name, season: ep.seasonNumber, episode: ep.episodeNumber },
+          {
+            preferredResolution: prefs.preferredResolution,
+            preferredLanguage: prefs.subtitleLanguage
+          }
+        )
+      )
+      const cached = searches.find((result) => result.ok && result.cached)
+      setSourcesData(
+        rows.length > 0 || !failed
+          ? {
+              ok: true,
+              results: rows,
+              errors: searches.flatMap((result) => (result.ok ? result.errors : [])),
+              cached: cached?.ok ? cached.cached : undefined,
+              cachedAtMs: cached?.ok ? cached.cachedAtMs : undefined
+            }
+          : failed
+      )
+      setSourcesLoading(false)
+    },
+    [show]
+  )
+
+  const queueEpisodeSource = useCallback(
+    async (ep: TvEpisode, row: TorrentSource): Promise<void> => {
+      if (!show || !row.magnetUri) return
+      const key = episodeMediaKey(ep.id)
+      const code = episodeCode(ep.seasonNumber, ep.episodeNumber)
+      const magnet = row.magnetUri
+      const queue = async (): Promise<void> => {
+        setSourceBusyMagnet(magnet)
+        const res = await window.api.torrent.addMovieDownload({
+          movieId: key,
+          movieTitle: `${show.name} ${code} · ${ep.name}`,
+          episode: {
+            showId: show.id,
+            showName: show.name,
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber
+          },
+          magnetUri: magnet,
+          title: row.title,
+          indexerSeeders: row.seeders,
+          indexerLeechers: row.leechers
+        })
+        setSourceBusyMagnet(null)
+        setSourceFeedback(res.ok ? 'Download queued.' : res.error)
+        setStatus((current) => ({
+          ...current,
+          [key]: res.ok
+            ? { phase: 'buffering', downloadId: res.downloadId }
+            : { phase: 'error', message: res.error }
+        }))
+      }
+      if (hasAcknowledgedNetworkNotice()) await queue()
+      else setPendingNotice(() => () => void queue())
+    },
+    [show]
+  )
+
   const nextEpisode = useMemo((): TvEpisode | null => {
     if (!lastPlayed || !season) return null
     const watched = history.get(episodeMediaKey(lastPlayed.id))?.finished
@@ -261,16 +359,16 @@ export function TvShowPage(): ReactElement {
       {!show && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
       {show && (
         <div className="space-y-6">
-          <div className="flex gap-6">
+          <div className="flex items-start gap-6">
             {show.posterUrl && (
               <img src={show.posterUrl} alt="" className="hidden w-40 rounded-md sm:block" />
             )}
             <div className="min-w-0 space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight">{show.name}</h1>
-              <p className="text-muted-foreground text-sm">
+              <h1 className="type-display">{show.name}</h1>
+              <p className="type-meta text-muted-foreground">
                 {[show.firstAirYear, seasonLabel(show.seasons.length)].filter(Boolean).join(' · ')}
               </p>
-              <p className="max-w-prose text-sm leading-relaxed">{show.overview}</p>
+              <p className="type-prose">{show.overview}</p>
               <Button
                 type="button"
                 variant={inMyShows ? 'secondary' : 'outline'}
@@ -290,6 +388,7 @@ export function TvShowPage(): ReactElement {
                 )}
                 {inMyShows ? 'In My shows' : 'Add to My shows'}
               </Button>
+              <TvCastTrailers cast={show.cast ?? []} trailers={show.trailers ?? []} />
             </div>
           </div>
 
@@ -360,70 +459,106 @@ export function TvShowPage(): ReactElement {
                 return (
                   <li
                     key={ep.id}
-                    className="flex items-center gap-4 rounded-lg border border-border bg-card/40 p-3"
+                    className="space-y-3 rounded-lg border border-border bg-card/40 p-3"
                   >
-                    <div className="bg-muted relative hidden aspect-video w-36 shrink-0 overflow-hidden rounded sm:block">
-                      {ep.stillUrl && (
-                        <img src={ep.stillUrl} alt="" className="size-full object-cover" />
-                      )}
-                      {progress && progress.duration > 0 && (
-                        <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
-                          <div
-                            className="bg-primary h-full"
-                            style={{
-                              width: `${progress.finished ? 100 : (progress.position / progress.duration) * 100}%`
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {episodeCode(ep.seasonNumber, ep.episodeNumber)} · {ep.name}
-                      </p>
-                      <p className="text-muted-foreground line-clamp-2 text-xs">{ep.overview}</p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {st.phase === 'searching' && 'Finding the best copy…'}
-                        {st.phase === 'buffering' &&
-                          (dl && dl.status !== 'pending_metadata' && dl.status !== 'queued'
-                            ? `Buffering ${Math.round(dl.progress * 100)}% · ${dl.numPeers} peers`
-                            : 'Connecting to peers…')}
-                        {st.phase === 'error' && (
-                          <span className="text-destructive">{st.message}</span>
+                    <div className="flex items-center gap-4">
+                      <div className="bg-muted relative hidden aspect-video w-36 shrink-0 overflow-hidden rounded sm:block">
+                        {ep.stillUrl && (
+                          <img src={ep.stillUrl} alt="" className="size-full object-cover" />
                         )}
-                        {st.phase === 'idle' && progress?.finished && 'Watched'}
-                        {st.phase === 'idle' &&
-                          !progress?.finished &&
-                          dl?.status === 'complete' &&
-                          'Downloaded'}
-                      </p>
+                        {progress && progress.duration > 0 && (
+                          <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
+                            <div
+                              className="bg-primary h-full"
+                              style={{
+                                width: `${progress.finished ? 100 : (progress.position / progress.duration) * 100}%`
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {episodeCode(ep.seasonNumber, ep.episodeNumber)} · {ep.name}
+                        </p>
+                        <p className="text-muted-foreground line-clamp-2 text-xs">{ep.overview}</p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {st.phase === 'searching' && 'Finding the best copy…'}
+                          {st.phase === 'buffering' &&
+                            (dl && dl.status !== 'pending_metadata' && dl.status !== 'queued'
+                              ? `Buffering ${Math.round(dl.progress * 100)}% · ${dl.numPeers} peers`
+                              : 'Connecting to peers…')}
+                          {st.phase === 'error' && (
+                            <span className="text-destructive">{st.message}</span>
+                          )}
+                          {st.phase === 'idle' && progress?.finished && 'Watched'}
+                          {st.phase === 'idle' &&
+                            !progress?.finished &&
+                            dl?.status === 'complete' &&
+                            'Downloaded'}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
+                              ? 'secondary'
+                              : 'outline'
+                          }
+                          onClick={() => setVidcoreEpisode(ep.episodeNumber)}
+                        >
+                          VidCore
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={sourcesFor === ep.id ? 'secondary' : 'outline'}
+                          onClick={() => {
+                            if (sourcesFor === ep.id) {
+                              setSourcesFor(null)
+                              return
+                            }
+                            void searchEpisodeSources(ep)
+                          }}
+                        >
+                          Sources
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={busy}
+                          onClick={() => void playEpisode(ep)}
+                        >
+                          {busy ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Play className="size-3.5" />
+                          )}
+                          {resume > 0 ? 'Resume' : 'Play'}
+                        </Button>
+                      </div>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={
-                        vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
-                          ? 'secondary'
-                          : 'outline'
-                      }
-                      onClick={() => setVidcoreEpisode(ep.episodeNumber)}
-                    >
-                      VidCore
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="shrink-0 gap-1.5"
-                      disabled={busy}
-                      onClick={() => void playEpisode(ep)}
-                    >
-                      {busy ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Play className="size-3.5" />
-                      )}
-                      {resume > 0 ? 'Resume' : 'Play'}
-                    </Button>
+                    {sourcesFor === ep.id && (
+                      <MovieTorrentSourcesSection
+                        detailPresent
+                        torrentLoading={sourcesLoading}
+                        torrentData={sourcesData}
+                        rankedSources={rankedSources}
+                        addFeedback={sourceFeedback}
+                        addBusyMagnet={sourceBusyMagnet}
+                        onRefreshSources={() => void searchEpisodeSources(ep, true)}
+                        onQueueDownload={(row) => void queueEpisodeSource(ep, row)}
+                        onCopyMagnet={(uri) => {
+                          if (isValidMagnetUri(uri)) void navigator.clipboard.writeText(uri)
+                        }}
+                        onOpenDetails={(url) => {
+                          if (isSafeTorrentDetailsUrl(url)) void window.api.app.openExternal(url)
+                        }}
+                      />
+                    )}
                   </li>
                 )
               })}

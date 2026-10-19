@@ -14,6 +14,7 @@ import {
   readShowListFacts,
   recordShowSwarm,
   setShowInWatchlist,
+  readStoredShowDetails,
   upsertShowDetails,
   upsertShowListRows
 } from './shows'
@@ -47,7 +48,7 @@ function run(): void {
           version: number
         }[]
       ).map((row) => row.version),
-      [1, 2, 3, 4, 5, 6]
+      [1, 2, 3, 4, 5, 6, 7]
     )
 
     upsertMovie(db, {
@@ -315,8 +316,14 @@ function run(): void {
       imdbId: 'tt7654321',
       voteAverage: 7.5,
       voteCount: 800,
-      popularity: 150
+      popularity: 150,
+      cast: [{ name: 'Ada Actor', character: 'Lead', profileUrl: null }],
+      trailers: [{ name: 'Trailer', youtubeKey: 'abc123' }]
     })
+    const storedShow = readStoredShowDetails(db, 3)
+    assert.equal(storedShow?.extrasStored, true)
+    assert.equal(storedShow?.details.cast[0]?.name, 'Ada Actor')
+    assert.equal(storedShow?.details.trailers[0]?.youtubeKey, 'abc123')
     upsertShowListRows(
       db,
       [{ ...showRow, tmdbId: 3, name: 'Searched Comedy', firstAirDate: null }],
