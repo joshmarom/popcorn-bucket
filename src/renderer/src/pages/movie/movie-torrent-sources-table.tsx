@@ -1,5 +1,5 @@
 import type { TorrentSource } from '@shared/torrent'
-import { isSafeTorrentDetailsUrl, isValidMagnetUri } from '@shared/torrent'
+import { isValidMagnetUri } from '@shared/torrent'
 import { qualitySortScore, swarmRatioScore } from '@shared/source-sort'
 import { ArrowDown, ArrowUp, ArrowUpDown, Magnet, Play } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'
 import { TorrentQualityBadge } from './torrent-quality-badge'
 
-type SortColumn = 'quality' | 'swarm'
+type SortColumn = 'quality' | 'size' | 'swarm'
 type SortState = { column: SortColumn; dir: 'asc' | 'desc' }
 
 function SortableHeader({
@@ -93,14 +93,12 @@ export function MovieTorrentSourcesTable({
   rows,
   addBusyMagnet,
   onQueueDownload,
-  onCopyMagnet,
-  onOpenDetails
+  onCopyMagnet
 }: {
   rows: TorrentSource[]
   addBusyMagnet: string | null
   onQueueDownload: (row: TorrentSource) => void
   onCopyMagnet: (uri: string) => void
-  onOpenDetails: (url: string) => void
 }): ReactElement {
   const [sort, setSort] = useState<SortState | null>(null)
 
@@ -114,12 +112,21 @@ export function MovieTorrentSourcesTable({
   const sortedRows = useMemo(() => {
     const indexed = rows.map((row, index) => ({ row, index }))
     if (!sort) return indexed
-    const score =
-      sort.column === 'quality'
-        ? qualitySortScore
-        : (row: TorrentSource) => swarmRatioScore(row.seeders, row.leechers)
     const direction = sort.dir === 'asc' ? 1 : -1
     return indexed.sort((a, b) => {
+      if (sort.column === 'size') {
+        const left = a.row.sizeBytes
+        const right = b.row.sizeBytes
+        if (left == null && right == null) return a.index - b.index
+        if (left == null) return 1
+        if (right == null) return -1
+        if (left !== right) return (left - right) * direction
+        return a.index - b.index
+      }
+      const score =
+        sort.column === 'quality'
+          ? qualitySortScore
+          : (row: TorrentSource) => swarmRatioScore(row.seeders, row.leechers)
       const delta = score(a.row) - score(b.row)
       if (delta !== 0) return delta * direction
       return a.index - b.index
@@ -137,15 +144,15 @@ export function MovieTorrentSourcesTable({
         <table className="w-full min-w-[520px] border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-muted/95 backdrop-blur-sm supports-[backdrop-filter]:bg-muted/80">
-              <th className="p-2 font-medium">Title</th>
+              <th className="w-full p-2 font-medium">Title</th>
               <SortableHeader label="Quality" column="quality" sort={sort} onSort={onSort} />
-              <th className="p-2 font-medium">Size</th>
+              <SortableHeader label="Size" column="size" sort={sort} onSort={onSort} />
               <SortableHeader
-                label="S/L"
+                label="Seeds"
                 column="swarm"
                 sort={sort}
                 onSort={onSort}
-                title="Seeders / leechers"
+                title="Seeders / leechers. A larger healthy swarm sorts first."
                 className="whitespace-nowrap"
               />
               <th className="p-2 font-medium">Actions</th>
@@ -154,20 +161,22 @@ export function MovieTorrentSourcesTable({
           <tbody>
             {sortedRows.map(({ row, index }) => (
               <tr key={`${row.title}-${index}`} className="border-b border-border last:border-0">
-                <td className="max-w-[240px] p-2 ps-4 align-top">
+                <td className="p-2 ps-4 align-top">
                   <span className="line-clamp-2">{row.title}</span>
                 </td>
                 <td className="text-muted-foreground p-2 align-top whitespace-nowrap">
-                  <div>
-                    {[
-                      row.release.resolution,
-                      row.release.source,
-                      row.quality?.hdr ?? (row.release.hdr ? 'HDR' : null)
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || '—'}
+                  <div className="flex items-center gap-1.5">
+                    <span>
+                      {[
+                        row.release.resolution,
+                        row.release.source,
+                        row.quality?.hdr ?? (row.release.hdr ? 'HDR' : null)
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
+                    </span>
+                    {row.quality ? <TorrentQualityBadge quality={row.quality} /> : null}
                   </div>
-                  {row.quality ? <TorrentQualityBadge quality={row.quality} /> : null}
                 </td>
                 <td className="text-muted-foreground p-2 align-top whitespace-nowrap">
                   {row.size ?? '—'}
@@ -176,8 +185,8 @@ export function MovieTorrentSourcesTable({
                   {row.seeders}
                   <span className="text-muted-foreground"> / {row.leechers}</span>
                 </td>
-                <td className="p-2 align-top">
-                  <div className="flex flex-wrap items-center gap-1">
+                <td className="p-2 align-top whitespace-nowrap">
+                  <div className="flex flex-nowrap items-center gap-1">
                     {row.magnetUri && isValidMagnetUri(row.magnetUri) ? (
                       <>
                         <Button
@@ -186,6 +195,7 @@ export function MovieTorrentSourcesTable({
                           size="sm"
                           className="h-8 gap-1"
                           disabled={addBusyMagnet !== null}
+                          title="Play this copy. Playback starts once it has buffered."
                           onClick={() => onQueueDownload(row)}
                         >
                           <Play className="size-3.5" />
@@ -193,17 +203,6 @@ export function MovieTorrentSourcesTable({
                         </Button>
                         <CopyMagnetButton uri={row.magnetUri} onCopy={onCopyMagnet} />
                       </>
-                    ) : null}
-                    {row.torrentFileUrl && isSafeTorrentDetailsUrl(row.torrentFileUrl) ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8"
-                        onClick={() => onOpenDetails(row.torrentFileUrl!)}
-                      >
-                        .torrent
-                      </Button>
                     ) : null}
                   </div>
                 </td>

@@ -24,7 +24,9 @@ import {
 } from '@shared/tv'
 import type { WatchProgress } from '@shared/watch-history'
 import { VidcorePlayer } from '@/components/vidcore-player'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { acknowledgeNetworkNotice, hasAcknowledgedNetworkNotice } from '@/lib/network-notice'
 import { cn } from '@/lib/utils'
 import { MoviePageShell } from './movie/movie-page-shell'
@@ -51,6 +53,19 @@ function mergeResults(lists: TorrentSource[][]): TorrentSource[] {
     out.push(row)
   }
   return out
+}
+
+/** Show details omit rating and genres; the list-facts payload already has both. */
+async function withShowFacts(show: TvShowDetails): Promise<TvShowDetails> {
+  const genres = show.genres ?? []
+  if (show.voteAverage != null && genres.length > 0) return { ...show, genres }
+  const factsRes = await window.api.tv.listFacts([show.id])
+  const facts = factsRes.ok ? factsRes.facts.find((row) => row.id === show.id) : undefined
+  return {
+    ...show,
+    genres: genres.length > 0 ? genres : (facts?.genres ?? []),
+    voteAverage: show.voteAverage ?? facts?.voteAverage ?? null
+  }
 }
 
 export function TvShowPage(): ReactElement {
@@ -104,13 +119,14 @@ export function TvShowPage(): ReactElement {
   useEffect(() => {
     if (!Number.isFinite(showId)) return
     setVidcoreEpisode(null)
-    void window.api.tv.getShow(showId).then((res) => {
+    void window.api.tv.getShow(showId).then(async (res) => {
       if (!res.ok) {
         setError(res.error)
         return
       }
-      setShow(res.show)
-      const first = res.show.seasons[0]?.seasonNumber ?? null
+      const loaded = await withShowFacts(res.show)
+      setShow(loaded)
+      const first = loaded.seasons[0]?.seasonNumber ?? null
       if (seasonNumberRef.current == null && first != null) {
         skipSeasonFetch.current = true
         void window.api.tv.getSeason(showId, first).then((seasonRes) => {
@@ -197,7 +213,10 @@ export function TvShowPage(): ReactElement {
       if (!best?.magnetUri) {
         setStatus((s) => ({
           ...s,
-          [key]: { phase: 'error', message: `No good copy of ${code} found.` }
+          [key]: {
+            phase: 'error',
+            message: `No good copy of ${code}. Choose one under Sources, or watch it in VidCore.`
+          }
         }))
         return
       }
@@ -302,7 +321,9 @@ export function TvShowPage(): ReactElement {
           indexerLeechers: row.leechers
         })
         setSourceBusyMagnet(null)
-        setSourceFeedback(res.ok ? 'Download queued.' : res.error)
+        setSourceFeedback(
+          res.ok ? 'Buffering this copy. Playback starts when it is ready.' : res.error
+        )
         setStatus((current) => ({
           ...current,
           [key]: res.ok
@@ -369,30 +390,29 @@ export function TvShowPage(): ReactElement {
       >
         {show && (
           <div className="space-y-6">
-            <div className="flex items-start gap-6">
-              {show.posterUrl && (
-                <img
-                  src={show.posterUrl}
-                  alt=""
-                  className="hidden w-40 rounded-md sm:block"
-                  style={posterStyle(posterName, poster)}
-                />
-              )}
-              <div className="min-w-0 space-y-2">
-                <h1 className="type-display" style={titleStyle(headingName, poster)}>
-                  {show.name}
-                </h1>
-                <p className="type-meta text-muted-foreground">
-                  {[show.firstAirYear, seasonLabel(show.seasons.length)]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-                <p className="type-prose">{show.overview}</p>
+            <div className="grid gap-6 md:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
+              <div className="space-y-3">
+                <Card className="overflow-hidden p-0">
+                  <div className="bg-muted aspect-[2/3]">
+                    {show.posterUrl ? (
+                      <img
+                        src={show.posterUrl}
+                        alt=""
+                        className="size-full object-cover"
+                        style={posterStyle(posterName, poster)}
+                      />
+                    ) : (
+                      <div className="text-muted-foreground flex size-full items-center justify-center text-sm">
+                        No poster
+                      </div>
+                    )}
+                  </div>
+                </Card>
                 <Button
                   type="button"
                   variant={inMyShows ? 'secondary' : 'outline'}
-                  size="sm"
-                  className="gap-1.5"
+                  size="lg"
+                  className="w-full gap-1.5"
                   aria-pressed={inMyShows}
                   onClick={() => {
                     const next = !inMyShows
@@ -402,11 +422,39 @@ export function TvShowPage(): ReactElement {
                 >
                   <IconSwap
                     state={inMyShows ? 'b' : 'a'}
-                    a={<Bookmark className="size-3.5" />}
-                    b={<BookmarkCheck className="size-3.5" />}
+                    a={<Bookmark className="size-4" />}
+                    b={<BookmarkCheck className="size-4" />}
                   />
                   {inMyShows ? 'In My shows' : 'Add to My shows'}
                 </Button>
+              </div>
+              <div className="min-w-0 space-y-4">
+                <div>
+                  <h1 className="type-display" style={titleStyle(headingName, poster)}>
+                    {show.name}
+                  </h1>
+                  <p className="type-meta text-muted-foreground mt-2">
+                    {[
+                      show.firstAirYear,
+                      seasonLabel(show.seasons.length),
+                      show.voteAverage != null && show.voteAverage > 0
+                        ? `★ ${show.voteAverage.toFixed(1)}`
+                        : null
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+                {(show.genres ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {(show.genres ?? []).map((genre) => (
+                      <Badge key={genre} variant="secondary">
+                        {genre}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <p className="type-prose">{show.overview}</p>
                 <TvCastTrailers cast={show.cast ?? []} trailers={show.trailers ?? []} />
               </div>
             </div>
@@ -435,7 +483,10 @@ export function TvShowPage(): ReactElement {
             )}
 
             {vidcoreEpisode != null && seasonNumber != null && (
-              <div ref={vidcoreAnchorRef}>
+              <div ref={vidcoreAnchorRef} className="space-y-3">
+                <p className="text-muted-foreground text-sm">
+                  Plays in the browser. Nothing is downloaded to this computer.
+                </p>
                 <VidcorePlayer
                   title={
                     vidcoreTarget

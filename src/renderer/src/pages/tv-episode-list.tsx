@@ -2,12 +2,7 @@ import { useEffect, useRef, useState, type MutableRefObject, type ReactElement }
 import { Loader2, Play } from 'lucide-react'
 import { episodeCode, episodeMediaKey, type TvEpisode, type TvSeasonDetails } from '@shared/tv'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
-import {
-  isSafeTorrentDetailsUrl,
-  isValidMagnetUri,
-  type TorrentSearchResponse,
-  type TorrentSource
-} from '@shared/torrent'
+import { isValidMagnetUri, type TorrentSearchResponse, type TorrentSource } from '@shared/torrent'
 import type { RankedSources } from '@shared/release-ranking'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
 import { Button } from '@/components/ui/button'
@@ -184,6 +179,10 @@ export function TvEpisodeList({
                       ? 'secondary'
                       : 'outline'
                   }
+                  title="Watch in the browser, without downloading"
+                  aria-pressed={
+                    vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
+                  }
                   onClick={() => setVidcoreEpisode(ep.episodeNumber)}
                 >
                   VidCore
@@ -192,6 +191,8 @@ export function TvEpisodeList({
                   type="button"
                   size="sm"
                   variant={sourcesFor === ep.id ? 'secondary' : 'outline'}
+                  title="Choose a specific copy"
+                  aria-pressed={sourcesFor === ep.id}
                   onClick={() => {
                     if (sourcesFor === ep.id) {
                       setSourcesFor(null)
@@ -207,6 +208,7 @@ export function TvEpisodeList({
                   size="sm"
                   className="gap-1.5"
                   disabled={busy}
+                  title="Play the best available copy"
                   onClick={() => void playEpisode(ep)}
                 >
                   {busy ? (
@@ -230,9 +232,6 @@ export function TvEpisodeList({
                 onQueueDownload={(row) => queueEpisodeSource(ep, row)}
                 onCopyMagnet={(uri) => {
                   if (isValidMagnetUri(uri)) void navigator.clipboard.writeText(uri)
-                }}
-                onOpenDetails={(url) => {
-                  if (isSafeTorrentDetailsUrl(url)) void window.api.app.openExternal(url)
                 }}
               />
             )}

@@ -4,7 +4,6 @@ import type { RankedTorrentSource } from '@shared/release-ranking'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import { IconSwap } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { releaseSummary } from '@/lib/release-summary'
 import type { QuickPlayState } from './movie-page-store'
 
@@ -75,27 +74,41 @@ export function QuickPlayBar({
         ? quickPlay.message
         : (status ?? subtitle)
 
+  const failed = quickPlay.phase === 'error' || quickPlay.phase === 'no-sources'
+
   return (
     <div className="flex flex-col gap-2">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="block w-full">
-              <Button
-                type="button"
-                size="lg"
-                className="w-full gap-2"
-                disabled={busy}
-                onClick={onPlay}
-              >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-                {resumeSeconds > 0 ? `Resume from ${formatClock(resumeSeconds)}` : 'Play'}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">{metadata}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Button type="button" size="lg" className="w-full gap-2" disabled={busy} onClick={onPlay}>
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
+        {resumeSeconds > 0 ? `Resume from ${formatClock(resumeSeconds)}` : 'Play'}
+      </Button>
+      <p
+        className={failed ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}
+        aria-live="polite"
+      >
+        {metadata}
+      </p>
+      {(quickPlay.phase === 'no-sources' || quickPlay.phase === 'error') && (
+        <div className="text-sm">
+          {quickPlay.phase === 'no-sources' && (
+            <p>
+              <button type="button" className="text-primary underline" onClick={onUseVidking}>
+                Try VidCore
+              </button>
+              {' or '}
+              <button type="button" className="text-primary underline" onClick={onShowSources}>
+                see all sources
+              </button>
+              .
+            </p>
+          )}
+          {quickPlay.phase === 'error' && (
+            <button type="button" className="text-destructive underline" onClick={onDismiss}>
+              Dismiss
+            </button>
+          )}
+        </div>
+      )}
       <Button
         type="button"
         variant="outline"
@@ -111,31 +124,6 @@ export function QuickPlayBar({
         />
         {inWatchlist ? 'In my list' : 'My list'}
       </Button>
-      {(quickPlay.phase === 'no-sources' || quickPlay.phase === 'error') && (
-        <div className="text-sm">
-          {quickPlay.phase === 'no-sources' && (
-            <p>
-              No good copy found.{' '}
-              <button type="button" className="text-primary underline" onClick={onUseVidking}>
-                Try VidCore
-              </button>{' '}
-              or{' '}
-              <button type="button" className="text-primary underline" onClick={onShowSources}>
-                see all sources
-              </button>
-              .
-            </p>
-          )}
-          {quickPlay.phase === 'error' && (
-            <p className="text-destructive">
-              {quickPlay.message}{' '}
-              <button type="button" className="underline" onClick={onDismiss}>
-                Dismiss
-              </button>
-            </p>
-          )}
-        </div>
-      )}
     </div>
   )
 }

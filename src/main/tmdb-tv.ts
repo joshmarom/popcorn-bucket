@@ -403,6 +403,8 @@ async function fetchTvShowDetailsFromTmdb(
     posterUrl: posterUrl(d.poster_path ?? null, 'w342'),
     backdropUrl: backdropUrl(d.backdrop_path ?? null),
     imdbId: d.external_ids?.imdb_id ?? null,
+    voteAverage: d.vote_average ?? null,
+    genres: (d.genres ?? []).map((g) => g.name),
     cast,
     trailers,
     seasons: (d.seasons ?? [])

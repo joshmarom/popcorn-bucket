@@ -56,10 +56,15 @@ export function MovieDownloadCard({
             size="sm"
             className="h-8 gap-1"
             disabled={!d.canPlay || playBusyDownloadId !== null}
+            title={
+              d.canPlay
+                ? 'Play this download'
+                : 'Playback starts once enough of the file has downloaded'
+            }
             onClick={() => onPlay(d.downloadId)}
           >
             <Play className="size-3.5" />
-            {playBusyDownloadId === d.downloadId ? 'Starting…' : 'Play'}
+            {playBusyDownloadId === d.downloadId ? 'Starting…' : d.canPlay ? 'Play' : 'Waiting'}
           </Button>
           {d.status === 'downloading' ? (
             <Button
@@ -104,8 +109,8 @@ export function MovieDownloadCard({
       </div>
       <div className="text-muted-foreground grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <span className="font-medium text-foreground">Indexer</span>: S {d.indexerSeeders} · L{' '}
-          {d.indexerLeechers}
+          <span className="font-medium text-foreground">Seeders</span>: {d.indexerSeeders} ·{' '}
+          <span className="font-medium text-foreground">leechers</span> {d.indexerLeechers}
         </div>
         <div>
           <span className="font-medium text-foreground">Swarm</span>: {d.numPeers} peers

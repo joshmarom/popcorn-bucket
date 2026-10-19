@@ -107,13 +107,16 @@ export function ShowDetailPlaceholder({
 }): ReactElement {
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-6">
-        <div className="bg-muted hidden aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-md sm:block">
-          {posterSrc ? (
-            <img className="size-full object-cover" src={posterSrc} alt="" style={posterStyle} />
-          ) : null}
+      <div className="grid gap-6 md:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
+        <div className="space-y-3">
+          <div className="bg-muted aspect-[2/3] overflow-hidden rounded-xl">
+            {posterSrc ? (
+              <img className="size-full object-cover" src={posterSrc} alt="" style={posterStyle} />
+            ) : null}
+          </div>
+          <Bar className="h-11" />
         </div>
-        <div className="min-w-0 flex-1 space-y-3">
+        <div className="min-w-0 space-y-4">
           {title ? (
             <h1 className="type-display" style={titleStyle}>
               {title}
@@ -122,12 +125,15 @@ export function ShowDetailPlaceholder({
             <Bar className="h-9 w-3/4" />
           )}
           <Bar className="h-4 w-40" />
+          <div className="flex gap-2">
+            <Bar className="h-6 w-16" />
+            <Bar className="h-6 w-20" />
+          </div>
           <div className="space-y-2">
             <Bar className="h-4 w-full" />
             <Bar className="h-4 w-full" />
             <Bar className="h-4 w-2/3" />
           </div>
-          <Bar className="h-8 w-36" />
         </div>
       </div>
       <div className="space-y-3">

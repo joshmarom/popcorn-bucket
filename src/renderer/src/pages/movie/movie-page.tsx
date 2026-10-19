@@ -301,9 +301,8 @@ function MoviePageContent(): ReactElement {
                     addFeedback={s.addFeedback}
                     addBusyMagnet={s.addBusyMagnet}
                     onRefreshSources={s.refreshTorrentSources}
-                    onQueueDownload={(row) => void s.queueDownload(row)}
+                    onQueueDownload={(row) => void s.playSource(row)}
                     onCopyMagnet={(uri) => void s.copyMagnet(uri)}
-                    onOpenDetails={(url) => void s.openDetails(url)}
                   />
                 </div>
               </PanelReveal>

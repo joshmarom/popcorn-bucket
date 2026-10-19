@@ -481,7 +481,7 @@ export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShow
   const row = db
     .prepare(
       `SELECT tmdb_id, name, overview, first_air_date, year, poster_url, backdrop_url,
-              imdb_id, details_at, cast_json, trailers_json
+              imdb_id, rating, genres_json, details_at, cast_json, trailers_json
        FROM shows WHERE tmdb_id = ?`
     )
     .get(tmdbId) as
@@ -494,6 +494,8 @@ export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShow
         poster_url: string | null
         backdrop_url: string | null
         imdb_id: string | null
+        rating: number | null
+        genres_json: string | null
         details_at: number | null
         cast_json: string | null
         trailers_json: string | null
@@ -523,6 +525,8 @@ export function readStoredShowDetails(db: LibraryDb, tmdbId: number): StoredShow
       posterUrl: row.poster_url,
       backdropUrl: row.backdrop_url,
       imdbId: row.imdb_id,
+      voteAverage: row.rating,
+      genres: parseGenres(row.genres_json),
       cast: parseCast(row.cast_json),
       trailers: parseTrailers(row.trailers_json),
       seasons: seasons.map((season) => ({

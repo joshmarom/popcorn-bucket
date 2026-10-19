@@ -1,6 +1,6 @@
 import type { TorrentSearchResponse, TorrentSource } from '@shared/torrent'
 import type { RankedSources } from '@shared/release-ranking'
-import { RefreshCw } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { useEffect, useState, type ReactElement } from 'react'
 import type { ProviderHealth } from '@shared/provider-health'
 import { Button } from '@/components/ui/button'
@@ -16,8 +16,7 @@ export function MovieTorrentSourcesSection({
   addBusyMagnet,
   onRefreshSources,
   onQueueDownload,
-  onCopyMagnet,
-  onOpenDetails
+  onCopyMagnet
 }: {
   detailPresent: boolean
   torrentLoading: boolean
@@ -28,7 +27,6 @@ export function MovieTorrentSourcesSection({
   onRefreshSources: () => void
   onQueueDownload: (row: TorrentSource) => void
   onCopyMagnet: (uri: string) => void
-  onOpenDetails: (url: string) => void
 }): ReactElement {
   const [health, setHealth] = useState<ProviderHealth[]>([])
   useEffect(() => {
@@ -47,7 +45,9 @@ export function MovieTorrentSourcesSection({
         <p
           className={cn(
             'rounded-md border px-3 py-2 text-sm',
-            addFeedback.startsWith('Download queued') || addFeedback.startsWith('Added')
+            addFeedback.startsWith('Buffering') ||
+              addFeedback.startsWith('Download queued') ||
+              addFeedback.startsWith('Added')
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
               : 'border-destructive/30 bg-destructive/10 text-destructive'
           )}
@@ -69,7 +69,10 @@ export function MovieTorrentSourcesSection({
           </p>
         )}
       {torrentLoading && (
-        <p className="text-muted-foreground text-sm">Searching public indexers…</p>
+        <p className="text-muted-foreground flex items-center gap-2 text-sm" aria-live="polite">
+          <Loader2 className="size-4 animate-spin" />
+          Searching for copies…
+        </p>
       )}
       {!torrentLoading && torrentData && !torrentData.ok && (
         <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
@@ -115,7 +118,6 @@ export function MovieTorrentSourcesSection({
             addBusyMagnet={addBusyMagnet}
             onQueueDownload={onQueueDownload}
             onCopyMagnet={onCopyMagnet}
-            onOpenDetails={onOpenDetails}
           />
         </section>
       )}
@@ -130,7 +132,6 @@ export function MovieTorrentSourcesSection({
             addBusyMagnet={addBusyMagnet}
             onQueueDownload={onQueueDownload}
             onCopyMagnet={onCopyMagnet}
-            onOpenDetails={onOpenDetails}
           />
         </details>
       )}

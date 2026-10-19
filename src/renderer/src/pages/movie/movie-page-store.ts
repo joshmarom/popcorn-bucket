@@ -83,6 +83,8 @@ type MoviePageActions = {
   queueDownload: (row: TorrentSource) => Promise<string | null>
   /** One-click Play: existing download, else the best-ranked copy. */
   playBest: () => Promise<void>
+  /** Play a specific source row: queue it, then start playback once it can stream. */
+  playSource: (row: TorrentSource) => Promise<void>
   /** Called on each downloads refresh; starts playback once the buffering copy can play. */
   advanceQuickPlay: () => void
   resetQuickPlay: () => void
@@ -319,6 +321,20 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
       })
     },
 
+    playSource: async (row) => {
+      if (!row.magnetUri || !isValidMagnetUri(row.magnetUri)) return
+      if (!hasAcknowledgedNetworkNotice()) {
+        set({ networkNoticeRow: row, quickPlay: { phase: 'awaiting-notice' } })
+        return
+      }
+      const downloadId = await get().queueDownload(row)
+      set({
+        quickPlay: downloadId
+          ? { phase: 'buffering', downloadId }
+          : { phase: 'error', message: get().addFeedback ?? 'Could not start playback.' }
+      })
+    },
+
     advanceQuickPlay: () => {
       const qp = get().quickPlay
       if (qp.phase !== 'buffering') return
@@ -356,7 +372,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
           indexerLeechers: row.leechers
         })
         if (res.ok) {
-          set({ addFeedback: 'Download queued — see above.' })
+          set({ addFeedback: 'Buffering this copy. Playback starts when it is ready.' })
           window.setTimeout(() => set({ addFeedback: null }), 2800)
           return res.downloadId
         }

@@ -57,6 +57,8 @@ export type TvShowDetails = {
   posterUrl: string | null
   backdropUrl: string | null
   imdbId: string | null
+  voteAverage: number | null
+  genres: string[]
   cast: CatalogCastMember[]
   trailers: CatalogTrailer[]
   /** Specials (season 0) are left out. */

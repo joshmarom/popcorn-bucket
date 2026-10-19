@@ -1,7 +1,6 @@
 import type { TorrentQualityInfo } from '@shared/torrent'
 import { BadgeCheck } from 'lucide-react'
 import type { ReactElement } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 function channelLabel(channels: number | null): string | null {
@@ -43,7 +42,7 @@ function detailLines(q: TorrentQualityInfo): string[] {
   return lines
 }
 
-/** Verified badge plus TorrentClaw score, with scanned file details on hover. */
+/** Verified icon plus TorrentClaw score, with scanned file details on hover. */
 export function TorrentQualityBadge({
   quality
 }: {
@@ -56,10 +55,7 @@ export function TorrentQualityBadge({
       <TooltipTrigger asChild>
         <span className="inline-flex items-center gap-1">
           {quality.verified ? (
-            <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-xs">
-              <BadgeCheck aria-hidden className="size-3" />
-              Verified
-            </Badge>
+            <BadgeCheck aria-label="Verified" className="size-3.5" />
           ) : null}
           {quality.score != null ? (
             <span className="text-muted-foreground text-xs tabular-nums">{quality.score}</span>

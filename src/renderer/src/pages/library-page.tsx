@@ -49,8 +49,8 @@ function showListItem(show: TvShowDetails): TvShowListItem {
     firstAirYear: show.firstAirYear,
     posterUrl: show.posterUrl,
     overview: show.overview,
-    voteAverage: null,
-    genres: []
+    voteAverage: show.voteAverage ?? null,
+    genres: show.genres ?? []
   }
 }
 
