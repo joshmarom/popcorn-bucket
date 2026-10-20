@@ -1,0 +1,60 @@
+name: Release installers
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  package-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        shell: bash
+        run: |
+          npm install -g npm@11
+          npm ci
+
+      - name: Package Windows installer
+        shell: bash
+        run: npm run build:win -- --publish never
+
+      - name: Upload installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.exe --clobber
+
+  package-macos:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: |
+          npm install -g npm@11
+          npm ci
+
+      - name: Package macOS disk image
+        run: npm run build:mac -- --universal --publish never
+
+      - name: Upload disk image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.dmg --clobber
