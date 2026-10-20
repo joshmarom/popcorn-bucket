@@ -24,6 +24,7 @@ function isLocalAppStreamUrl(url: string): boolean {
 export function PlayerWindowPage(): ReactElement {
   const [session, setSession] = useState<InlinePlayerSession | null>(null)
   const [playError, setPlayError] = useState<string | null>(null)
+  const [openingMpv, setOpeningMpv] = useState(false)
   const playerRef = useRef<MediaPlayerInstance>(null)
   const sessionRef = useRef<InlinePlayerSession | null>(null)
   const lastReportRef = useRef(0)
@@ -125,6 +126,36 @@ export function PlayerWindowPage(): ReactElement {
     }))
   }, [session?.subtitles])
 
+  const openInMpv = useCallback(async (): Promise<void> => {
+    const s = sessionRef.current
+    if (!s || openingMpv) return
+    const p = playerRef.current
+    const position = p?.state.currentTime ?? s.startSeconds
+    const duration = p?.state.duration ?? 0
+    setOpeningMpv(true)
+    setPlayError(null)
+    p?.pause()
+    if (duration > 0) {
+      await window.api.history.report(s.movieId, position, duration)
+    }
+    try {
+      const openInMpv = window.api.player.openInMpv
+      if (!openInMpv) {
+        throw new Error('Restart the app to enable Open in mpv.')
+      }
+      const res = await openInMpv(position)
+      if (!res.ok) {
+        setPlayError(res.error)
+        setOpeningMpv(false)
+        void p?.play()
+      }
+    } catch (e) {
+      setPlayError(e instanceof Error ? e.message : 'Could not open mpv.')
+      setOpeningMpv(false)
+      void p?.play()
+    }
+  }, [openingMpv])
+
   const handlePlayerError = (d: MediaErrorDetail): void => {
     const msg = d.message || 'Video playback failed.'
     const code = d.code
@@ -174,6 +205,19 @@ export function PlayerWindowPage(): ReactElement {
           Loading player…
         </div>
       )}
+      {session ? (
+        <button
+          type="button"
+          className="pointer-events-auto absolute top-3 right-3 z-[200] rounded-md border border-white/20 bg-black/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-xs hover:bg-black/90 disabled:opacity-50"
+          disabled={openingMpv}
+          onClick={(e) => {
+            e.stopPropagation()
+            void openInMpv()
+          }}
+        >
+          {openingMpv ? 'Opening mpv…' : 'Open in mpv'}
+        </button>
+      ) : null}
       {playError ? (
         <div className="border-destructive/40 bg-destructive/20 pointer-events-auto absolute inset-x-4 bottom-16 z-50 rounded-md border px-4 py-3 text-sm text-white backdrop-blur-xs">
           {playError}

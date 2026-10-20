@@ -208,7 +208,9 @@ const api = {
       const listener = (_e: unknown, session: InlinePlayerSession): void => cb(session)
       ipcRenderer.on('player:session', listener)
       return () => ipcRenderer.removeListener('player:session', listener)
-    }
+    },
+    openInMpv: (position: number): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('player:openInMpv', { position })
   }
 }
 

@@ -171,6 +171,8 @@ export type PopcornApi = {
   player: {
     getSession(): Promise<InlinePlayerSession | null>
     onSession(cb: (session: InlinePlayerSession) => void): () => void
+    /** Hands the current in-app session to mpv at `position` seconds and closes this window. */
+    openInMpv(position: number): Promise<{ ok: true } | { ok: false; error: string }>
   }
 }
 

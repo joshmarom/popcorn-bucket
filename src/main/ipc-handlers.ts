@@ -40,6 +40,7 @@ import type {
 import {
   addMovieDownload,
   endStreamingPlayback,
+  handoffInlinePlaybackToMpv,
   getAllMovieDownloads,
   getDownloadLocation,
   deleteUntrackedDownload,
@@ -405,6 +406,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('player:getSession', (): InlinePlayerSession | null => {
     return getPlayerSession()
   })
+
+  ipcMain.handle(
+    'player:openInMpv',
+    async (_evt, raw: unknown): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const parsed = z
+        .object({ position: z.number().finite().min(0).max(86400 * 48) })
+        .safeParse(raw)
+      if (!parsed.success) return { ok: false, error: 'Invalid playback position.' }
+      return handoffInlinePlaybackToMpv(parsed.data.position)
+    }
+  )
 
   ipcMain.handle('torrent:setMovieDownloadPaused', async (_evt, raw: unknown) => {
     const parsed = movieDownloadPauseInput.safeParse(raw)

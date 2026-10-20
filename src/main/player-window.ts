@@ -7,15 +7,30 @@ import type { InlinePlayerSession } from '@shared/torrent-stream'
 
 export const playerWindowEvents = new EventEmitter()
 
+/** Enough to relaunch the current inline session in external mpv. */
+export type PlayerMpvHandoff = {
+  /** Stream URL or absolute file path mpv can open. */
+  url: string
+  subFiles: string[]
+  /** True when playback depends on the WebTorrent HTTP server staying up. */
+  streaming: boolean
+}
+
 let playerWindow: BrowserWindow | null = null
 let currentSession: InlinePlayerSession | null = null
+let currentHandoff: PlayerMpvHandoff | null = null
 
 export function getPlayerSession(): InlinePlayerSession | null {
   return currentSession
 }
 
-export function openPlayerWindow(session: InlinePlayerSession): void {
+export function getPlayerMpvHandoff(): PlayerMpvHandoff | null {
+  return currentHandoff
+}
+
+export function openPlayerWindow(session: InlinePlayerSession, handoff: PlayerMpvHandoff): void {
   currentSession = session
+  currentHandoff = handoff
 
   if (playerWindow && !playerWindow.isDestroyed()) {
     playerWindow.setTitle(session.fileLabel)
@@ -52,6 +67,7 @@ export function openPlayerWindow(session: InlinePlayerSession): void {
   playerWindow.on('closed', () => {
     playerWindow = null
     currentSession = null
+    currentHandoff = null
     playerWindowEvents.emit('end')
   })
 
@@ -65,6 +81,7 @@ export function openPlayerWindow(session: InlinePlayerSession): void {
 
 export function closePlayerWindow(): void {
   currentSession = null
+  currentHandoff = null
   if (playerWindow && !playerWindow.isDestroyed()) {
     playerWindow.close()
   }

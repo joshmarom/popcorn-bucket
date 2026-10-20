@@ -112,8 +112,8 @@ export function PreferencesSection(): ReactElement {
             update({ preferredPlayer: e.target.value as Preferences['preferredPlayer'] })
           }
         >
-          <option value="mpv">Prefer mpv (fall back to in-app player)</option>
           <option value="inline">Prefer in-app player (use mpv for unsupported formats)</option>
+          <option value="mpv">Prefer mpv (fall back to in-app player)</option>
           <option value="inline-only">In-app player only (never open mpv)</option>
           <option value="mpv-only">mpv only (never use in-app player)</option>
         </select>

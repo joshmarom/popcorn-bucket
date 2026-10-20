@@ -20,7 +20,7 @@ export type Preferences = {
 
 export const defaultPreferences: Preferences = {
   preferredResolution: '1080p',
-  preferredPlayer: 'mpv',
+  preferredPlayer: 'inline',
   downloadDir: '',
   maxActiveDownloads: 2,
   downloadLimitKBps: 0,

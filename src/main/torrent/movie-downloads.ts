@@ -61,6 +61,7 @@ import { resumePosition } from '@shared/watch-history'
 import { localMediaUrl, setLocalMediaRoots } from '../local-media-protocol'
 import {
   closePlayerWindow,
+  getPlayerMpvHandoff,
   getPlayerSession,
   openPlayerWindow,
   playerWindowEvents
@@ -1109,12 +1110,48 @@ async function launchPlayback(t: PlaybackTarget): Promise<TorrentStreamStartResp
     subtitles: t.inlineSubtitles,
     startSeconds
   }
-  openPlayerWindow(session)
+  openPlayerWindow(session, {
+    url: t.mpvUrl,
+    subFiles: t.mpvSubFiles,
+    streaming: t.streaming
+  })
   return {
     ok: true,
     kind: 'inline',
     ...session
   }
+}
+
+/**
+ * Moves the open in-app player session to external mpv at the current position, then closes
+ * the player window. Streaming stays attached so the WebTorrent HTTP server is not torn down.
+ */
+export async function handoffInlinePlaybackToMpv(
+  startSeconds: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = getPlayerSession()
+  const handoff = getPlayerMpvHandoff()
+  if (!session || !handoff) {
+    return { ok: false, error: 'Nothing is playing in the in-app player.' }
+  }
+  const position = Number.isFinite(startSeconds) && startSeconds > 0 ? startSeconds : 0
+  const res = await startExternalMpvSession({
+    url: handoff.url,
+    title: session.fileLabel,
+    subFiles: handoff.subFiles,
+    startSeconds: position,
+    tag: { movieId: session.movieId, downloadId: session.downloadId }
+  })
+  if (!res.ok) {
+    console.error('[player] failed to open mpv:', res.error)
+    return res
+  }
+  if (handoff.streaming) {
+    streamingDownloadId = session.downloadId
+    streamingVia = 'mpv'
+  }
+  closePlayerWindow()
+  return { ok: true }
 }
 
 function inlineTracksForPaths(paths: string[]): TorrentSubtitleTrack[] {
