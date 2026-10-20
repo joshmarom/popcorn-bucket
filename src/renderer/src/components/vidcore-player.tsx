@@ -15,14 +15,16 @@ export function VidcorePlayer({ title, src }: { title: string; src: string }): R
   const webviewRef = useRef<EmbedWebview | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [playerFullscreen, setPlayerFullscreen] = useState(false)
+  const [fullscreenSrc, setFullscreenSrc] = useState(src)
   const [clearing, setClearing] = useState(false)
   const [copyingDiag, setCopyingDiag] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const playerKey = `${reloadKey}:${src}`
 
-  useEffect(() => {
+  if (src !== fullscreenSrc) {
+    setFullscreenSrc(src)
     setPlayerFullscreen(false)
-  }, [src])
+  }
 
   useEffect(() => {
     const el = webviewRef.current

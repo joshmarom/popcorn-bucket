@@ -5,7 +5,7 @@ import type { Context, Next } from 'hono'
 import * as schema from './auth-schema'
 import { getDb, getPool } from './db'
 
-export function createAuth() {
+export function createAuth(): ReturnType<typeof betterAuth> {
   const db = getDb()
   return betterAuth({
     baseURL: process.env.BETTER_AUTH_URL || 'https://popcorn.josh.co.il',

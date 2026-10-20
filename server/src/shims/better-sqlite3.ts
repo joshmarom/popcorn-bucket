@@ -44,11 +44,13 @@ function client(): (body: Call) => Reply {
 
 /** Drop-in for better-sqlite3. The file path is ignored; rows live in Postgres. */
 export default class Database {
-  constructor(_filename?: string) {
+  constructor(filename?: string) {
+    void filename
     client()
   }
 
-  pragma(_source: string): unknown {
+  pragma(source: string): unknown {
+    void source
     return undefined
   }
 

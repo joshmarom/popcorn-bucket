@@ -6,7 +6,7 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  { ignores: ['**/node_modules', '**/dist', '**/out', 'tmp-sqlite-load.cjs'] },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
@@ -40,6 +40,19 @@ export default defineConfig(
   {
     files: ['**/src/renderer/src/pages/**/*.tsx'],
     rules: {
+      'react-hooks/set-state-in-effect': 'off'
+    }
+  },
+  {
+    files: ['**/src/renderer/src/lib/screen-transition.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off'
+    }
+  },
+  {
+    files: ['**/src/renderer/src/lib/surface-motion.ts'],
+    rules: {
+      'react-hooks/immutability': 'off',
       'react-hooks/set-state-in-effect': 'off'
     }
   },

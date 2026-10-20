@@ -31,7 +31,13 @@ export function openPgLibrary(connectionString: string): LibraryDb {
     return reply
   }
 
-  const prepare = (sql: string) => ({
+  const prepare = (
+    sql: string
+  ): {
+    get: (...args: unknown[]) => unknown
+    all: (...args: unknown[]) => unknown[]
+    run: (...args: unknown[]) => { changes: number; lastInsertRowid: number }
+  } => ({
     get: (...args: unknown[]): unknown => {
       const bound = toPostgres(sql, args)
       const reply = call({ op: 'query', text: bound.text, params: bound.params })

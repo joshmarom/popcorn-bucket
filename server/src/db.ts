@@ -1,4 +1,4 @@
-import { drizzle } from 'drizzle-orm/node-postgres'
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import pg from 'pg'
 import * as schema from './auth-schema'
 import { pgConfig } from './pg-config'
@@ -12,6 +12,6 @@ export function getPool(): pg.Pool {
   return pool
 }
 
-export function getDb() {
+export function getDb(): NodePgDatabase<typeof schema> & { $client: pg.Pool } {
   return drizzle(getPool(), { schema })
 }
