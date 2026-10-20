@@ -40,9 +40,11 @@ jobs:
         run: npx vitest run
 
   # Packaged on Windows so better-sqlite3 is the Windows build. Unsigned: SmartScreen warns.
+  # windows-latest is Visual Studio 2026 (v18). The node-gyp used to build better-sqlite3
+  # does not recognize it ("unknown version undefined"), so stay on the 2022 image (VS 2022).
   package-windows:
     needs: build
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
