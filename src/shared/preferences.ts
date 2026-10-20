@@ -1,7 +1,11 @@
 import type { ReleaseResolution } from './release-info'
 
+export type PlayerPreference = 'mpv' | 'inline' | 'inline-only' | 'mpv-only'
+
 export type Preferences = {
   preferredResolution: ReleaseResolution
+  /** Controls when to use the in-app Vidstack player vs external mpv. */
+  preferredPlayer: PlayerPreference
   /** Absolute folder for new downloads; empty means `Downloads/Popcorn Bucket`. */
   downloadDir: string
   /** Downloads that run at once; the rest wait as "Queued". */
@@ -16,6 +20,7 @@ export type Preferences = {
 
 export const defaultPreferences: Preferences = {
   preferredResolution: '1080p',
+  preferredPlayer: 'mpv',
   downloadDir: '',
   maxActiveDownloads: 2,
   downloadLimitKBps: 0,

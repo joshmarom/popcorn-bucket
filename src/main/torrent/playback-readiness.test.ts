@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { headBytesNeeded, parseMp4Layout } from './playback-readiness'
+import { choosePlaybackTarget, headBytesNeeded, parseMp4Layout } from './playback-readiness'
 
 function box(type: string, size: number): Uint8Array {
   const b = new Uint8Array(8)
@@ -60,5 +60,82 @@ describe('headBytesNeeded', () => {
     expect(headBytesNeeded(100 * 1024 * 1024)).toBe(4 * 1024 * 1024)
     expect(headBytesNeeded(2 * 1024 ** 3)).toBeCloseTo(0.01 * 2 * 1024 ** 3)
     expect(headBytesNeeded(1000)).toBe(1000)
+  })
+})
+
+describe('choosePlaybackTarget', () => {
+  it('uses mpv when preferredPlayer is mpv and mpv is installed', () => {
+    expect(
+      choosePlaybackTarget({
+        preference: 'mpv',
+        fileName: 'Movie.2024.1080p.mp4',
+        hasInlineUrl: true,
+        mpvInstalled: true
+      })
+    ).toEqual({ kind: 'mpv' })
+  })
+
+  it('falls back to inline when preferredPlayer is mpv, mpv is missing, and container is MP4', () => {
+    expect(
+      choosePlaybackTarget({
+        preference: 'mpv',
+        fileName: 'Movie.2024.1080p.mp4',
+        hasInlineUrl: true,
+        mpvInstalled: false
+      })
+    ).toEqual({ kind: 'inline' })
+  })
+
+  it('uses inline for MP4 and mpv for MKV when preferredPlayer is inline', () => {
+    expect(
+      choosePlaybackTarget({
+        preference: 'inline',
+        fileName: 'Movie.2024.1080p.mp4',
+        hasInlineUrl: true,
+        mpvInstalled: true
+      })
+    ).toEqual({ kind: 'inline' })
+
+    expect(
+      choosePlaybackTarget({
+        preference: 'inline',
+        fileName: 'Movie.2024.1080p.mkv',
+        hasInlineUrl: true,
+        mpvInstalled: true
+      })
+    ).toEqual({ kind: 'mpv' })
+  })
+
+  it('keeps MKV in the in-app player when preferredPlayer is inline-only', () => {
+    expect(
+      choosePlaybackTarget({
+        preference: 'inline-only',
+        fileName: 'Movie.2024.1080p.mkv',
+        hasInlineUrl: true,
+        mpvInstalled: true
+      })
+    ).toEqual({ kind: 'inline' })
+  })
+
+  it('requires mpv for archives even when inline-only is selected', () => {
+    expect(
+      choosePlaybackTarget({
+        preference: 'inline-only',
+        fileName: 'release.rar',
+        hasInlineUrl: true,
+        mpvInstalled: true
+      })
+    ).toEqual({ kind: 'archive-needs-mpv', reason: 'inline-only' })
+  })
+
+  it('always selects mpv when preferredPlayer is mpv-only', () => {
+    expect(
+      choosePlaybackTarget({
+        preference: 'mpv-only',
+        fileName: 'Movie.2024.1080p.mp4',
+        hasInlineUrl: true,
+        mpvInstalled: false
+      })
+    ).toEqual({ kind: 'mpv' })
   })
 })

@@ -101,6 +101,35 @@ export function PreferencesSection(): ReactElement {
       </div>
 
       <div className="space-y-2">
+        <label className="type-label" htmlFor="pref-player">
+          Video player
+        </label>
+        <select
+          id="pref-player"
+          className={selectClass}
+          value={prefs.preferredPlayer}
+          onChange={(e) =>
+            update({ preferredPlayer: e.target.value as Preferences['preferredPlayer'] })
+          }
+        >
+          <option value="mpv">Prefer mpv (fall back to in-app player)</option>
+          <option value="inline">Prefer in-app player (use mpv for unsupported formats)</option>
+          <option value="inline-only">In-app player only (never open mpv)</option>
+          <option value="mpv-only">mpv only (never use in-app player)</option>
+        </select>
+        <p className="text-muted-foreground text-xs">
+          {prefs.preferredPlayer === 'mpv' &&
+            'Uses external mpv whenever installed, and falls back to the built-in Vidstack player for MP4/WebM if mpv is not installed.'}
+          {prefs.preferredPlayer === 'inline' &&
+            'Plays MP4, WebM, and MOV inside the app with Vidstack, and hands MKV, AVI, TS, or archive releases to mpv.'}
+          {prefs.preferredPlayer === 'inline-only' &&
+            'Always opens videos in the built-in Vidstack player without launching mpv.'}
+          {prefs.preferredPlayer === 'mpv-only' &&
+            'Always launches external mpv and requires mpv to be installed.'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
         <span className="type-label">Download folder</span>
         <div className="flex items-center gap-2">
           <p className="bg-muted min-w-0 flex-1 truncate rounded-md px-3 py-2 font-mono text-xs">

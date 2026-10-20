@@ -1,8 +1,61 @@
 /** Where an MP4's index (`moov` box) sits. Players cannot start until they have it. */
+import type { PlayerPreference } from '@shared/preferences'
+
 export type Mp4Layout =
   | { kind: 'faststart' }
   | { kind: 'moov-at-end'; moovOffset: number }
   | { kind: 'unknown' }
+
+/** RAR volumes (`.rar`, `.r00`, `.part01.rar`) and zip archives. */
+const ARCHIVE_RE = /\.(rar|r\d{2}|zip)$/i
+/** Containers Chromium refuses to play inline; we hand these off to mpv unless forced inline. */
+const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
+
+export function needsExternalPlayer(fileName: string): boolean {
+  const trimmed = fileName.trim()
+  return EXTERNAL_CONTAINER_RE.test(trimmed) || ARCHIVE_RE.test(trimmed)
+}
+
+export type PlayerChoice =
+  | { kind: 'mpv' }
+  | { kind: 'inline' }
+  | { kind: 'archive-needs-mpv'; reason: 'missing-mpv' | 'inline-only' }
+
+/**
+ * Decides whether playback should run in external `mpv` or the in-app Vidstack player based on
+ * the user's preference, container support, and whether `mpv` is installed.
+ */
+export function choosePlaybackTarget(params: {
+  preference: PlayerPreference
+  fileName: string
+  hasInlineUrl: boolean
+  mpvInstalled: boolean
+}): PlayerChoice {
+  const { preference, fileName, hasInlineUrl, mpvInstalled } = params
+  if (ARCHIVE_RE.test(fileName.trim())) {
+    if (preference === 'inline-only') {
+      return { kind: 'archive-needs-mpv', reason: 'inline-only' }
+    }
+    if (!mpvInstalled) {
+      return { kind: 'archive-needs-mpv', reason: 'missing-mpv' }
+    }
+    return { kind: 'mpv' }
+  }
+
+  const inlineCapable = hasInlineUrl && !needsExternalPlayer(fileName)
+
+  switch (preference) {
+    case 'mpv-only':
+      return { kind: 'mpv' }
+    case 'inline-only':
+      return hasInlineUrl ? { kind: 'inline' } : { kind: 'mpv' }
+    case 'inline':
+      return inlineCapable ? { kind: 'inline' } : { kind: 'mpv' }
+    case 'mpv':
+    default:
+      return mpvInstalled || !inlineCapable ? { kind: 'mpv' } : { kind: 'inline' }
+  }
+}
 
 /** Bytes to read from the start of an MP4 to find its top-level box layout. */
 export const MP4_HEAD_PROBE_BYTES = 64 * 1024

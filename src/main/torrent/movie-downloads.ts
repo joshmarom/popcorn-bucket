@@ -15,11 +15,7 @@ import type { CatalogMovieResponse } from '@shared/catalog'
 import type { EpisodeTarget, TvShowResponse } from '@shared/tv'
 import { getPreferences, preferenceEvents } from '../preferences-store'
 import { apiJson } from '../api-client'
-import {
-  computeMovieHash,
-  findCachedSubtitle,
-  subtitleCacheRoot
-} from '../subtitles/opensubtitles'
+import { computeMovieHash, findCachedSubtitle, subtitleCacheRoot } from '../subtitles/opensubtitles'
 import { isValidMagnetUri } from '@shared/torrent'
 import type {
   AddMovieTorrentPayload,
@@ -66,18 +62,12 @@ import { localMediaUrl, setLocalMediaRoots } from '../local-media-protocol'
 import { PUBLIC_TRACKERS } from './public-trackers'
 import {
   MP4_HEAD_PROBE_BYTES,
+  choosePlaybackTarget,
   headBytesNeeded,
   isMp4Container,
   parseMp4Layout,
   type Mp4Layout
 } from './playback-readiness'
-
-/** Containers Chromium refuses to play inline; we hand these off to mpv. */
-const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
-
-function needsExternalPlayer(fileName: string): boolean {
-  return EXTERNAL_CONTAINER_RE.test(fileName.trim()) || isArchiveFileName(fileName.trim())
-}
 
 type DownloadRecord = {
   id: string
@@ -1031,19 +1021,27 @@ type PlaybackTarget = {
 }
 
 /**
- * mpv plays every format and reports position, so it is the player whenever it is installed.
- * Without mpv, files Chromium can decode fall back to the in-app player.
+ * Routes playback to either external `mpv` or the in-app Vidstack player according to
+ * `preferredPlayer` in Settings.
  */
 async function launchPlayback(t: PlaybackTarget): Promise<TorrentStreamStartResponse> {
   const startSeconds = resumePosition(await getWatchProgress(t.rec.movieId))
-  if (isArchiveFileName(t.label) && !findMpvBinary()) {
+  const choice = choosePlaybackTarget({
+    preference: getPreferences().preferredPlayer,
+    fileName: t.label,
+    hasInlineUrl: t.inlineUrl != null,
+    mpvInstalled: Boolean(findMpvBinary())
+  })
+  if (choice.kind === 'archive-needs-mpv') {
     return {
       ok: false,
-      error: `This release is packed in an archive, which only mpv can play. ${mpvNotFoundMessage()}`
+      error:
+        choice.reason === 'inline-only'
+          ? 'This release is packed in an archive, which the in-app player cannot open. Change Video player in Settings to allow mpv.'
+          : `This release is packed in an archive, which only mpv can play. ${mpvNotFoundMessage()}`
     }
   }
-  const inlineCapable = t.inlineUrl != null && !needsExternalPlayer(t.label)
-  if (findMpvBinary() || !inlineCapable) {
+  if (choice.kind === 'mpv') {
     const res = await startExternalMpvSession({
       url: t.mpvUrl,
       title: t.label,

@@ -21,6 +21,7 @@ function getStoreConstructor(): StoreCtor {
 
 export const preferencesSchema = z.object({
   preferredResolution: z.enum(['2160p', '1080p', '720p', '480p']),
+  preferredPlayer: z.enum(['mpv', 'inline', 'inline-only', 'mpv-only']),
   downloadDir: z.string().max(1000),
   maxActiveDownloads: z.number().int().min(1).max(10),
   downloadLimitKBps: z.number().int().min(0).max(1_000_000),
