@@ -16,3 +16,7 @@ npm ci
 npm run build
 node dist/migrate.js
 echo "build ok"
+cd "$ROOT/website"
+npm ci
+npm run build
+echo "website ok"

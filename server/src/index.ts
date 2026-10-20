@@ -9,6 +9,8 @@ import { registerMediaRoutes } from './media-routes'
 import { registerMeRoutes } from './me-routes'
 import { registerSubtitleRoutes } from './subtitle-routes'
 import { registerTorrentRoutes } from './torrent-routes'
+import { loadSiteDownloads } from './site-downloads'
+import { mountWebsite } from './website'
 import { migrate } from './migrate'
 import { pgConfig } from './pg-config'
 
@@ -17,6 +19,12 @@ registerMediaRoutes(app)
 mountAuth(app)
 registerCatalogRoutes(app)
 registerTorrentRoutes(app)
+
+app.get('/v1/site/downloads', async (c) => {
+  const body = await loadSiteDownloads()
+  c.header('Cache-Control', 'public, max-age=300')
+  return c.json(body, body.ok ? 200 : 502)
+})
 
 app.get('/health', async (c) => {
   const databaseUrl = process.env.DATABASE_URL
@@ -32,6 +40,8 @@ app.get('/health', async (c) => {
     await client.end().catch(() => undefined)
   }
 })
+
+mountWebsite(app)
 
 const server = createAdaptorServer({ fetch: app.fetch })
 server.on('error', (error) => {
@@ -106,4 +116,3 @@ function socketFd(fd: number): boolean {
     return false
   }
 }
-

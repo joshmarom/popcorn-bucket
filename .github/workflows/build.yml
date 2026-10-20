@@ -3,10 +3,10 @@ name: Build
 on:
   push:
     branches: [main]
-    paths-ignore: ['server/**', 'docs/**', '**/*.md']
+    paths-ignore: ['server/**', 'docs/**', '**/*.md', 'website/**']
   pull_request:
     branches: [main]
-    paths-ignore: ['server/**', 'docs/**', '**/*.md']
+    paths-ignore: ['server/**', 'docs/**', '**/*.md', 'website/**']
 
 concurrency:
   group: build-${{ github.ref }}
