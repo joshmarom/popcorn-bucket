@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { CatalogMovieListItem } from '@shared/catalog'
 import { ChevronLeft } from 'lucide-react'
 import { LearnChevron } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
 import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
+import { PageTurn } from '@/components/page-turn'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 
 function parseListPage(raw: string | null): number {
@@ -95,8 +95,6 @@ export function GenreBrowsePage(): ReactElement {
     )
   }
 
-  useScrollToOnPageChange(headingRef, currentPage)
-
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 pb-16">
       <div className="flex flex-wrap items-center gap-3">
@@ -122,7 +120,9 @@ export function GenreBrowsePage(): ReactElement {
       )}
       {items.length > 0 && (
         <>
-          <MovieGrid items={pagedItems} />
+          <PageTurn page={currentPage} items={pagedItems} scrollTarget={headingRef}>
+            <MovieGrid items={pagedItems} />
+          </PageTurn>
           {totalPages > 1 && (
             <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
               <p className="text-muted-foreground order-2 text-sm sm:order-1">

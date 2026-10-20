@@ -18,7 +18,7 @@ import { SearchAutocomplete } from '@/components/search-autocomplete'
 import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 import { cn } from '@/lib/utils'
-import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
+import { PageTurn } from '@/components/page-turn'
 
 type TrendingPage = { page: number; results: CatalogMovieListItem[]; hasMore: boolean }
 
@@ -451,9 +451,6 @@ export function HomePage(): ReactElement {
   const rangeStart = list.items.length === 0 ? 0 : (list.page - 1) * CATALOG_LIST_PAGE_SIZE + 1
   const rangeEnd = rangeStart === 0 ? 0 : rangeStart + list.items.length - 1
 
-  // Keyed on the page actually rendered, so the scroll happens once the new cards are in place.
-  useScrollToOnPageChange(listHeadingRef, list.page)
-
   return (
     <div className="pb-8">
       <div className="bg-background sticky top-0 z-10 border-b border-border px-4 py-4">
@@ -562,7 +559,9 @@ export function HomePage(): ReactElement {
         {listLoading && list.items.length === 0 && !list.error && <PosterGridPlaceholder />}
         {list.items.length > 0 && (
           <>
-            <MovieGrid items={list.items} />
+            <PageTurn page={list.page} items={list.items} scrollTarget={listHeadingRef}>
+              <MovieGrid items={list.items} />
+            </PageTurn>
             {(list.hasPrev || list.hasNext) && (
               <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
                 <p className="text-muted-foreground order-2 text-sm sm:order-1">

@@ -5,7 +5,7 @@ import { ChevronLeft } from 'lucide-react'
 import { LearnChevron } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
 import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
-import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
+import { PageTurn } from '@/components/page-turn'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 
 function parseListPage(raw: string | null): number {
@@ -46,8 +46,6 @@ export function CollectionPage(): ReactElement {
       { replace: true }
     )
   }
-
-  useScrollToOnPageChange(headingRef, currentPage)
 
   useEffect(() => {
     if (invalidId) return
@@ -116,7 +114,9 @@ export function CollectionPage(): ReactElement {
         )}
         {movies.length > 0 && (
           <>
-            <MovieGrid items={pagedMovies} />
+            <PageTurn page={currentPage} items={pagedMovies} scrollTarget={headingRef}>
+              <MovieGrid items={pagedMovies} />
+            </PageTurn>
             {totalPages > 1 && (
               <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
                 <p className="text-muted-foreground order-2 text-sm sm:order-1">

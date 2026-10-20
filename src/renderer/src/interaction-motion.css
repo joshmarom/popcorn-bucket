@@ -57,6 +57,10 @@
   --stagger-stagger: 40ms;
   --stagger-blur: 3px;
   --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --page-turn-out: 200ms;
+  --page-turn-in: 380ms;
+  --page-turn-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Light snippet colors sit on a dark UI. The app marks the theme with
@@ -399,6 +403,8 @@
    stagger token so each row starts after the one above it. */
 .t-poster { opacity: 0; }
 .t-poster.is-shown {
+  /* Keep the poster visible if the smooth page scroll cancels the fade. */
+  opacity: 1;
   animation: t-poster-in var(--stagger-dur) var(--stagger-ease) both;
   animation-delay: calc(var(--stagger-stagger) * var(--stagger-index, 0));
 }
@@ -414,4 +420,53 @@
 @media (prefers-reduced-motion: reduce) {
   .t-poster { opacity: 1; }
   .t-poster.is-shown { animation: none; }
+}
+
+/* List page change: fade out, then fade in under a single light sweep.
+   Out is shorter than in. The sweep stands in for Transitions.dev organic
+   shimmer, which is a Pro recipe and is not in the free skill. */
+.t-page-turn { position: relative; }
+.t-page-turn.is-out {
+  pointer-events: none;
+  animation: t-page-turn-out var(--page-turn-out) var(--page-turn-ease) both;
+}
+.t-page-turn.is-in {
+  animation: t-page-turn-in var(--page-turn-in) var(--page-turn-ease) both;
+}
+.t-page-turn.is-in::after {
+  content: "";
+  position: absolute;
+  inset: -4% 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 70% at 50% 50%, color-mix(in oklch, white 34%, transparent), transparent 72%),
+    linear-gradient(
+      105deg,
+      transparent 38%,
+      color-mix(in oklch, white 28%, transparent) 50%,
+      transparent 62%
+    );
+  background-repeat: no-repeat;
+  background-size: 140% 100%, 180% 100%;
+  mix-blend-mode: soft-light;
+  animation: t-page-turn-sheen var(--page-turn-in) linear both;
+}
+@keyframes t-page-turn-out {
+  to { opacity: 0; }
+}
+@keyframes t-page-turn-in {
+  from { opacity: 0; }
+  45% { opacity: 1; }
+  to { opacity: 1; }
+}
+@keyframes t-page-turn-sheen {
+  from { background-position: 120% 0, 140% 0; opacity: 0; }
+  30% { opacity: 1; }
+  to { background-position: -20% 0, -40% 0; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-page-turn.is-out,
+  .t-page-turn.is-in,
+  .t-page-turn.is-in::after { animation: none !important; }
+  .t-page-turn.is-out { opacity: 0; }
 }

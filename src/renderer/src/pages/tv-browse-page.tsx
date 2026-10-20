@@ -10,7 +10,7 @@ import { PosterGridPlaceholder } from '@/components/movie-grid'
 import { ShowGrid } from '@/components/show-grid'
 import { TvDiscoveryRails } from '@/components/tv-discovery-rails'
 import { TvGenreRails } from '@/components/tv-genre-rails'
-import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
+import { PageTurn } from '@/components/page-turn'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 import { cn } from '@/lib/utils'
 
@@ -180,9 +180,6 @@ export function TvBrowsePage(): ReactElement {
     requestedPage
   ])
 
-  // Keyed on the page actually rendered, so the scroll happens once the new cards are in place.
-  useScrollToOnPageChange(headingRef, list.page)
-
   const rangeStart = list.items.length === 0 ? 0 : (list.page - 1) * CATALOG_LIST_PAGE_SIZE + 1
   const rangeEnd = rangeStart === 0 ? 0 : rangeStart + list.items.length - 1
   const hasPrev = list.page > 1
@@ -236,7 +233,9 @@ export function TvBrowsePage(): ReactElement {
         )}
         {list.items.length > 0 && (
           <>
-            <ShowGrid shows={list.items} />
+            <PageTurn page={list.page} items={list.items} scrollTarget={headingRef}>
+              <ShowGrid shows={list.items} />
+            </PageTurn>
             {(hasPrev || list.hasNext) && (
               <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
                 <p className="text-muted-foreground order-2 text-sm sm:order-1">

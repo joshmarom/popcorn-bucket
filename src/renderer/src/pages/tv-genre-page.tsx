@@ -6,7 +6,7 @@ import type { TvShowListItem } from '@shared/tv'
 import { Button } from '@/components/ui/button'
 import { PosterGridPlaceholder } from '@/components/movie-grid'
 import { ShowGrid } from '@/components/show-grid'
-import { useScrollToOnPageChange } from '@/hooks/use-scroll-to-on-page-change'
+import { PageTurn } from '@/components/page-turn'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 
 type GenrePage = { page: number; results: TvShowListItem[]; hasMore: boolean }
@@ -68,7 +68,6 @@ export function TvGenrePage(): ReactElement {
   }, [genreId, invalidId, requestedPage])
 
   const page = data?.page ?? requestedPage
-  useScrollToOnPageChange(headingRef, page)
   const items = data?.results ?? []
   const rangeStart = items.length === 0 ? 0 : (page - 1) * CATALOG_LIST_PAGE_SIZE + 1
   const rangeEnd = rangeStart === 0 ? 0 : rangeStart + items.length - 1
@@ -94,7 +93,9 @@ export function TvGenrePage(): ReactElement {
       )}
       {items.length > 0 && (
         <>
-          <ShowGrid shows={items} />
+          <PageTurn page={page} items={items} scrollTarget={headingRef}>
+            <ShowGrid shows={items} />
+          </PageTurn>
           {(page > 1 || data?.hasMore) && (
             <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
               <p className="text-muted-foreground order-2 text-sm sm:order-1">
