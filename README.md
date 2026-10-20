@@ -66,7 +66,7 @@ Download the latest installer for your operating system from the **[Releases](ht
 
 #### Optional: Install `mpv` for universal codec support
 
-Popcorn Bucket plays web-compatible streams directly inside the app. For releases with codecs or containers that Chromium cannot decode natively (such as certain HEVC/MKV/DTS encodes), Popcorn Bucket automatically hands playback to **[mpv](https://mpv.io/)** and tracks your watch progress over IPC:
+Popcorn Bucket plays MP4, MKV, WebM, and MOV in the built-in player. For containers it cannot open, such as AVI, TS, and archive releases, it hands playback to **[mpv](https://mpv.io/)** and tracks watch progress over IPC. The player window can also hand the current video to mpv:
 
 ```bash
 # macOS (Homebrew)
