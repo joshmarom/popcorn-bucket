@@ -47,6 +47,9 @@ module.exports = {
     entitlements: 'build/entitlements.mac.plist',
     entitlementsInherit: 'build/entitlements.mac.plist',
     hardenedRuntime: true,
+    // Prebuild blobs are copied into both arch trees unchanged. The rebuilt addon is merged;
+    // these copies are not the binary the app loads.
+    x64ArchFiles: '**/better-sqlite3/prebuilds/**/*.node',
     extendInfo: {
       NSDownloadsFolderUsageDescription: 'Popcorn Bucket saves movies to your Downloads folder.'
     },

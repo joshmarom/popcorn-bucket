@@ -3,12 +3,22 @@ name: Release installers
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach installers to
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
 jobs:
   package-windows:
+    if: github.event_name == 'release'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
@@ -32,7 +42,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.exe --clobber
+        run: gh release upload "$RELEASE_TAG" dist/*.exe --clobber
 
   package-macos:
     runs-on: macos-latest
@@ -52,9 +62,9 @@ jobs:
           npm ci
 
       - name: Package macOS disk image
-        run: npm run build:mac -- --universal --publish never
+        run: npm run build:mac -- --universal --publish never -c.npmRebuild=true
 
       - name: Upload disk image
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.dmg --clobber
+        run: gh release upload "$RELEASE_TAG" dist/*.dmg --clobber
