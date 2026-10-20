@@ -40,7 +40,7 @@ export function MovieTorrentSourcesSection({
   }, [torrentLoading, torrentData])
 
   return (
-    <div className="space-y-4 border-t border-border pt-4">
+    <section className="space-y-6 border-t border-border pt-6" aria-label="Torrent sources">
       {addFeedback && (
         <p
           className={cn(
@@ -136,7 +136,7 @@ export function MovieTorrentSourcesSection({
         </details>
       )}
 
-      <div className="flex flex-wrap justify-center gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button
           type="button"
           variant="outline"
@@ -149,6 +149,6 @@ export function MovieTorrentSourcesSection({
           Refresh
         </Button>
       </div>
-    </div>
+    </section>
   )
 }

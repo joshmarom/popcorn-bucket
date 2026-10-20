@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type MutableRefObject, type ReactElement } from 'react'
-import { Loader2, Play } from 'lucide-react'
+import { Check, Download, ListVideo, Loader2, Play, Radio, Search } from 'lucide-react'
 import { episodeCode, episodeMediaKey, type TvEpisode, type TvSeasonDetails } from '@shared/tv'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import { isValidMagnetUri, type TorrentSearchResponse, type TorrentSource } from '@shared/torrent'
 import type { RankedSources } from '@shared/release-ranking'
 import { resumePosition, type WatchProgress } from '@shared/watch-history'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { MovieTorrentSourcesSection } from './movie/movie-torrent-sources-section'
 
 export type EpisodeStatus =
@@ -121,7 +122,7 @@ export function TvEpisodeList({
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-3">
       {season.episodes.map((ep) => {
         const key = episodeMediaKey(ep.id)
         const st = status[key] ?? { phase: 'idle' }
@@ -129,9 +130,38 @@ export function TvEpisodeList({
         const dl = downloads.find((row) => row.movieId === key && row.status !== 'error')
         const busy = st.phase === 'searching' || st.phase === 'buffering'
         const resume = resumePosition(progress)
+        const statusMessage =
+          st.phase === 'searching' ? (
+            <>
+              <Search className="size-3.5" />
+              Finding the best copy…
+            </>
+          ) : st.phase === 'buffering' ? (
+            <>
+              <Radio className="size-3.5" />
+              {dl && dl.status !== 'pending_metadata' && dl.status !== 'queued'
+                ? `Buffering ${Math.round(dl.progress * 100)}% · ${dl.numPeers} peers`
+                : 'Connecting to peers…'}
+            </>
+          ) : st.phase === 'error' ? (
+            <span className="text-destructive">{st.message}</span>
+          ) : progress?.finished ? (
+            <>
+              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              Watched
+            </>
+          ) : dl?.status === 'complete' ? (
+            <>
+              <Download className="size-3.5 text-primary" />
+              Downloaded
+            </>
+          ) : null
         return (
-          <li key={ep.id} className="space-y-3 rounded-lg border border-border bg-card/40 p-3">
-            <div className="flex items-center gap-4">
+          <li
+            key={ep.id}
+            className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <div className="bg-muted relative hidden aspect-video w-36 shrink-0 overflow-hidden rounded sm:block">
                 {ep.stillUrl && <img src={ep.stillUrl} alt="" className="size-full object-cover" />}
                 {progress && progress.duration > 0 && (
@@ -146,29 +176,25 @@ export function TvEpisodeList({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
+                <p className="truncate text-base font-semibold">
                   {episodeCode(ep.seasonNumber, ep.episodeNumber)} · {ep.name}
                 </p>
-                <p className="text-muted-foreground line-clamp-2 text-xs">{ep.overview}</p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {st.phase === 'searching' && 'Finding the best copy…'}
-                  {st.phase === 'buffering' &&
-                    (dl && dl.status !== 'pending_metadata' && dl.status !== 'queued'
-                      ? `Buffering ${Math.round(dl.progress * 100)}% · ${dl.numPeers} peers`
-                      : 'Connecting to peers…')}
-                  {st.phase === 'error' && <span className="text-destructive">{st.message}</span>}
-                  {st.phase === 'idle' && progress?.finished && 'Watched'}
-                  {st.phase === 'idle' &&
-                    !progress?.finished &&
-                    dl?.status === 'complete' &&
-                    'Downloaded'}
-                </p>
+                <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">{ep.overview}</p>
+                {statusMessage && (
+                  <p
+                    className="text-muted-foreground mt-2 flex items-center gap-1.5 text-sm"
+                    aria-live={busy ? 'polite' : undefined}
+                  >
+                    {statusMessage}
+                  </p>
+                )}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 gap-2 sm:self-center">
                 <Button
                   type="button"
                   size="sm"
                   variant={sourcesFor === ep.id ? 'secondary' : 'outline'}
+                  className={cn('gap-1.5', sourcesFor === ep.id && 'text-primary')}
                   title="Choose a specific copy"
                   aria-pressed={sourcesFor === ep.id}
                   onClick={() => {
@@ -179,6 +205,7 @@ export function TvEpisodeList({
                     void searchEpisodeSources(ep)
                   }}
                 >
+                  <ListVideo className="size-3.5" />
                   Sources
                 </Button>
                 <Button

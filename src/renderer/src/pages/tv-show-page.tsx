@@ -355,10 +355,10 @@ export function TvShowPage(): ReactElement {
         }
       >
         {show && (
-          <div className="space-y-6">
-            <div className="grid gap-6 md:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
-              <div className="space-y-3">
-                <Card className="overflow-hidden p-0">
+          <div className="space-y-8">
+            <div className="grid gap-8 lg:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
+              <aside className="space-y-4">
+                <Card className="overflow-hidden p-0 shadow-md">
                   <div className="bg-muted aspect-[2/3]">
                     {show.posterUrl ? (
                       <img
@@ -378,7 +378,10 @@ export function TvShowPage(): ReactElement {
                   type="button"
                   variant={inMyShows ? 'secondary' : 'outline'}
                   size="lg"
-                  className="w-full gap-1.5"
+                  className={cn(
+                    'w-full gap-1.5',
+                    inMyShows && 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
+                  )}
                   aria-pressed={inMyShows}
                   onClick={() => {
                     const next = !inMyShows
@@ -393,9 +396,10 @@ export function TvShowPage(): ReactElement {
                   />
                   {inMyShows ? 'In My shows' : 'Add to My shows'}
                 </Button>
-              </div>
-              <div className="min-w-0 space-y-4">
-                <div>
+              </aside>
+              <article className="min-w-0 space-y-6">
+                <header className="space-y-3">
+                  <p className="type-kicker">TV show</p>
                   <h1 className="type-display" style={titleStyle(headingName, poster)}>
                     {show.name}
                   </h1>
@@ -410,7 +414,7 @@ export function TvShowPage(): ReactElement {
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
-                </div>
+                </header>
                 {(show.genres ?? []).length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {(show.genres ?? []).map((genre) => (
@@ -422,13 +426,16 @@ export function TvShowPage(): ReactElement {
                 )}
                 <p className="type-prose">{show.overview}</p>
                 <TvCastTrailers cast={show.cast ?? []} trailers={show.trailers ?? []} />
-              </div>
+              </article>
             </div>
 
             {(nextEpisode || nextSeasonNumber != null) && (
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-card/60 px-4 py-3">
-                <span className="text-sm">
-                  Up next:{' '}
+              <section
+                className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3 shadow-sm"
+                aria-label="Up next"
+              >
+                <span className="text-sm font-medium">
+                  Up next{' '}
                   {nextEpisode
                     ? `${episodeCode(nextEpisode.seasonNumber, nextEpisode.episodeNumber)} · ${nextEpisode.name}`
                     : `Season ${nextSeasonNumber}`}
@@ -445,23 +452,30 @@ export function TvShowPage(): ReactElement {
                   <Play className="size-3.5" />
                   {nextEpisode ? 'Play' : 'Open season'}
                 </Button>
-              </div>
+              </section>
             )}
 
-            <div className="flex flex-wrap gap-2 border-b border-border pb-2">
+            <nav
+              className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/50 p-1"
+              aria-label="Seasons"
+            >
               {show.seasons.map((s) => (
                 <Button
                   key={s.seasonNumber}
                   type="button"
                   size="sm"
-                  variant={s.seasonNumber === seasonNumber ? 'default' : 'ghost'}
-                  className={cn(s.seasonNumber !== seasonNumber && 'text-muted-foreground')}
+                  variant={s.seasonNumber === seasonNumber ? 'secondary' : 'ghost'}
+                  className={cn(
+                    'min-h-9',
+                    s.seasonNumber !== seasonNumber && 'text-muted-foreground hover:text-foreground'
+                  )}
+                  aria-current={s.seasonNumber === seasonNumber ? 'page' : undefined}
                   onClick={() => setSeasonNumber(s.seasonNumber)}
                 >
                   {s.name}
                 </Button>
               ))}
-            </div>
+            </nav>
 
             <TvEpisodeList
               showId={showId}

@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, session } from 'electron'
+import { app, shell, BrowserWindow, Menu, session, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -52,6 +52,65 @@ function lockDownMainSession(): void {
   })
 }
 
+/** Packaged builds keep zoom and fullscreen, and drop the developer tools entry. */
+function productionApplicationMenu(): Menu {
+  const template: MenuItemConstructorOptions[] = []
+  if (process.platform === 'darwin') {
+    template.push({
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    })
+  }
+  template.push(
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(process.platform === 'darwin'
+          ? [{ role: 'pasteAndMatchStyle' as const }, { role: 'delete' as const }]
+          : [{ role: 'delete' as const }]),
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu:
+        process.platform === 'darwin'
+          ? [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }]
+          : [{ role: 'minimize' }, { role: 'close' }]
+    }
+  )
+  return Menu.buildFromTemplate(template)
+}
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -62,7 +121,8 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: true
+      sandbox: true,
+      devTools: is.dev
     }
   })
 
@@ -97,12 +157,12 @@ app.whenReady().then(() => {
   // Packaged macOS builds take the icon from icon.icns; dev runs the stock Electron bundle.
   if (is.dev && process.platform === 'darwin') app.dock?.setIcon(icon)
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
+  // F12 opens DevTools in development and CommandOrControl+R is ignored in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+  if (!is.dev) Menu.setApplicationMenu(productionApplicationMenu())
 
   migrateStoredSecrets()
   migrateStoredSession()

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { Bookmark, BookmarkCheck, Loader2, Play } from 'lucide-react'
+import { Bookmark, BookmarkCheck, ListVideo, Loader2, Play } from 'lucide-react'
 import type { RankedTorrentSource } from '@shared/release-ranking'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import { IconSwap } from '@/components/interaction-motion'
@@ -75,8 +75,17 @@ export function QuickPlayBar({
   const failed = quickPlay.phase === 'error' || quickPlay.phase === 'no-sources'
 
   return (
-    <div className="flex flex-col gap-2">
-      <Button type="button" size="lg" className="w-full gap-2" disabled={busy} onClick={onPlay}>
+    <section
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm"
+      aria-label="Watch options"
+    >
+      <Button
+        type="button"
+        size="lg"
+        className="w-full gap-2 shadow-sm"
+        disabled={busy}
+        onClick={onPlay}
+      >
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
         {resumeSeconds > 0 ? `Resume from ${formatClock(resumeSeconds)}` : 'Play'}
       </Button>
@@ -90,7 +99,12 @@ export function QuickPlayBar({
         <div className="text-sm">
           {quickPlay.phase === 'no-sources' && (
             <p>
-              <button type="button" className="text-primary underline" onClick={onShowSources}>
+              <button
+                type="button"
+                className="text-primary inline-flex items-center gap-1 font-medium underline underline-offset-4"
+                onClick={onShowSources}
+              >
+                <ListVideo className="size-4" />
                 See all sources
               </button>
               .
@@ -107,7 +121,11 @@ export function QuickPlayBar({
         type="button"
         variant="outline"
         size="lg"
-        className="w-full gap-1.5"
+        className={
+          inWatchlist
+            ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 w-full gap-1.5'
+            : 'w-full gap-1.5'
+        }
         aria-pressed={inWatchlist}
         onClick={onToggleWatchlist}
       >
@@ -118,6 +136,6 @@ export function QuickPlayBar({
         />
         {inWatchlist ? 'In my list' : 'My list'}
       </Button>
-    </div>
+    </section>
   )
 }

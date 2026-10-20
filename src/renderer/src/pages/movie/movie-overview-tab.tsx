@@ -1,9 +1,10 @@
 import type { CatalogMovieDetails } from '@shared/catalog'
 import { useState, type ReactElement, type ReactNode } from 'react'
+import { CalendarDays, Clock3, Star } from 'lucide-react'
 import { PanelReveal, SlidingTabs } from '@/components/interaction-motion'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { movieBasics } from '@/lib/movie-meta'
+import { formatRuntime, releaseYearFromDate } from '@/lib/movie-meta'
 import {
   genrePart,
   partStyle,
@@ -29,11 +30,13 @@ export function MovieOverviewTab({
   const [subtabMoved, setSubtabMoved] = useState(false)
   const posterName = `poster-movie-${detail.id}`
   const headingName = `title-movie-${detail.id}`
-  const basics = movieBasics(detail.releaseDate, detail.runtime)
+  const releaseYear = releaseYearFromDate(detail.releaseDate)
+  const runtime =
+    detail.runtime != null && detail.runtime > 0 ? formatRuntime(detail.runtime) : null
   return (
-    <div className="grid gap-6 md:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
-      <div className="space-y-3">
-        <Card className="overflow-hidden p-0">
+    <div className="grid gap-8 lg:grid-cols-[minmax(200px,280px)_minmax(0,1fr)]">
+      <aside className="space-y-4">
+        <Card className="overflow-hidden p-0 shadow-md">
           <div className="bg-muted aspect-[2/3]">
             {detail.posterUrl ? (
               <img
@@ -50,34 +53,55 @@ export function MovieOverviewTab({
           </div>
         </Card>
         {posterActions}
-      </div>
-      <div className="min-w-0 space-y-4">
-        <div>
+      </aside>
+      <article className="min-w-0 space-y-6">
+        <header className="space-y-3">
+          <p className="type-kicker">Movie</p>
           <h1 className="type-display" style={titleStyle(headingName, poster)}>
             {detail.title}
           </h1>
           {detail.tagline && (
             <p className="type-tagline text-muted-foreground mt-2">{detail.tagline}</p>
           )}
-          <p className="type-meta text-muted-foreground mt-2">
-            {basics && (
+          <div
+            className="type-meta mt-2 flex flex-wrap items-center gap-x-4 gap-y-2"
+            style={partStyle('meta', posterName, poster)}
+          >
+            {releaseYear != null && (
               <span
+                className="text-muted-foreground inline-flex items-center gap-1.5"
                 title={detail.releaseDate ?? undefined}
-                style={partStyle('meta', posterName, poster)}
               >
-                {basics}
+                <CalendarDays className="size-4" aria-hidden />
+                {releaseYear}
               </span>
             )}
-            {detail.voteAverage != null &&
-              `${basics ? ' · ' : ''}★ ${detail.voteAverage.toFixed(1)}`}
-            {detail.imdbId && ` · ${detail.imdbId}`}
-            {detail.omdb?.rated && ` · ${detail.omdb.rated}`}
-            {detail.omdb?.metascore != null &&
-              detail.omdb.metascore !== 'N/A' &&
-              ` · Metacritic ${detail.omdb.metascore}`}
-            {detail.omdb?.imdbVotes && ` · ${detail.omdb.imdbVotes} IMDb votes`}
-          </p>
-        </div>
+            {runtime && (
+              <span className="text-muted-foreground inline-flex items-center gap-1.5">
+                <Clock3 className="size-4" aria-hidden />
+                {runtime}
+              </span>
+            )}
+            {detail.voteAverage != null && detail.voteAverage > 0 && (
+              <span className="text-primary inline-flex items-center gap-1.5 font-semibold">
+                <Star className="size-4 fill-current" aria-hidden />
+                {detail.voteAverage.toFixed(1)}
+              </span>
+            )}
+            {detail.omdb?.rated && <Badge variant="secondary">{detail.omdb.rated}</Badge>}
+            {detail.omdb?.metascore != null && detail.omdb.metascore !== 'N/A' && (
+              <Badge variant="secondary">Metascore {detail.omdb.metascore}</Badge>
+            )}
+            {detail.imdbId && (
+              <span className="text-muted-foreground text-sm">IMDb {detail.imdbId}</span>
+            )}
+            {detail.omdb?.imdbVotes && (
+              <span className="text-muted-foreground text-sm">
+                {detail.omdb.imdbVotes} IMDb votes
+              </span>
+            )}
+          </div>
+        </header>
         {detail.genres.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {detail.genres.map((g) => (
@@ -93,7 +117,7 @@ export function MovieOverviewTab({
         )}
         <p className="type-prose text-foreground">{detail.overview}</p>
 
-        <div className="space-y-4 border-t border-border pt-4">
+        <section className="space-y-4 border-t border-border pt-6" aria-label="Movie extras">
           <SlidingTabs
             label="Cast and trailers"
             tabs={[
@@ -190,8 +214,8 @@ export function MovieOverviewTab({
               </div>
             </PanelReveal>
           )}
-        </div>
-      </div>
+        </section>
+      </article>
     </div>
   )
 }

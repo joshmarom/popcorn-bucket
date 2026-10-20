@@ -53,7 +53,8 @@ export function openPlayerWindow(session: InlinePlayerSession, handoff: PlayerMp
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: true
+      sandbox: true,
+      devTools: is.dev
     }
   })
 
