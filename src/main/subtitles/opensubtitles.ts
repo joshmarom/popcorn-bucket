@@ -4,7 +4,7 @@ import { readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const API = 'https://api.opensubtitles.com/api/v1'
-const USER_AGENT = 'PopcornBucket v1.0.0'
+const USER_AGENT = `PopcornBucket v${app.getVersion()}`
 const TIMEOUT_MS = 10_000
 const HASH_CHUNK = 64 * 1024
 
