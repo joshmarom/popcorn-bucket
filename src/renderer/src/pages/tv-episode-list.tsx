@@ -56,7 +56,6 @@ function useShowDownloads(
 export function TvEpisodeList({
   showId,
   season,
-  seasonNumber,
   history,
   status,
   statusRef,
@@ -64,8 +63,6 @@ export function TvEpisodeList({
   downloadsRef,
   startPlayback,
   playEpisode,
-  vidcoreEpisode,
-  setVidcoreEpisode,
   sourcesFor,
   setSourcesFor,
   sourcesLoading,
@@ -78,7 +75,6 @@ export function TvEpisodeList({
 }: {
   showId: number
   season: TvSeasonDetails | null
-  seasonNumber: number | null
   history: Map<number, WatchProgress>
   status: Record<number, EpisodeStatus>
   statusRef: MutableRefObject<Record<number, EpisodeStatus>>
@@ -86,8 +82,6 @@ export function TvEpisodeList({
   downloadsRef: MutableRefObject<MovieTorrentDownloadSnapshot[]>
   startPlayback: (ep: TvEpisode, downloadId: string) => Promise<void>
   playEpisode: (ep: TvEpisode) => Promise<void>
-  vidcoreEpisode: number | null
-  setVidcoreEpisode: (episode: number) => void
   sourcesFor: number | null
   setSourcesFor: (episodeId: number | null) => void
   sourcesLoading: boolean
@@ -171,22 +165,6 @@ export function TvEpisodeList({
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={
-                    vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
-                      ? 'secondary'
-                      : 'outline'
-                  }
-                  title="Watch in the browser, without downloading"
-                  aria-pressed={
-                    vidcoreEpisode === ep.episodeNumber && seasonNumber === ep.seasonNumber
-                  }
-                  onClick={() => setVidcoreEpisode(ep.episodeNumber)}
-                >
-                  VidCore
-                </Button>
                 <Button
                   type="button"
                   size="sm"

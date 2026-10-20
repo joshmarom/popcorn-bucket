@@ -22,7 +22,6 @@ import { MovieDownloadsSection } from './movie-downloads-section'
 import { MovieOverviewTab } from './movie-overview-tab'
 import { MoviePageShell } from './movie-page-shell'
 import { MovieTorrentSourcesSection } from './movie-torrent-sources-section'
-import { MovieVidkingTab } from './movie-vidking-tab'
 import { NetworkNoticeDialog } from './network-notice-dialog'
 import type { RankedTorrentSource } from '@shared/release-ranking'
 
@@ -76,7 +75,6 @@ function ConnectedQuickPlayBar({
       onToggleWatchlist={onToggleWatchlist}
       onPlay={() => void playBest()}
       onShowSources={() => setTab('sources')}
-      onUseVidking={() => setTab('vidking')}
       onDismiss={resetQuickPlay}
     />
   )
@@ -293,12 +291,6 @@ function MoviePageContent(): ReactElement {
                     onCopyMagnet={(uri) => void s.copyMagnet(uri)}
                   />
                 </div>
-              </PanelReveal>
-            )}
-
-            {s.tab === 'vidking' && (
-              <PanelReveal instant={!tabsMoved}>
-                <MovieVidkingTab detail={s.detail} />
               </PanelReveal>
             )}
           </>

@@ -14,8 +14,6 @@ import {
 } from '@shared/discovery'
 import { getPreferences, preferencesSchema, setPreferences } from './preferences-store'
 import { baseDownloadDir, defaultDownloadDir } from './torrent/webtorrent-core'
-import { isVidkingEmbedUrl, openOrFocusVidkingEmbed } from './vidking-embed-window'
-import { clearVidkingSessionData } from './vidking-session'
 import { z } from 'zod'
 import type {
   CatalogGenreRailsResponse,
@@ -64,7 +62,6 @@ import {
   setInWatchlist
 } from './watch-history'
 import type { WatchProgress } from '@shared/watch-history'
-import { readVidkingDiagnostics, type VidkingNetEvent } from './vidking-diagnostics'
 import { apiJson, apiSignIn, broadcastAuthStatus } from './api-client'
 import { clearSession, getCachedSession, getSessionToken, setSession } from './session-store'
 
@@ -288,22 +285,6 @@ export function registerIpcHandlers(): void {
     if (!parsed.success) return
     const location = getDownloadLocation(parsed.data)
     if (location) shell.showItemInFolder(location)
-  })
-
-  ipcMain.handle('app:openVidkingEmbed', (evt, raw: unknown): void => {
-    if (typeof raw !== 'string' || !isVidkingEmbedUrl(raw)) {
-      throw new Error('Invalid VidCore embed URL.')
-    }
-    const parent = BrowserWindow.fromWebContents(evt.sender)
-    openOrFocusVidkingEmbed(raw, parent)
-  })
-
-  ipcMain.handle('app:clearVidkingData', async (): Promise<void> => {
-    await clearVidkingSessionData()
-  })
-
-  ipcMain.handle('app:getVidkingDiagnostics', (): VidkingNetEvent[] => {
-    return readVidkingDiagnostics()
   })
 
   ipcMain.handle('torrent:search', async (_evt, raw: unknown): Promise<TorrentSearchResponse> => {

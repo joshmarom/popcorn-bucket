@@ -1,3 +1,3 @@
-export type DetailTab = 'overview' | 'sources' | 'vidking'
+export type DetailTab = 'overview' | 'sources'
 
 export type OverviewSubTab = 'cast' | 'trailers'

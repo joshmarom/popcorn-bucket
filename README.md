@@ -32,7 +32,7 @@
 
 - **Movies & TV in one shell** — Browse trending catalogs, popular releases, upcoming titles, curated collections, genre rails, and streaming Top 10s (Netflix, Prime Video, Disney+, Apple TV+) with instant cross-catalog autocomplete.
 - **Smart multi-indexer torrent aggregation** — Queries 8 providers in parallel (TorrentClaw, TorrentsCSV, Knaben, ThePirateBay, YTS, EZTV, UIndex, LimeTorrents), deduplicates by info-hash, parses release metadata (4K/1080p, HDR, codec, source, season packs), and ranks results by quality and swarm health.
-- **Instant streaming & external playback** — Stream sequentially over WebTorrent inside the built-in Vidstack player, hand off incompatible containers/codecs to `mpv` with bidirectional JSON IPC progress tracking, or switch to the isolated VidCore embed player.
+- **Instant streaming & external playback** — Stream sequentially over WebTorrent inside the built-in Vidstack player, or hand off incompatible containers/codecs to `mpv` with bidirectional JSON IPC progress tracking.
 - **Automatic subtitles** — Extracts embedded subtitle tracks or automatically fetches matching subtitles from OpenSubtitles in your preferred language.
 - **Personal library & cloud sync** — Track *Continue Watching*, *My List* (movies), and *My Shows* locally in SQLite with seamless account synchronization via the Popcorn API.
 - **Full download manager** — Configure concurrent download slots, bandwidth rate limits, pause/resume states, and untracked folder recovery from disk.

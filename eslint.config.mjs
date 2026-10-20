@@ -25,9 +25,7 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules,
-      // Electron <webview> attributes.
-      'react/no-unknown-property': ['error', { ignore: ['partition', 'allowpopups'] }]
+      ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
   {

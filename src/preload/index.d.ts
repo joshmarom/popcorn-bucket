@@ -41,27 +41,8 @@ import type {
 export type PopcornApi = {
   app: {
     openExternal(url: string): Promise<void>
-    /** Open (or focus) the VidCore embed in a dedicated top-level Electron window. */
-    openVidkingEmbed(url: string): Promise<void>
-    /** Clear cookies, storage, and HTTP cache of the isolated VidKing session. */
-    clearVidkingData(): Promise<void>
     /** Reveal a download's video (or folder) in Finder / Explorer. */
     showDownloadInFolder(downloadId: string): Promise<void>
-    /**
-     * Recent VidCore request outcomes captured by main process hooks.
-     * Useful for diagnosing "no servers found" cases.
-     */
-    getVidkingDiagnostics(): Promise<
-      {
-        at: string
-        phase: 'completed' | 'error'
-        url: string
-        method?: string
-        resourceType?: string
-        statusCode?: number
-        error?: string
-      }[]
-    >
   }
   auth: {
     status(): Promise<AuthStatus>

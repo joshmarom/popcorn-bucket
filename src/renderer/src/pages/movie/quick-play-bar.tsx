@@ -27,7 +27,6 @@ export function QuickPlayBar({
   onToggleWatchlist,
   onPlay,
   onShowSources,
-  onUseVidking,
   onDismiss
 }: {
   /** Saved position; > 0 turns the button into "Resume". */
@@ -42,7 +41,6 @@ export function QuickPlayBar({
   playBusy: boolean
   onPlay: () => void
   onShowSources: () => void
-  onUseVidking: () => void
   onDismiss: () => void
 }): ReactElement {
   const busy =
@@ -92,12 +90,8 @@ export function QuickPlayBar({
         <div className="text-sm">
           {quickPlay.phase === 'no-sources' && (
             <p>
-              <button type="button" className="text-primary underline" onClick={onUseVidking}>
-                Try VidCore
-              </button>
-              {' or '}
               <button type="button" className="text-primary underline" onClick={onShowSources}>
-                see all sources
+                See all sources
               </button>
               .
             </p>

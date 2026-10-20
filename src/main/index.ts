@@ -9,19 +9,9 @@ import { closeLibrary } from './library/db'
 import { importLegacyLibrary } from './library/migrate'
 import { startAutoUpdates } from './auto-update'
 import { resetDownloadsBroadcast, startDownloadsBroadcast } from './downloads-broadcast'
-import { guardVidkingWebviews, installVidkingSession } from './vidking-session'
 import { isSafeTorrentDetailsUrl } from '@shared/torrent'
 
-/**
- * VidKing and similar embeds often discover "servers" via LAN / permission APIs.
- * In a cross-origin iframe under Electron, Chromium can default the
- * `local-network-access` permissions policy to denied while the top-level frame
- * is treated differently — so the player shows no servers. This switch aligns
- * the default with typical Electron "local requests allowed" behavior.
- * @see https://github.com/electron/electron/issues/50391
- */
-app.commandLine.appendSwitch('local-network-access-permissions-policy-default-enabled')
-// Enable SharedArrayBuffer for ffmpeg.wasm (mkv-web) without requiring COEP require-corp on cross-origin embeds/posters.
+// Enable SharedArrayBuffer for ffmpeg.wasm (mkv-web) without requiring COEP require-corp on cross-origin posters.
 app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer')
 // Dev builds are ad-hoc signed, so macOS asks for the login keychain on every launch.
 // A mock keychain skips that prompt. Packaged builds still use the real keychain.
@@ -72,8 +62,7 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: true,
-      webviewTag: true
+      sandbox: true
     }
   })
 
@@ -81,7 +70,6 @@ function createWindow(): void {
     mainWindow.show()
   })
 
-  guardVidkingWebviews(mainWindow.webContents)
   mainWindow.webContents.on('did-finish-load', resetDownloadsBroadcast)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -120,7 +108,6 @@ app.whenReady().then(() => {
   migrateStoredSession()
   importLegacyLibrary()
   lockDownMainSession()
-  installVidkingSession()
   installLocalMediaProtocol()
   registerIpcHandlers()
   restoreMovieDownloadsOnStartup()

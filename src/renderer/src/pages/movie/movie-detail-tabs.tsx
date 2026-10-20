@@ -4,8 +4,7 @@ import type { DetailTab } from './movie-types'
 
 const TABS: { id: DetailTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'sources', label: 'Sources' },
-  { id: 'vidking', label: 'VidCore' }
+  { id: 'sources', label: 'Sources' }
 ]
 
 export function MovieDetailTabs({

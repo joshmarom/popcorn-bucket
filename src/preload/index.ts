@@ -42,22 +42,8 @@ import type {
 const api = {
   app: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke('app:openExternal', url),
-    openVidkingEmbed: (url: string): Promise<void> =>
-      ipcRenderer.invoke('app:openVidkingEmbed', url),
-    clearVidkingData: (): Promise<void> => ipcRenderer.invoke('app:clearVidkingData'),
     showDownloadInFolder: (downloadId: string): Promise<void> =>
-      ipcRenderer.invoke('app:showDownloadInFolder', downloadId),
-    getVidkingDiagnostics: (): Promise<
-      {
-        at: string
-        phase: 'completed' | 'error'
-        url: string
-        method?: string
-        resourceType?: string
-        statusCode?: number
-        error?: string
-      }[]
-    > => ipcRenderer.invoke('app:getVidkingDiagnostics')
+      ipcRenderer.invoke('app:showDownloadInFolder', downloadId)
   },
   auth: {
     status: (): Promise<AuthStatus> => ipcRenderer.invoke('auth:status'),
