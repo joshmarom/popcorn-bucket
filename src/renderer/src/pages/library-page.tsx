@@ -478,7 +478,7 @@ export function LibraryPage(): ReactElement {
                 )}
                 {data.continueShows.length > 0 && (
                   <div className="space-y-3">
-                    {bothContinue && <h3 className="type-kicker">Shows</h3>}
+                    {bothContinue && <h3 className="type-kicker">TV shows</h3>}
                     <ShowPosterGrid
                       id="continue-shows"
                       shows={data.continueShows}

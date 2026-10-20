@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronLeft, RefreshCw } from 'lucide-react'
-import { LearnChevron } from '@/components/interaction-motion'
+import { RefreshCw } from 'lucide-react'
 import type { TvShowListItem } from '@shared/tv'
 import { hasListPosterUrl, hasMeaningfulListOverview } from '@shared/catalog'
 import { Button } from '@/components/ui/button'
-import { SearchAutocomplete } from '@/components/search-autocomplete'
+import { BrowseHeader } from '@/components/browse-header'
+import { ListPager } from '@/components/list-pager'
 import { PosterGridPlaceholder } from '@/components/movie-grid'
 import { ShowGrid } from '@/components/show-grid'
 import { TvDiscoveryRails } from '@/components/tv-discovery-rails'
@@ -154,18 +154,17 @@ export function TvBrowsePage(): ReactElement {
         items: (searchResults ?? []).slice(start, start + CATALOG_LIST_PAGE_SIZE),
         page: searchPage,
         hasNext: searchPage < searchTotalPages,
-        pageLabel: `Page ${searchPage} of ${searchTotalPages}`,
+        totalPages: searchTotalPages as number | null,
         total: searchResults?.length ?? null
       }
     }
-    const page = trending?.page ?? requestedPage
     return {
       loading: trendingLoading,
       error: trendingError,
       items: trending?.results ?? [],
-      page,
+      page: trending?.page ?? requestedPage,
       hasNext: trending?.hasMore ?? false,
-      pageLabel: `Page ${page}`,
+      totalPages: null as number | null,
       total: null as number | null
     }
   }, [
@@ -180,33 +179,13 @@ export function TvBrowsePage(): ReactElement {
     requestedPage
   ])
 
-  const rangeStart = list.items.length === 0 ? 0 : (list.page - 1) * CATALOG_LIST_PAGE_SIZE + 1
-  const rangeEnd = rangeStart === 0 ? 0 : rangeStart + list.items.length - 1
-  const hasPrev = list.page > 1
-
   return (
     <div className="pb-8">
-      <div className="bg-background sticky top-0 z-10 border-b border-border px-4 py-4">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
-          <h1 className="type-page">TV shows</h1>
-          <SearchAutocomplete
-            className="w-full max-w-md"
-            placeholder="Search TV shows…"
-            value={query}
-            onChange={setQuery}
-          />
-          {list.loading && <span className="text-muted-foreground text-sm">Loading…</span>}
-        </div>
-        {query.trim().length > 0 && query.trim().length < 2 && (
-          <p className="text-muted-foreground mx-auto mt-2 max-w-6xl text-sm">
-            Type at least 2 characters to search.
-          </p>
-        )}
-      </div>
+      <BrowseHeader section="tv" query={query} onQueryChange={setQuery} loading={list.loading} />
 
       <div className="mx-auto max-w-6xl space-y-12 px-4 pt-8">
-        <div ref={headingRef} className="flex scroll-mt-24 flex-wrap items-center gap-2">
-          <h2 className="type-kicker">{searching ? 'Results' : 'Trending'}</h2>
+        <div ref={headingRef} className="flex min-h-9 scroll-mt-24 flex-wrap items-center gap-2">
+          <h2 className="type-kicker">{searching ? 'Search results' : 'Trending'}</h2>
           {!searching && (
             <Button
               type="button"
@@ -224,7 +203,11 @@ export function TvBrowsePage(): ReactElement {
             </Button>
           )}
         </div>
-        {list.error && <p className="text-destructive text-sm">{list.error}</p>}
+        {list.error && (
+          <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
+            {list.error}
+          </p>
+        )}
         {list.loading && list.items.length === 0 && !list.error && <PosterGridPlaceholder />}
         {!list.loading && !list.error && list.items.length === 0 && (
           <p className="text-muted-foreground text-sm">
@@ -236,45 +219,18 @@ export function TvBrowsePage(): ReactElement {
             <PageTurn page={list.page} items={list.items} scrollTarget={headingRef}>
               <ShowGrid shows={list.items} />
             </PageTurn>
-            {(hasPrev || list.hasNext) && (
-              <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
-                <p className="text-muted-foreground order-2 text-sm sm:order-1">
-                  Showing {rangeStart}–{rangeEnd}
-                  {list.total != null ? ` of ${list.total}` : ''}
-                </p>
-                <div className="flex items-center gap-2 sm:order-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!hasPrev || list.loading}
-                    onClick={() => setPage(list.page - 1)}
-                    aria-label="Previous page"
-                  >
-                    <ChevronLeft aria-hidden className="size-4" />
-                    Previous
-                  </Button>
-                  <span className="text-muted-foreground min-w-[7rem] text-center text-sm tabular-nums">
-                    {list.pageLabel}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="t-learn"
-                    disabled={!list.hasNext || list.loading}
-                    onClick={() => setPage(list.page + 1)}
-                    aria-label="Next page"
-                  >
-                    Next
-                    <LearnChevron />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <ListPager
+              page={list.page}
+              itemCount={list.items.length}
+              hasNext={list.hasNext}
+              totalPages={list.totalPages}
+              total={list.total}
+              disabled={list.loading}
+              onPageChange={setPage}
+            />
           </>
         )}
-        {!searching && <TvDiscoveryRails className="mt-12" />}
+        {!searching && <TvDiscoveryRails />}
         {!searching && <TvGenreRails />}
       </div>
     </div>

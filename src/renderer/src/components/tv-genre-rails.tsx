@@ -68,7 +68,7 @@ export function TvGenreRails(): ReactElement {
   }, [])
 
   return (
-    <div className="border-border mt-12 space-y-12 border-t pt-12">
+    <div className="border-border space-y-12 border-t pt-12">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="type-kicker">Browse by genre</h2>
         <Button

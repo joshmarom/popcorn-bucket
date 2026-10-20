@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import type { DiscoverCollection, DiscoverMovieItem } from '@shared/discovery'
-import { ChevronLeft } from 'lucide-react'
-import { LearnChevron } from '@/components/interaction-motion'
-import { Button } from '@/components/ui/button'
+import { ListPager } from '@/components/list-pager'
+import { SectionBackLink } from '@/components/section-back-link'
 import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
 import { PageTurn } from '@/components/page-turn'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
@@ -32,9 +31,6 @@ export function CollectionPage(): ReactElement {
     const start = (currentPage - 1) * CATALOG_LIST_PAGE_SIZE
     return movies.slice(start, start + CATALOG_LIST_PAGE_SIZE)
   }, [movies, currentPage])
-  const rangeStart = movies.length === 0 ? 0 : (currentPage - 1) * CATALOG_LIST_PAGE_SIZE + 1
-  const rangeEnd = Math.min(currentPage * CATALOG_LIST_PAGE_SIZE, movies.length)
-
   const setListPage = (page: number): void => {
     setSearchParams(
       (prev) => {
@@ -87,9 +83,7 @@ export function CollectionPage(): ReactElement {
             : 'mx-auto max-w-6xl space-y-4 px-4 pt-4'
         }
       >
-        <Button variant="outline" size="sm" type="button" asChild>
-          <Link to="/">Back</Link>
-        </Button>
+        <SectionBackLink section="movies" />
         {collection ? (
           <div className="space-y-2">
             <h1 ref={headingRef} className="type-display scroll-mt-4">
@@ -117,41 +111,14 @@ export function CollectionPage(): ReactElement {
             <PageTurn page={currentPage} items={pagedMovies} scrollTarget={headingRef}>
               <MovieGrid items={pagedMovies} />
             </PageTurn>
-            {totalPages > 1 && (
-              <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
-                <p className="text-muted-foreground order-2 text-sm sm:order-1">
-                  Showing {rangeStart}–{rangeEnd} of {movies.length}
-                </p>
-                <div className="flex items-center gap-2 sm:order-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage <= 1}
-                    onClick={() => setListPage(currentPage - 1)}
-                    aria-label="Previous page"
-                  >
-                    <ChevronLeft aria-hidden className="size-4" />
-                    Previous
-                  </Button>
-                  <span className="text-muted-foreground min-w-[7rem] text-center text-sm tabular-nums">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="t-learn"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setListPage(currentPage + 1)}
-                    aria-label="Next page"
-                  >
-                    Next
-                    <LearnChevron />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <ListPager
+              page={currentPage}
+              itemCount={pagedMovies.length}
+              hasNext={currentPage < totalPages}
+              totalPages={totalPages}
+              total={movies.length}
+              onPageChange={setListPage}
+            />
           </>
         )}
       </div>

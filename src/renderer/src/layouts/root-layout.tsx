@@ -1,167 +1,100 @@
 import { Suspense, useState, type ReactElement } from 'react'
 import { ScrollContainerContext } from '@/lib/scroll-container'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { ScreenTransitionProvider } from '@/lib/screen-transition'
-import { Download, Library, Settings, Tv } from 'lucide-react'
-import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
-import { useHoverIntent } from '@/hooks/use-hover-intent'
+import { Download, Library, Settings, type LucideIcon } from 'lucide-react'
+import { BROWSE_SECTION_ORDER, BROWSE_SECTIONS, browseSectionForPath } from '@/lib/browse-sections'
 import { cn } from '@/lib/utils'
 
 import popcornUrl from '../../../../resources/popcorn.png?url'
 
-function navIconClassName(isActive: boolean): string {
-  return cn(
-    'flex size-12 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar hover:bg-accent hover:text-accent-foreground',
-    isActive && 'bg-accent text-foreground'
-  )
-}
-
-function SidebarHoverLabel({
+function NavItem({
+  to,
   label,
-  children
+  icon: Icon,
+  active
 }: {
+  to: string
   label: string
-  children: (handlers: {
-    onMouseEnter: () => void
-    onMouseLeave: () => void
-    onFocus: () => void
-    onBlur: () => void
-  }) => ReactElement
+  icon: LucideIcon
+  active: boolean
 }): ReactElement {
-  const {
-    open,
-    setOpen,
-    onTriggerEnter,
-    onTriggerLeave,
-    onContentEnter,
-    onContentLeave,
-    onTriggerFocus,
-    onTriggerBlur
-  } = useHoverIntent()
-
   return (
-    <Popover open={open} onOpenChange={setOpen} modal={false}>
-      <PopoverAnchor asChild>
-        {children({
-          onMouseEnter: onTriggerEnter,
-          onMouseLeave: onTriggerLeave,
-          onFocus: onTriggerFocus,
-          onBlur: onTriggerBlur
-        })}
-      </PopoverAnchor>
-      <PopoverContent
-        side="right"
-        align="center"
-        sideOffset={10}
-        className="w-auto border-border px-3 py-2 text-sm font-medium shadow-md"
-        onMouseEnter={onContentEnter}
-        onMouseLeave={onContentLeave}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
+    <Link
+      to={to}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'group flex w-16 flex-col items-center gap-1 rounded-lg px-1 py-2 transition-colors outline-none',
+        'focus-visible:ring-sidebar-ring focus-visible:ring-offset-sidebar focus-visible:ring-2 focus-visible:ring-offset-2',
+        active
+          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+          : 'text-muted-foreground hover:text-sidebar-foreground'
+      )}
+    >
+      <Icon aria-hidden className="size-5" />
+      <span
+        className={cn(
+          'text-[0.6875rem] leading-tight transition-colors',
+          active
+            ? 'text-sidebar-accent-foreground'
+            : 'text-muted-foreground/70 group-hover:text-sidebar-foreground'
+        )}
       >
         {label}
-      </PopoverContent>
-    </Popover>
+      </span>
+    </Link>
   )
 }
 
 export function RootLayout(): ReactElement {
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
+  const { pathname } = useLocation()
+  const section = browseSectionForPath(pathname)
+  const at = (path: string): boolean => pathname === path || pathname.startsWith(`${path}/`)
+
   return (
     <ScreenTransitionProvider>
       <div className="bg-background flex h-screen overflow-hidden border-border">
         <aside
-          className="border-sidebar-border bg-sidebar flex h-full min-h-0 w-16 shrink-0 flex-col items-center border-r py-4"
+          className="border-sidebar-border bg-sidebar flex h-full min-h-0 w-20 shrink-0 flex-col items-center border-r py-4"
           style={{ viewTransitionName: 'persistent-nav' }}
         >
-          <div className="flex shrink-0 flex-col items-center">
-            <SidebarHoverLabel label="Home">
-              {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
-                <NavLink
-                  to="/"
-                  end
-                  onMouseEnter={onMouseEnter}
-                  onMouseLeave={onMouseLeave}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                  className={({ isActive }) => cn(navIconClassName(isActive), 'mb-1')}
-                  aria-label="Home"
-                >
-                  <img src={popcornUrl} alt="" className="size-9 select-none" draggable={false} />
-                </NavLink>
-              )}
-            </SidebarHoverLabel>
-
-            <div className="bg-border my-2 h-px w-8 shrink-0" aria-hidden />
-          </div>
-
-          <nav
-            className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6"
-            aria-label="Main"
+          <Link
+            to="/"
+            aria-label="Popcorn Bucket"
+            className="focus-visible:ring-sidebar-ring focus-visible:ring-offset-sidebar flex size-12 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           >
-            <SidebarHoverLabel label="Library">
-              {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
-                <NavLink
-                  to="/library"
-                  onMouseEnter={onMouseEnter}
-                  onMouseLeave={onMouseLeave}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                  className={({ isActive }) => navIconClassName(isActive)}
-                  aria-label="Library"
-                >
-                  <Library className="size-6" />
-                </NavLink>
-              )}
-            </SidebarHoverLabel>
+            <img src={popcornUrl} alt="" className="size-9 select-none" draggable={false} />
+          </Link>
 
-            <SidebarHoverLabel label="TV shows">
-              {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
-                <NavLink
-                  to="/tv"
-                  onMouseEnter={onMouseEnter}
-                  onMouseLeave={onMouseLeave}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                  className={({ isActive }) => navIconClassName(isActive)}
-                  aria-label="TV shows"
-                >
-                  <Tv className="size-6" />
-                </NavLink>
-              )}
-            </SidebarHoverLabel>
+          <nav className="mt-10 flex min-h-0 flex-1 flex-col items-center" aria-label="Main">
+            <div className="flex flex-col items-center gap-1">
+              {BROWSE_SECTION_ORDER.map((id) => (
+                <NavItem
+                  key={id}
+                  to={BROWSE_SECTIONS[id].path}
+                  label={BROWSE_SECTIONS[id].label}
+                  icon={BROWSE_SECTIONS[id].icon}
+                  active={section === id}
+                />
+              ))}
+            </div>
 
-            <SidebarHoverLabel label="Downloads">
-              {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
-                <NavLink
-                  to="/downloads"
-                  onMouseEnter={onMouseEnter}
-                  onMouseLeave={onMouseLeave}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                  className={({ isActive }) => navIconClassName(isActive)}
-                  aria-label="Downloads"
-                >
-                  <Download className="size-6" />
-                </NavLink>
-              )}
-            </SidebarHoverLabel>
+            <div className="bg-sidebar-border my-4 h-px w-8 shrink-0" aria-hidden />
 
-            <SidebarHoverLabel label="Settings">
-              {({ onMouseEnter, onMouseLeave, onFocus, onBlur }) => (
-                <NavLink
-                  to="/settings"
-                  onMouseEnter={onMouseEnter}
-                  onMouseLeave={onMouseLeave}
-                  onFocus={onFocus}
-                  onBlur={onBlur}
-                  className={({ isActive }) => navIconClassName(isActive)}
-                  aria-label="Settings"
-                >
-                  <Settings className="size-6" />
-                </NavLink>
-              )}
-            </SidebarHoverLabel>
+            <div className="flex flex-col items-center gap-1">
+              <NavItem to="/library" label="Library" icon={Library} active={at('/library')} />
+              <NavItem
+                to="/downloads"
+                label="Downloads"
+                icon={Download}
+                active={at('/downloads')}
+              />
+            </div>
+
+            <div className="mt-auto pt-4">
+              <NavItem to="/settings" label="Settings" icon={Settings} active={at('/settings')} />
+            </div>
           </nav>
         </aside>
 

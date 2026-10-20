@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import type { CatalogMovieListItem } from '@shared/catalog'
-import { ChevronLeft } from 'lucide-react'
-import { LearnChevron } from '@/components/interaction-motion'
-import { Button } from '@/components/ui/button'
+import { ListPager } from '@/components/list-pager'
+import { SectionBackLink } from '@/components/section-back-link'
 import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
 import { PageTurn } from '@/components/page-turn'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
@@ -75,9 +74,6 @@ export function GenreBrowsePage(): ReactElement {
     return items.slice(start, start + CATALOG_LIST_PAGE_SIZE)
   }, [items, currentPage])
 
-  const rangeStart = items.length === 0 ? 0 : (currentPage - 1) * CATALOG_LIST_PAGE_SIZE + 1
-  const rangeEnd = Math.min(currentPage * CATALOG_LIST_PAGE_SIZE, items.length)
-
   const heading = nameFromQuery || `Genre #${genreId}`
 
   const setListPage = (page: number): void => {
@@ -97,17 +93,15 @@ export function GenreBrowsePage(): ReactElement {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 pb-16">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" type="button" asChild>
-          <Link to="/">Back</Link>
-        </Button>
+      <div className="space-y-2">
+        <SectionBackLink section="movies" />
+        <h1 ref={headingRef} className="type-page scroll-mt-4">
+          {heading}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          Ranked by torrent availability, TMDB popularity, and rating.
+        </p>
       </div>
-      <h1 ref={headingRef} className="type-page scroll-mt-4">
-        {heading}
-      </h1>
-      <p className="text-muted-foreground text-sm">
-        Ranked by torrent availability, TMDB popularity, and rating.
-      </p>
 
       {loading && items.length === 0 && !error && <PosterGridPlaceholder />}
       {error && (
@@ -116,48 +110,21 @@ export function GenreBrowsePage(): ReactElement {
         </p>
       )}
       {!loading && !error && items.length === 0 && (
-        <p className="text-muted-foreground text-sm">No titles found for this genre.</p>
+        <p className="text-muted-foreground text-sm">No movies found for this genre.</p>
       )}
       {items.length > 0 && (
         <>
           <PageTurn page={currentPage} items={pagedItems} scrollTarget={headingRef}>
             <MovieGrid items={pagedItems} />
           </PageTurn>
-          {totalPages > 1 && (
-            <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
-              <p className="text-muted-foreground order-2 text-sm sm:order-1">
-                Showing {rangeStart}–{rangeEnd} of {items.length}
-              </p>
-              <div className="flex items-center gap-2 sm:order-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1}
-                  onClick={() => setListPage(currentPage - 1)}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft aria-hidden className="size-4" />
-                  Previous
-                </Button>
-                <span className="text-muted-foreground min-w-[7rem] text-center text-sm tabular-nums">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="t-learn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setListPage(currentPage + 1)}
-                  aria-label="Next page"
-                >
-                  Next
-                  <LearnChevron />
-                </Button>
-              </div>
-            </div>
-          )}
+          <ListPager
+            page={currentPage}
+            itemCount={pagedItems.length}
+            hasNext={currentPage < totalPages}
+            totalPages={totalPages}
+            total={items.length}
+            onPageChange={setListPage}
+          />
         </>
       )}
     </div>

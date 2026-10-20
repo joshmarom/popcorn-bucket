@@ -10,7 +10,7 @@ import {
   type ReactNode
 } from 'react'
 import { Link } from 'react-router-dom'
-import { Film, Star } from 'lucide-react'
+import { Film, Star, Tv } from 'lucide-react'
 import { formatRuntime } from '@/lib/movie-meta'
 import {
   CardScopeContext,
@@ -96,6 +96,7 @@ export function MovieCard({
   }
   const shownGenres = genres.filter((name) => name.trim().length > 0).slice(0, 3)
   const small = size === 'sm'
+  const PlaceholderIcon = href.startsWith('/tv/') ? Tv : Film
   const sharedName = posterTransitionName(href)
   const titleName = titleTransitionName(href)
   const sourceKey = cardSourceKey(useContext(CardScopeContext), href)
@@ -176,7 +177,7 @@ export function MovieCard({
             />
           ) : (
             <div className="text-muted-foreground flex size-full flex-col items-center justify-center gap-2 px-3 text-center">
-              <Film aria-hidden className={small ? 'size-5' : 'size-7'} />
+              <PlaceholderIcon aria-hidden className={small ? 'size-5' : 'size-7'} />
               <span className="line-clamp-3 text-xs leading-snug font-medium text-balance">
                 {title}
               </span>

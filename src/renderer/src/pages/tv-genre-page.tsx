@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
-import { LearnChevron } from '@/components/interaction-motion'
+import { useParams, useSearchParams } from 'react-router-dom'
 import type { TvShowListItem } from '@shared/tv'
-import { Button } from '@/components/ui/button'
+import { ListPager } from '@/components/list-pager'
+import { SectionBackLink } from '@/components/section-back-link'
 import { PosterGridPlaceholder } from '@/components/movie-grid'
 import { ShowGrid } from '@/components/show-grid'
 import { PageTurn } from '@/components/page-turn'
-import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 
 type GenrePage = { page: number; results: TvShowListItem[]; hasMore: boolean }
 
@@ -69,18 +67,16 @@ export function TvGenrePage(): ReactElement {
 
   const page = data?.page ?? requestedPage
   const items = data?.results ?? []
-  const rangeStart = items.length === 0 ? 0 : (page - 1) * CATALOG_LIST_PAGE_SIZE + 1
-  const rangeEnd = rangeStart === 0 ? 0 : rangeStart + items.length - 1
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 pb-16">
-      <Button variant="outline" size="sm" type="button" asChild>
-        <Link to="/tv">Back</Link>
-      </Button>
-      <h1 ref={headingRef} className="type-page scroll-mt-4">
-        {name || 'TV genre'}
-      </h1>
-      <p className="text-muted-foreground text-sm">Most popular on TMDB first.</p>
+      <div className="space-y-2">
+        <SectionBackLink section="tv" />
+        <h1 ref={headingRef} className="type-page scroll-mt-4">
+          {name || 'TV genre'}
+        </h1>
+        <p className="text-muted-foreground text-sm">Most popular on TMDB first.</p>
+      </div>
 
       {loading && items.length === 0 && !error && <PosterGridPlaceholder />}
       {error && (
@@ -96,41 +92,13 @@ export function TvGenrePage(): ReactElement {
           <PageTurn page={page} items={items} scrollTarget={headingRef}>
             <ShowGrid shows={items} />
           </PageTurn>
-          {(page > 1 || data?.hasMore) && (
-            <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
-              <p className="text-muted-foreground order-2 text-sm sm:order-1">
-                Showing {rangeStart}–{rangeEnd}
-              </p>
-              <div className="flex items-center gap-2 sm:order-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage(page - 1)}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft aria-hidden className="size-4" />
-                  Previous
-                </Button>
-                <span className="text-muted-foreground min-w-[7rem] text-center text-sm tabular-nums">
-                  Page {page}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="t-learn"
-                  disabled={!data?.hasMore || loading}
-                  onClick={() => setPage(page + 1)}
-                  aria-label="Next page"
-                >
-                  Next
-                  <LearnChevron />
-                </Button>
-              </div>
-            </div>
-          )}
+          <ListPager
+            page={page}
+            itemCount={items.length}
+            hasNext={data?.hasMore ?? false}
+            disabled={loading}
+            onPageChange={setPage}
+          />
         </>
       )}
     </div>

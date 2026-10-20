@@ -1,21 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { CardScopeContext } from '@/lib/screen-transition'
-import { Link, useSearchParams } from 'react-router-dom'
-import {
-  shouldIncludeCatalogListItem,
-  type CatalogGenreRail,
-  type CatalogMovieListItem
-} from '@shared/catalog'
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronLeft, RefreshCw } from 'lucide-react'
-import { IconSwap, LearnChevron } from '@/components/interaction-motion'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { shouldIncludeCatalogListItem, type CatalogMovieListItem } from '@shared/catalog'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, RefreshCw } from 'lucide-react'
+import { IconSwap } from '@/components/interaction-motion'
 import { Button } from '@/components/ui/button'
-import { MovieCard } from '@/components/movie-card'
 import { MovieGrid, PosterGridPlaceholder } from '@/components/movie-grid'
-import { useMovieListFacts } from '@/components/use-movie-list-facts'
 import { DiscoveryRails } from '@/components/discovery-rails'
-import { VirtualRails } from '@/components/virtual-rails'
-import { SearchAutocomplete } from '@/components/search-autocomplete'
-import { MOVIE_RAIL_CLASS, MOVIE_RAIL_ITEM_CLASS } from '@/lib/movie-layout'
+import { MovieGenreRails } from '@/components/movie-genre-rails'
+import { BrowseHeader } from '@/components/browse-header'
+import { ListPager } from '@/components/list-pager'
 import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 import { cn } from '@/lib/utils'
 import { PageTurn } from '@/components/page-turn'
@@ -124,50 +117,6 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced
 }
 
-function GenreRailRow({ rail }: { rail: CatalogGenreRail }): ReactElement {
-  const movies = useMovieListFacts(rail.movies)
-  const nameQ = encodeURIComponent(rail.genre.name)
-  return (
-    <CardScopeContext.Provider value={`genre-rail-${rail.genre.id}`}>
-      <section className="space-y-4" aria-labelledby={`genre-rail-${rail.genre.id}`}>
-        <div className="flex flex-wrap items-baseline justify-between gap-2 pe-1">
-          <h3 id={`genre-rail-${rail.genre.id}`} className="type-kicker">
-            {rail.genre.name}
-          </h3>
-          <Button
-            variant="link"
-            className="t-learn text-muted-foreground hover:text-foreground h-auto p-0 text-sm"
-            asChild
-          >
-            <Link to={`/genre/${rail.genre.id}?name=${nameQ}`}>
-              All in {rail.genre.name}
-              <LearnChevron />
-            </Link>
-          </Button>
-        </div>
-        <ul className={MOVIE_RAIL_CLASS}>
-          {movies.map((m, index) => (
-            <li key={m.id} className={MOVIE_RAIL_ITEM_CLASS}>
-              <MovieCard
-                size="sm"
-                index={index}
-                href={`/movie/${m.id}`}
-                linkState={{ from: 'home' }}
-                title={m.title}
-                posterUrl={m.posterUrl}
-                releaseYear={m.releaseYear}
-                runtime={m.runtime}
-                genres={m.genres}
-                voteAverage={m.voteAverage}
-              />
-            </li>
-          ))}
-        </ul>
-      </section>
-    </CardScopeContext.Provider>
-  )
-}
-
 export function HomePage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams()
   const query = searchParams.get('q') ?? ''
@@ -247,11 +196,7 @@ export function HomePage(): ReactElement {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
 
-  const [genreRails, setGenreRails] = useState<CatalogGenreRail[]>([])
-  const [genreRailsLoading, setGenreRailsLoading] = useState(false)
-  const [genreRailsError, setGenreRailsError] = useState<string | null>(null)
   const [trendingRefreshBusy, setTrendingRefreshBusy] = useState(false)
-  const [genreRailsRefreshBusy, setGenreRailsRefreshBusy] = useState(false)
 
   const showingSearch = debouncedQuery.trim().length >= 2
 
@@ -270,19 +215,6 @@ export function HomePage(): ReactElement {
     setTrendingRefreshBusy(false)
     if (requestedPage !== 1) setListPage(1)
   }
-
-  const refreshGenreRails = useCallback(async (): Promise<void> => {
-    setGenreRailsRefreshBusy(true)
-    setGenreRailsError(null)
-    const res = await window.api.catalog.genreRails()
-    if (res.ok) {
-      setGenreRails(res.rails)
-    } else {
-      setGenreRails([])
-      setGenreRailsError(res.error)
-    }
-    setGenreRailsRefreshBusy(false)
-  }, [])
 
   const catalogListKeyRef = useRef<string | null>(null)
   useEffect(() => {
@@ -358,28 +290,6 @@ export function HomePage(): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingSearch, requestedPage])
 
-  useEffect(() => {
-    if (showingSearch) {
-      return
-    }
-    let cancelled = false
-    setGenreRailsLoading(true)
-    setGenreRailsError(null)
-    void window.api.catalog.genreRails().then((res) => {
-      if (cancelled) return
-      setGenreRailsLoading(false)
-      if (res.ok) {
-        setGenreRails(res.rails)
-      } else {
-        setGenreRails([])
-        setGenreRailsError(res.error)
-      }
-    })
-    return (): void => {
-      cancelled = true
-    }
-  }, [showingSearch])
-
   const searchPending = query.trim().length >= 2 && debouncedQuery !== query
   const listLoading = showingSearch ? searchLoading || searchPending : trendingLoading
 
@@ -420,21 +330,18 @@ export function HomePage(): ReactElement {
         error: searchError,
         items: sortedSearchResults.slice(start, start + CATALOG_LIST_PAGE_SIZE),
         page: searchPage,
-        hasPrev: searchPage > 1,
         hasNext: searchPage < searchTotalPages,
-        pageLabel: `Page ${searchPage} of ${searchTotalPages}`,
+        totalPages: searchTotalPages as number | null,
         total: sortedSearchResults.length as number | null
       }
     }
-    const page = trending?.page ?? requestedPage
     return {
       heading: 'Trending',
       error: trendingError,
       items: trending?.results ?? [],
-      page,
-      hasPrev: page > 1,
+      page: trending?.page ?? requestedPage,
       hasNext: trending?.hasMore ?? false,
-      pageLabel: `Page ${page}`,
+      totalPages: null as number | null,
       total: null as number | null
     }
   }, [
@@ -448,32 +355,14 @@ export function HomePage(): ReactElement {
     requestedPage
   ])
 
-  const rangeStart = list.items.length === 0 ? 0 : (list.page - 1) * CATALOG_LIST_PAGE_SIZE + 1
-  const rangeEnd = rangeStart === 0 ? 0 : rangeStart + list.items.length - 1
-
   return (
     <div className="pb-8">
-      <div className="bg-background sticky top-0 z-10 border-b border-border px-4 py-4">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3">
-          <SearchAutocomplete
-            className="w-full max-w-md"
-            placeholder="Search movies…"
-            value={query}
-            onChange={setQuery}
-          />
-          {listLoading && <span className="text-muted-foreground text-sm">Loading…</span>}
-        </div>
-        {query.trim().length > 0 && query.trim().length < 2 && (
-          <p className="text-muted-foreground mx-auto mt-2 max-w-6xl px-0 text-sm">
-            Type at least 2 characters to search.
-          </p>
-        )}
-      </div>
+      <BrowseHeader section="movies" query={query} onQueryChange={setQuery} loading={listLoading} />
 
       <div className="mx-auto max-w-6xl space-y-12 px-4 pt-8">
         <div
           ref={listHeadingRef}
-          className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3"
+          className="flex min-h-9 scroll-mt-24 flex-wrap items-center justify-between gap-3"
         >
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="type-kicker">{list.heading}</h2>
@@ -554,7 +443,7 @@ export function HomePage(): ReactElement {
           </p>
         )}
         {!listLoading && !list.error && list.items.length === 0 && showingSearch && (
-          <p className="text-muted-foreground text-sm">No titles match that search.</p>
+          <p className="text-muted-foreground text-sm">No movies match that search.</p>
         )}
         {listLoading && list.items.length === 0 && !list.error && <PosterGridPlaceholder />}
         {list.items.length > 0 && (
@@ -562,84 +451,19 @@ export function HomePage(): ReactElement {
             <PageTurn page={list.page} items={list.items} scrollTarget={listHeadingRef}>
               <MovieGrid items={list.items} />
             </PageTurn>
-            {(list.hasPrev || list.hasNext) && (
-              <div className="flex flex-col items-center justify-center gap-3 pt-8 sm:flex-row sm:gap-6">
-                <p className="text-muted-foreground order-2 text-sm sm:order-1">
-                  Showing {rangeStart}–{rangeEnd}
-                  {list.total != null ? ` of ${list.total}` : ''}
-                </p>
-                <div className="flex items-center gap-2 sm:order-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!list.hasPrev || listLoading}
-                    onClick={() => setListPage(list.page - 1)}
-                    aria-label="Previous page"
-                  >
-                    <ChevronLeft aria-hidden className="size-4" />
-                    Previous
-                  </Button>
-                  <span className="text-muted-foreground min-w-[7rem] text-center text-sm tabular-nums">
-                    {list.pageLabel}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="t-learn"
-                    disabled={!list.hasNext || listLoading}
-                    onClick={() => setListPage(list.page + 1)}
-                    aria-label="Next page"
-                  >
-                    Next
-                    <LearnChevron />
-                  </Button>
-                </div>
-              </div>
-            )}
+            <ListPager
+              page={list.page}
+              itemCount={list.items.length}
+              hasNext={list.hasNext}
+              totalPages={list.totalPages}
+              total={list.total}
+              disabled={listLoading}
+              onPageChange={setListPage}
+            />
           </>
         )}
         {!showingSearch && <DiscoveryRails />}
-        {!showingSearch && (
-          <div className="border-border space-y-12 border-t pt-12">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="type-kicker">Browse by genre</h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5"
-                disabled={genreRailsLoading || genreRailsRefreshBusy}
-                title="Reload genre rails from TMDB"
-                onClick={() => void refreshGenreRails()}
-              >
-                <RefreshCw
-                  className={cn(
-                    'size-3.5',
-                    (genreRailsLoading || genreRailsRefreshBusy) && 'animate-spin'
-                  )}
-                />
-                Refresh
-              </Button>
-            </div>
-            {genreRailsLoading && (
-              <p className="text-muted-foreground text-sm">Loading genre rows…</p>
-            )}
-            {genreRailsError && (
-              <p className="text-destructive border-destructive/30 bg-destructive/10 rounded-md border px-3 py-2 text-sm">
-                {genreRailsError}
-              </p>
-            )}
-            {!genreRailsLoading && !genreRailsError && (
-              <VirtualRails
-                items={genreRails}
-                getKey={(rail) => rail.genre.id}
-                renderItem={(rail) => <GenreRailRow rail={rail} />}
-              />
-            )}
-          </div>
-        )}
+        {!showingSearch && <MovieGenreRails />}
       </div>
     </div>
   )
