@@ -40,46 +40,36 @@ const SECRET_KEYS = [
 ] as const
 type SecretKey = (typeof SECRET_KEYS)[number]
 
-/** Values written by `safeStorage` carry this prefix; anything else is legacy plaintext. */
+/** Values written by the old `safeStorage` path. New values are stored as plaintext. */
 const ENCRYPTED_PREFIX = 'enc:v1:'
 
-export function isSecretStorageEncrypted(): boolean {
-  return safeStorage.isEncryptionAvailable()
-}
-
-function encodeSecret(value: string): string {
-  if (!value || !isSecretStorageEncrypted()) return value
-  return ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64')
-}
-
-function decodeSecret(raw: unknown): string {
-  const value = typeof raw === 'string' ? raw : ''
-  if (!value.startsWith(ENCRYPTED_PREFIX)) return value
-  if (!isSecretStorageEncrypted()) return ''
+/** One keychain read, only for a value the previous version encrypted. Returns null if it can't. */
+function decryptLegacy(raw: string): string | null {
+  if (!safeStorage.isEncryptionAvailable()) return null
   try {
-    return safeStorage.decryptString(Buffer.from(value.slice(ENCRYPTED_PREFIX.length), 'base64'))
+    return safeStorage.decryptString(Buffer.from(raw.slice(ENCRYPTED_PREFIX.length), 'base64'))
   } catch {
-    return ''
+    return null
   }
 }
 
 function readSecret(key: SecretKey): string {
-  return decodeSecret(store.get(key))
+  const raw = store.get(key) as unknown
+  if (typeof raw !== 'string') return ''
+  if (!raw.startsWith(ENCRYPTED_PREFIX)) return raw
+  const plain = decryptLegacy(raw)
+  if (plain == null) return ''
+  store.set(key, plain)
+  return plain
 }
 
 function writeSecret(key: SecretKey, value: string): void {
-  store.set(key, encodeSecret(value))
+  store.set(key, value)
 }
 
-/** Re-save plaintext keys from older versions in encrypted form. Call after app ready. */
-export function migratePlaintextSecrets(): void {
-  if (!isSecretStorageEncrypted()) return
-  for (const key of SECRET_KEYS) {
-    const raw = store.get(key) as unknown
-    if (typeof raw === 'string' && raw && !raw.startsWith(ENCRYPTED_PREFIX)) {
-      writeSecret(key, raw)
-    }
-  }
+/** Rewrite leftover keychain-encrypted secrets as plaintext. Call after app ready. */
+export function migrateStoredSecrets(): void {
+  for (const key of SECRET_KEYS) readSecret(key)
 }
 
 const DEV_ENV_KEYS = [

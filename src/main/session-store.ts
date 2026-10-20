@@ -25,19 +25,20 @@ const store = new (getStoreConstructor())({
   defaults: { sessionToken: '', email: '', name: '', role: '' }
 })
 
+/** Session tokens written by the old `safeStorage` path. New tokens are stored as plaintext. */
 const ENCRYPTED_PREFIX = 'enc:v1:'
 
-function encodeSecret(value: string): string {
-  if (!value || !safeStorage.isEncryptionAvailable()) return value
-  return ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64')
-}
-
-function decodeSecret(raw: unknown): string {
-  const value = typeof raw === 'string' ? raw : ''
-  if (!value.startsWith(ENCRYPTED_PREFIX)) return value
+function readToken(): string {
+  const raw = store.get('sessionToken') as unknown
+  if (typeof raw !== 'string') return ''
+  if (!raw.startsWith(ENCRYPTED_PREFIX)) return raw
   if (!safeStorage.isEncryptionAvailable()) return ''
   try {
-    return safeStorage.decryptString(Buffer.from(value.slice(ENCRYPTED_PREFIX.length), 'base64'))
+    const plain = safeStorage.decryptString(
+      Buffer.from(raw.slice(ENCRYPTED_PREFIX.length), 'base64')
+    )
+    store.set('sessionToken', plain)
+    return plain
   } catch {
     return ''
   }
@@ -46,11 +47,16 @@ function decodeSecret(raw: unknown): string {
 let cachedSession: AuthSession | null = null
 
 export function getSessionToken(): string {
-  return decodeSecret(store.get('sessionToken'))
+  return readToken()
+}
+
+/** Rewrite a leftover keychain-encrypted token as plaintext. Call after app ready. */
+export function migrateStoredSession(): void {
+  readToken()
 }
 
 export function setSession(token: string, session: AuthSession): void {
-  store.set('sessionToken', encodeSecret(token))
+  store.set('sessionToken', token)
   store.set('email', session.email)
   store.set('name', session.name)
   store.set('role', session.role)

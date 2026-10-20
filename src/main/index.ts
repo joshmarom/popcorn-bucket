@@ -3,7 +3,8 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc-handlers'
-import { migratePlaintextSecrets } from './settings-store'
+import { migrateStoredSecrets } from './settings-store'
+import { migrateStoredSession } from './session-store'
 import { closeLibrary } from './library/db'
 import { importLegacyLibrary } from './library/migrate'
 import { startAutoUpdates } from './auto-update'
@@ -99,7 +100,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  migratePlaintextSecrets()
+  migrateStoredSecrets()
+  migrateStoredSession()
   importLegacyLibrary()
   lockDownMainSession()
   installVidkingSession()

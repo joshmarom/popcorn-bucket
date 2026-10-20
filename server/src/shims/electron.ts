@@ -17,15 +17,3 @@ export const app = {
     return process.cwd()
   }
 }
-
-export const safeStorage = {
-  isEncryptionAvailable(): boolean {
-    return false
-  },
-  encryptString(value: string): Buffer {
-    return Buffer.from(value)
-  },
-  decryptString(value: Buffer): string {
-    return Buffer.from(value).toString('utf8')
-  }
-}
