@@ -12,13 +12,22 @@ import { CATALOG_LIST_PAGE_SIZE } from '@/lib/catalog-list-page-size'
 
 type PageSlot = number | 'gap'
 
+/** Pages kept on each side of the current page before the ellipsis. */
+const PAGE_NEIGHBORS = 3
+
 /**
- * First page, the current page and its neighbours, and the last page when known. Open-ended
- * lists end in a gap while another page exists.
+ * First page, the current page and a few pages on either side, and the last page when known.
+ * Open-ended lists end in a gap while another page exists.
  */
 function pageSlots(page: number, hasNext: boolean, totalPages: number | null): PageSlot[] {
-  const last = totalPages ?? (hasNext ? page + 1 : page)
-  const pages = new Set<number>([1, page - 1, page, page + 1])
+  // Open-ended lists only report whether one more page exists, so the window ahead is shown
+  // up to the same number of neighbours kept behind the current page.
+  const last = totalPages ?? (hasNext ? page + PAGE_NEIGHBORS : page)
+  const pages = new Set<number>([1, page])
+  for (let offset = 1; offset <= PAGE_NEIGHBORS; offset++) {
+    pages.add(page - offset)
+    pages.add(page + offset)
+  }
   if (totalPages != null) pages.add(totalPages)
   const sorted = [...pages].filter((p) => p >= 1 && p <= last).sort((a, b) => a - b)
   const slots: PageSlot[] = []
