@@ -30,6 +30,9 @@ jobs:
           npm install -g npm@11
           npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck and build
         run: npm run build
 
