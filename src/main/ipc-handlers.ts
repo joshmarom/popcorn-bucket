@@ -26,7 +26,7 @@ import type {
 } from '@shared/catalog'
 import { isSafeTorrentDetailsUrl, type TorrentSearchResponse } from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot, UntrackedDownload } from '@shared/torrent-downloads'
-import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
+import type { InlinePlayerSession, TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { ProviderHealth } from '@shared/provider-health'
 import type {
   TvSearchResponse,
@@ -51,6 +51,7 @@ import {
   startMoviePlayback
 } from './torrent/movie-downloads'
 import { mpvEvents } from './torrent/mpv-controller'
+import { getPlayerSession, playerWindowEvents } from './player-window'
 import {
   clearWatchProgress,
   getWatchProgress,
@@ -401,6 +402,10 @@ export function registerIpcHandlers(): void {
     endStreamingPlayback('inline')
   })
 
+  ipcMain.handle('player:getSession', (): InlinePlayerSession | null => {
+    return getPlayerSession()
+  })
+
   ipcMain.handle('torrent:setMovieDownloadPaused', async (_evt, raw: unknown) => {
     const parsed = movieDownloadPauseInput.safeParse(raw)
     if (!parsed.success) {
@@ -409,7 +414,7 @@ export function registerIpcHandlers(): void {
     return setMovieDownloadPaused(parsed.data.movieId, parsed.data.downloadId, parsed.data.paused)
   })
 
-  mpvEvents.on('end', () => {
+  const notifyPlaybackEnd = (): void => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (w.isDestroyed()) continue
       try {
@@ -418,7 +423,9 @@ export function registerIpcHandlers(): void {
         /* window may have gone away mid-send */
       }
     }
-  })
+  }
+  mpvEvents.on('end', notifyPlaybackEnd)
+  playerWindowEvents.on('end', notifyPlaybackEnd)
 
   ipcMain.handle(
     'catalog:trendingPage',
@@ -572,9 +579,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('tv:search', async (_evt, raw: unknown): Promise<TvSearchResponse> => {
     const parsed = tvSearchInput.safeParse(raw)
     if (!parsed.success) return { ok: false, error: 'Enter a search query.' }
-    return apiJson(
-      `/v1/tv/search${query({ query: parsed.data.query, page: parsed.data.page })}`
-    )
+    return apiJson(`/v1/tv/search${query({ query: parsed.data.query, page: parsed.data.page })}`)
   })
 
   ipcMain.handle('tv:listFacts', async (_evt, raw: unknown): Promise<TvShowListFactsResponse> => {

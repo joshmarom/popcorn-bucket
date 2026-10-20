@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useContext, useEffect, useMemo, useState, type ReactElement } from 'react'
 import { DetailReveal, MovieDetailPlaceholder } from '@/components/detail-placeholder'
 import { useDetailReveal } from '@/hooks/use-detail-reveal'
 import { PanelReveal } from '@/components/interaction-motion'
@@ -11,7 +11,6 @@ import {
   useActivePoster,
   useScreenTransition
 } from '@/lib/screen-transition'
-import type { MediaErrorDetail } from '@vidstack/react'
 import { useShallow } from 'zustand/react/shallow'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
 import { createMoviePageStore, getRankedSources, type QuickPlayState } from './movie-page-store'
@@ -22,7 +21,6 @@ import { MovieDetailTabs } from './movie-detail-tabs'
 import { MovieDownloadsSection } from './movie-downloads-section'
 import { MovieOverviewTab } from './movie-overview-tab'
 import { MoviePageShell } from './movie-page-shell'
-import { LazyMoviePlaybackDialog } from './lazy-movie-playback-dialog'
 import { MovieTorrentSourcesSection } from './movie-torrent-sources-section'
 import { MovieVidkingTab } from './movie-vidking-tab'
 import { NetworkNoticeDialog } from './network-notice-dialog'
@@ -154,9 +152,6 @@ function MoviePageContent(): ReactElement {
 
   useEffect(() => {
     void store.getState().loadCatalog()
-    return (): void => {
-      if (store.getState().playUrl) void window.api.torrent.endInlinePlayback()
-    }
   }, [store])
 
   const [inWatchlist, setInWatchlist] = useState(false)
@@ -170,14 +165,6 @@ function MoviePageContent(): ReactElement {
     const offEnd = window.api.mpv.onEnd(refresh)
     return offEnd
   }, [s.movieId])
-  const playDialogWasOpen = useRef(false)
-  useEffect(() => {
-    const wasOpen = playDialogWasOpen.current
-    playDialogWasOpen.current = s.playDialogOpen
-    if (wasOpen && !s.playDialogOpen) {
-      void window.api.history.get(s.movieId).then((p) => setResumeSeconds(resumePosition(p)))
-    }
-  }, [s.playDialogOpen, s.movieId])
 
   useEffect(() => {
     return window.api.torrent.onDownloadsUpdate((rows) => {
@@ -190,6 +177,7 @@ function MoviePageContent(): ReactElement {
   useEffect(() => {
     void window.api.torrent.getMovieDownloads(s.movieId).then((rows) => {
       store.setState({ downloads: rows })
+      store.getState().advanceQuickPlay()
     })
     void window.api.prefs.get().then((p) => {
       store.getState().setRankingPrefs({
@@ -323,24 +311,6 @@ function MoviePageContent(): ReactElement {
         open={s.networkNoticeRow != null}
         onCancel={s.cancelNetworkNotice}
         onConfirm={s.confirmNetworkNotice}
-      />
-
-      <LazyMoviePlaybackDialog
-        open={s.playDialogOpen}
-        playUrl={s.playUrl}
-        playLabel={s.playLabel}
-        playSubtitles={s.playSubtitles}
-        playError={s.playError}
-        startSeconds={s.playStartSeconds}
-        onProgress={(position, duration) =>
-          void window.api.history.report(s.movieId, position, duration)
-        }
-        onOpenChange={s.closePlayDialog}
-        onPlayerError={(d: MediaErrorDetail) => {
-          const msg = d.message || 'Video playback failed.'
-          const code = d.code
-          s.setPlayErrorFromPlayer(code != null ? `${msg} (code ${code})` : msg)
-        }}
       />
     </MoviePageShell>
   )

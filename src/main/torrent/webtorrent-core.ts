@@ -39,6 +39,15 @@ export type WtTorrent = {
   bitfield?: { get: (index: number) => boolean }
   /** Prioritize a piece range (inclusive). */
   select?: (start: number, end: number, priority?: number) => void
+  /** Internal WebTorrent selection allowing `isStreamSelection` so sub-ranges aren't swallowed by `Selections.concatenate`. */
+  _select?: (
+    start: number,
+    end: number,
+    priority?: number,
+    notify?: (() => void) | null,
+    isStreamSelection?: boolean
+  ) => void
+  critical?: (start: number, end: number) => void
   pause?: () => void
   resume?: () => void
   once: (ev: string, fn: (err?: Error) => void) => void

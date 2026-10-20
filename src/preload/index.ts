@@ -15,7 +15,7 @@ import type {
   MovieTorrentDownloadSnapshot,
   UntrackedDownload
 } from '@shared/torrent-downloads'
-import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
+import type { InlinePlayerSession, TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
@@ -200,6 +200,14 @@ const api = {
       const listener = (): void => cb()
       ipcRenderer.on('mpv:end', listener)
       return () => ipcRenderer.removeListener('mpv:end', listener)
+    }
+  },
+  player: {
+    getSession: (): Promise<InlinePlayerSession | null> => ipcRenderer.invoke('player:getSession'),
+    onSession: (cb: (session: InlinePlayerSession) => void): (() => void) => {
+      const listener = (_e: unknown, session: InlinePlayerSession): void => cb(session)
+      ipcRenderer.on('player:session', listener)
+      return () => ipcRenderer.removeListener('player:session', listener)
     }
   }
 }

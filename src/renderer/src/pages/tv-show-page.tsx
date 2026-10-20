@@ -14,7 +14,6 @@ import { seasonLabel } from '@shared/tv-meta'
 import { rankEpisodeSources, type RankedSources } from '@shared/release-ranking'
 import type { TorrentSearchResponse, TorrentSource } from '@shared/torrent'
 import type { MovieTorrentDownloadSnapshot } from '@shared/torrent-downloads'
-import type { TorrentSubtitleTrack } from '@shared/torrent-stream'
 import {
   episodeCode,
   episodeMediaKey,
@@ -30,18 +29,9 @@ import { Card } from '@/components/ui/card'
 import { acknowledgeNetworkNotice, hasAcknowledgedNetworkNotice } from '@/lib/network-notice'
 import { cn } from '@/lib/utils'
 import { MoviePageShell } from './movie/movie-page-shell'
-import { LazyMoviePlaybackDialog } from './movie/lazy-movie-playback-dialog'
 import { NetworkNoticeDialog } from './movie/network-notice-dialog'
 import { TvCastTrailers } from './tv-cast-trailers'
 import { TvEpisodeList, type EpisodeStatus } from './tv-episode-list'
-
-type InlinePlayback = {
-  key: number
-  url: string
-  label: string
-  subtitles: TorrentSubtitleTrack[]
-  startSeconds: number
-}
 
 function mergeResults(lists: TorrentSource[][]): TorrentSource[] {
   const seen = new Set<string>()
@@ -92,7 +82,6 @@ export function TvShowPage(): ReactElement {
   const skipSeasonFetch = useRef(false)
   const [history, setHistory] = useState<Map<number, WatchProgress>>(new Map())
   const [status, setStatus] = useState<Record<number, EpisodeStatus>>({})
-  const [inline, setInline] = useState<InlinePlayback | null>(null)
   const [pendingNotice, setPendingNotice] = useState<(() => void) | null>(null)
   const [lastPlayed, setLastPlayed] = useState<TvEpisode | null>(null)
   const [inMyShows, setInMyShows] = useState(false)
@@ -165,15 +154,6 @@ export function TvShowPage(): ReactElement {
     }
     setStatus((s) => ({ ...s, [key]: { phase: 'idle' } }))
     setLastPlayed(ep)
-    if (res.kind === 'inline') {
-      setInline({
-        key,
-        url: res.streamUrl,
-        label: res.fileLabel,
-        subtitles: res.subtitles,
-        startSeconds: res.startSeconds
-      })
-    }
   }, [])
 
   const playEpisode = useCallback(
@@ -552,26 +532,6 @@ export function TvShowPage(): ReactElement {
           setPendingNotice(null)
           run?.()
         }}
-      />
-
-      <LazyMoviePlaybackDialog
-        open={inline != null}
-        playUrl={inline?.url ?? null}
-        playLabel={inline?.label ?? ''}
-        playSubtitles={inline?.subtitles ?? []}
-        playError={null}
-        startSeconds={inline?.startSeconds ?? 0}
-        onProgress={(position, duration) => {
-          if (inline) void window.api.history.report(inline.key, position, duration)
-        }}
-        onOpenChange={(open) => {
-          if (!open) {
-            setInline(null)
-            void window.api.torrent.endInlinePlayback()
-            void refreshHistory()
-          }
-        }}
-        onPlayerError={() => {}}
       />
     </MoviePageShell>
   )

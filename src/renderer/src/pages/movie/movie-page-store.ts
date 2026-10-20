@@ -229,6 +229,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
       set({ downloadsRefreshBusy: true })
       void window.api.torrent.getMovieDownloads(id).then((rows) => {
         set({ downloads: rows, downloadsRefreshBusy: false })
+        get().advanceQuickPlay()
       })
     },
 
@@ -319,6 +320,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
           ? { phase: 'buffering', downloadId }
           : { phase: 'error', message: get().addFeedback ?? 'Could not start the download.' }
       })
+      if (downloadId) get().advanceQuickPlay()
     },
 
     playSource: async (row) => {
@@ -333,6 +335,7 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
           ? { phase: 'buffering', downloadId }
           : { phase: 'error', message: get().addFeedback ?? 'Could not start playback.' }
       })
+      if (downloadId) get().advanceQuickPlay()
     },
 
     advanceQuickPlay: () => {
@@ -397,30 +400,16 @@ export function createMoviePageStore(movieId: number): MoviePageStoreApi {
           set({ playError: res.error, playBusyDownloadId: null })
           return
         }
-        if (res.kind === 'external') {
-          // mpv is driving playback in its own window; we just track that a
-          // session is running so we can clean up if the user deletes the
-          // download mid-playback.
-          set({
-            externalPlaybackActive: true,
-            playbackDownloadId: downloadId,
-            playBusyDownloadId: null,
-            addFeedback: `Playing “${res.fileLabel}” in mpv.`
-          })
-          window.setTimeout(() => {
-            if (get().addFeedback?.startsWith('Playing ')) set({ addFeedback: null })
-          }, 2800)
-          return
-        }
+        const playerLabel = res.kind === 'external' ? 'mpv' : 'player window'
         set({
-          playUrl: res.streamUrl,
-          playLabel: res.fileLabel,
-          playSubtitles: res.subtitles,
-          playStartSeconds: res.startSeconds,
+          externalPlaybackActive: true,
           playbackDownloadId: downloadId,
-          playDialogOpen: true,
-          playBusyDownloadId: null
+          playBusyDownloadId: null,
+          addFeedback: `Playing “${res.fileLabel}” in ${playerLabel}.`
         })
+        window.setTimeout(() => {
+          if (get().addFeedback?.startsWith('Playing ')) set({ addFeedback: null })
+        }, 2800)
       } catch (e) {
         set({
           playError: e instanceof Error ? e.message : 'Could not start playback.',

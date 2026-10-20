@@ -59,6 +59,12 @@ import {
 import { getWatchProgress, recordWatchProgress } from '../watch-history'
 import { resumePosition } from '@shared/watch-history'
 import { localMediaUrl, setLocalMediaRoots } from '../local-media-protocol'
+import {
+  closePlayerWindow,
+  getPlayerSession,
+  openPlayerWindow,
+  playerWindowEvents
+} from '../player-window'
 import { PUBLIC_TRACKERS } from './public-trackers'
 import {
   MP4_HEAD_PROBE_BYTES,
@@ -148,7 +154,12 @@ function isReadyToPlay(rec: DownloadRecord, t: WtTorrent, play: WtFile): boolean
     if (rec.mp4Layout.kind === 'moov-at-end' && t.pieceLength && play.offset != null) {
       const first = Math.floor((play.offset + rec.mp4Layout.moovOffset) / t.pieceLength)
       const last = Math.floor((play.offset + play.length - 1) / t.pieceLength)
-      t.select?.(first, last, 5)
+      if (typeof t._select === 'function') {
+        t._select(first, last, 5, null, true)
+      } else {
+        t.select?.(first, last, 5)
+      }
+      t.critical?.(first, last)
     }
   }
   if (rec.mp4Layout.kind === 'moov-at-end') {
@@ -241,6 +252,7 @@ export function endStreamingPlayback(via?: 'inline' | 'mpv'): void {
 }
 
 mpvEvents.on('end', () => endStreamingPlayback('mpv'))
+playerWindowEvents.on('end', () => endStreamingPlayback('inline'))
 
 function captureCompleteSnapshot(rec: DownloadRecord, torrent: WtTorrent): void {
   const totals = wantedTotals(rec, torrent)
@@ -647,6 +659,20 @@ function selectWantedFiles(rec: DownloadRecord, torrent: WtTorrent, video: WtFil
     if (f.path === video.path) f.select?.(4)
     else if (rec.wantedPaths.includes(f.path)) f.select?.(2)
   }
+  if (
+    !isArchiveFileName(video.name) &&
+    torrent.pieceLength &&
+    video.offset != null &&
+    video.length > 0
+  ) {
+    const headEnd = Math.min(video.length, headBytesNeeded(video.length))
+    const first = Math.floor(video.offset / torrent.pieceLength)
+    const last = Math.floor((video.offset + headEnd - 1) / torrent.pieceLength)
+    if (typeof torrent._select === 'function') {
+      torrent._select(first, last, 6, null, true)
+    }
+    torrent.critical?.(first, last)
+  }
 }
 
 async function attachTorrent(rec: DownloadRecord): Promise<void> {
@@ -882,6 +908,9 @@ export async function removeMovieDownload(
   if (streamingDownloadId === downloadId) {
     streamingDownloadId = null
     await shutdownCurrentMpvSession()
+    closePlayerWindow()
+  } else if (getPlayerSession()?.downloadId === downloadId) {
+    closePlayerWindow()
   }
   if (rec.wt && !rec.wt.destroyed) {
     const c = getClientIfExists()
@@ -1060,13 +1089,19 @@ async function launchPlayback(t: PlaybackTarget): Promise<TorrentStreamStartResp
     streamingDownloadId = t.rec.id
     streamingVia = 'inline'
   }
-  return {
-    ok: true,
-    kind: 'inline',
+  const session = {
+    movieId: t.rec.movieId,
+    downloadId: t.rec.id,
     streamUrl: t.inlineUrl!,
     fileLabel: t.label,
     subtitles: t.inlineSubtitles,
     startSeconds
+  }
+  openPlayerWindow(session)
+  return {
+    ok: true,
+    kind: 'inline',
+    ...session
   }
 }
 
@@ -1222,6 +1257,7 @@ export function shutdownMovieDownloads(): void {
   flushMovieDownloadsPersistence()
   shuttingDown = true
   void shutdownCurrentMpvSession()
+  closePlayerWindow()
   shutdownWebTorrentCore()
   records.clear()
 }

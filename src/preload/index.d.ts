@@ -14,7 +14,7 @@ import type {
   MovieTorrentDownloadSnapshot,
   UntrackedDownload
 } from '@shared/torrent-downloads'
-import type { TorrentStreamStartResponse } from '@shared/torrent-stream'
+import type { InlinePlayerSession, TorrentStreamStartResponse } from '@shared/torrent-stream'
 import type { WatchProgress } from '@shared/watch-history'
 import type { Preferences } from '@shared/preferences'
 import type { ProviderHealth } from '@shared/provider-health'
@@ -165,8 +165,12 @@ export type PopcornApi = {
     set(showId: number, inList: boolean): Promise<number[]>
   }
   mpv: {
-    /** Fires when the current mpv session ends (process exit / EOF). */
+    /** Fires when the current mpv or player window session ends (process exit / window close). */
     onEnd(cb: () => void): () => void
+  }
+  player: {
+    getSession(): Promise<InlinePlayerSession | null>
+    onSession(cb: (session: InlinePlayerSession) => void): () => void
   }
 }
 

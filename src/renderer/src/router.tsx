@@ -1,5 +1,5 @@
 import { createHashRouter, Navigate, RouterProvider, useParams } from 'react-router-dom'
-import { lazy, type ReactElement } from 'react'
+import { lazy, Suspense, type ReactElement } from 'react'
 import { RootLayout } from '@/layouts/root-layout'
 import { GenreBrowsePage } from '@/pages/genre-browse-page'
 import { HomePage } from '@/pages/home-page'
@@ -20,6 +20,9 @@ const DownloadsPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('@/pages/settings-page').then((mod) => ({ default: mod.SettingsPage }))
 )
+const PlayerWindowPage = lazy(() =>
+  import('@/pages/player-window-page').then((mod) => ({ default: mod.PlayerWindowPage }))
+)
 
 function MovieRoute(): ReactElement {
   const { movieId } = useParams()
@@ -37,6 +40,14 @@ function CollectionRoute(): ReactElement {
 }
 
 const router = createHashRouter([
+  {
+    path: '/player',
+    element: (
+      <Suspense fallback={<div className="h-screen w-screen bg-black" />}>
+        <PlayerWindowPage />
+      </Suspense>
+    )
+  },
   {
     path: '/',
     element: <RootLayout />,

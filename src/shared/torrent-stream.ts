@@ -8,17 +8,22 @@ export type TorrentSubtitleTrack = {
   language?: string
 }
 
+export type InlinePlayerSession = {
+  movieId: number
+  downloadId: string
+  streamUrl: string
+  fileLabel: string
+  subtitles: TorrentSubtitleTrack[]
+  /** Resume position in seconds (0 to start from the beginning). */
+  startSeconds: number
+}
+
 export type TorrentStreamStartResponse =
-  | {
+  | ({
       ok: true
-      /** In-app Vidstack player streaming from the local WebTorrent HTTP server. */
+      /** In-app Vidstack player opened in a dedicated popup window. */
       kind: 'inline'
-      streamUrl: string
-      fileLabel: string
-      subtitles: TorrentSubtitleTrack[]
-      /** Resume position in seconds (0 to start from the beginning). */
-      startSeconds: number
-    }
+    } & InlinePlayerSession)
   | {
       ok: true
       /** Playback was handed off to an external player (mpv). */
