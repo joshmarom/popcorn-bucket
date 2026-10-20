@@ -31,7 +31,9 @@ export function createAuth(): ReturnType<typeof betterAuth> {
       user: {
         create: {
           before: async (user) => {
-            const result = await getPool().query<{ n: number }>('SELECT COUNT(*)::int AS n FROM "user"')
+            const result = await getPool().query<{ n: number }>(
+              'SELECT COUNT(*)::int AS n FROM "user"'
+            )
             const first = (result.rows[0]?.n ?? 0) === 0
             return { data: { ...user, role: first ? 'admin' : 'user' } }
           }

@@ -74,7 +74,9 @@ const idsInput = z.object({
     .pipe(z.array(z.number().int().positive()).max(40))
 })
 const streamingInput = z.object({
-  service: z.enum(STREAMING_SERVICES.map((service) => service.id) as [StreamingService, ...StreamingService[]])
+  service: z.enum(
+    STREAMING_SERVICES.map((service) => service.id) as [StreamingService, ...StreamingService[]]
+  )
 })
 const autocompleteInput = z.object({ q: z.string().trim().min(2).max(100) })
 const resolveInput = z.object({
@@ -127,11 +129,19 @@ export function registerCatalogRoutes(app: Hono): void {
       const merged = mergeById(local, remote)
       const enriched = await enrichCatalogListWithOmdb(settings, merged)
       return c.json(
-        withPublicMedia({ ok: true as const, results: enriched.filter(shouldIncludeCatalogListItem) })
+        withPublicMedia({
+          ok: true as const,
+          results: enriched.filter(shouldIncludeCatalogListItem)
+        })
       )
     } catch (error) {
       if (local.length > 0) {
-        return c.json(withPublicMedia({ ok: true as const, results: local.filter(shouldIncludeCatalogListItem) }))
+        return c.json(
+          withPublicMedia({
+            ok: true as const,
+            results: local.filter(shouldIncludeCatalogListItem)
+          })
+        )
       }
       return c.json(mapCatalogError(error))
     }
@@ -242,11 +252,7 @@ export function registerCatalogRoutes(app: Hono): void {
     try {
       const local = await searchShowsLocal(parsed.data.query)
       try {
-        const page = await searchTvShows(
-          serverSettings(),
-          parsed.data.query,
-          parsed.data.page ?? 1
-        )
+        const page = await searchTvShows(serverSettings(), parsed.data.query, parsed.data.page ?? 1)
         return c.json(
           withPublicMedia({
             ok: true,
@@ -257,7 +263,15 @@ export function registerCatalogRoutes(app: Hono): void {
       } catch {
         const extra = await searchShowsFromTorrentClaw(parsed.data.query).catch(() => [])
         const results = mergeById(local, extra)
-        return c.json(withPublicMedia({ ok: true, results, page: 1, totalPages: 1, totalResults: results.length }))
+        return c.json(
+          withPublicMedia({
+            ok: true,
+            results,
+            page: 1,
+            totalPages: 1,
+            totalResults: results.length
+          })
+        )
       }
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
@@ -302,7 +316,10 @@ export function registerCatalogRoutes(app: Hono): void {
     if (!parsed.success) return c.json({ ok: false, error: 'Invalid show id.' })
     try {
       return c.json(
-        withPublicMedia({ ok: true, show: await getTvShowDetails(serverSettings(), parsed.data.id) })
+        withPublicMedia({
+          ok: true,
+          show: await getTvShowDetails(serverSettings(), parsed.data.id)
+        })
       )
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
@@ -345,7 +362,9 @@ export function registerCatalogRoutes(app: Hono): void {
 
   app.get('/v1/tv/on-the-air', async (c) => {
     try {
-      return c.json(withPublicMedia({ ok: true, results: await getOnTheAirShows(serverSettings()) }))
+      return c.json(
+        withPublicMedia({ ok: true, results: await getOnTheAirShows(serverSettings()) })
+      )
     } catch (error) {
       return c.json({ ok: false, error: mapCatalogError(error).error })
     }
@@ -424,7 +443,9 @@ export function registerCatalogRoutes(app: Hono): void {
     const parsed = streamingInput.safeParse({ service: c.req.query('service') })
     if (!parsed.success) return c.json({ ok: false, error: 'Unknown streaming service.' })
     try {
-      return c.json(withPublicMedia({ ok: true, items: await getStreamingTop(parsed.data.service) }))
+      return c.json(
+        withPublicMedia({ ok: true, items: await getStreamingTop(parsed.data.service) })
+      )
     } catch (error) {
       return c.json({ ok: false, error: discoverError(error) })
     }
@@ -520,7 +541,11 @@ function mapCatalogError(error: unknown): { ok: false; error: string; code: Cata
     }
   }
   if (message.startsWith('TMDB_HTTP_')) {
-    return { ok: false, error: `TMDB request failed (${message.slice(0, 80)})`, code: 'BAD_RESPONSE' }
+    return {
+      ok: false,
+      error: `TMDB request failed (${message.slice(0, 80)})`,
+      code: 'BAD_RESPONSE'
+    }
   }
   if (message === 'BAD_RESPONSE') {
     return { ok: false, error: 'Unexpected response from TMDB.', code: 'BAD_RESPONSE' }
