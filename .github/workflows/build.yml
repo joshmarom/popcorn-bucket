@@ -23,8 +23,8 @@ jobs:
           node-version: 24
           cache: npm
 
-      # npm 12 (bundled with newer Node 24) rejects this lockfile's missing optional deps and its
-      # remote tarball entries; stay on the npm major the lockfile is written with.
+      # npm 12 (bundled with newer Node 24) refuses the lockfile's remote tarball entries; stay on
+      # the npm major the lockfile is written with.
       - name: Install
         run: |
           npm install -g npm@11
