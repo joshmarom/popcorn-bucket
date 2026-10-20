@@ -38,3 +38,31 @@ jobs:
 
       - name: Unit tests
         run: npx vitest run
+
+  # Packaged on Windows so better-sqlite3 is the Windows build. Unsigned: SmartScreen warns.
+  package-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        shell: bash
+        run: |
+          npm install -g npm@11
+          npm ci
+
+      - name: Package Windows installer
+        shell: bash
+        run: npm run build:win -- --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: popcorn-bucket-windows
+          path: dist/*.exe
+          if-no-files-found: error

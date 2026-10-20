@@ -30,12 +30,17 @@ module.exports = {
     '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   ],
   asarUnpack: ['resources/**', 'node_modules/better-sqlite3/**'],
-  win: { executableName: 'PopcornBucket' },
+  // Electron 44 runs on Windows 10 and 11. x64 covers both; the installer refuses anything older.
+  win: {
+    executableName: 'PopcornBucket',
+    target: [{ target: 'nsis', arch: ['x64'] }]
+  },
   nsis: {
     artifactName: '${name}-${version}-setup.${ext}',
     shortcutName: '${productName}',
     uninstallDisplayName: '${productName}',
-    createDesktopShortcut: 'always'
+    createDesktopShortcut: 'always',
+    include: 'build/installer.nsh'
   },
   mac: {
     minimumSystemVersion: '13.0',
