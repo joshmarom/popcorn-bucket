@@ -31,7 +31,7 @@
 ## 🌟 Highlights
 
 - **Movies & TV in one shell** — Browse trending catalogs, popular releases, upcoming titles, curated collections, genre rails, and streaming Top 10s (Netflix, Prime Video, Disney+, Apple TV+) with instant cross-catalog autocomplete.
-- **Smart multi-indexer torrent aggregation** — Queries 8 providers in parallel (TorrentClaw, TorrentsCSV, Knaben, ThePirateBay, YTS, EZTV, UIndex, LimeTorrents), deduplicates by info-hash, parses release metadata (4K/1080p, HDR, codec, source, season packs), and ranks results by quality and swarm health.
+- **Smart multi-indexer torrent aggregation** — The Popcorn API queries 8 providers in parallel (TorrentClaw, TorrentsCSV, Knaben, ThePirateBay, YTS, EZTV, UIndex, LimeTorrents), deduplicates by info-hash, parses release metadata (4K/1080p, HDR, codec, source, season packs), and ranks results by quality and swarm health.
 - **Instant streaming & external playback** — Stream sequentially over WebTorrent inside the built-in Vidstack player, or hand off incompatible containers/codecs to `mpv` with bidirectional JSON IPC progress tracking.
 - **Automatic subtitles** — Extracts embedded subtitle tracks or automatically fetches matching subtitles from OpenSubtitles in your preferred language.
 - **Personal library & cloud sync** — Track *Continue Watching*, *My List* (movies), and *My Shows* locally in SQLite with seamless account synchronization via the Popcorn API.
@@ -56,11 +56,11 @@ Created and maintained by **[Josh Marom](https://github.com/joshmarom)**.
 
 ### End Users (Prebuilt Installers)
 
-Download the latest installer for your operating system from the **[Releases](https://github.com/joshmarom/popcorn-bucket/releases/latest)** page:
+Download the latest installer from **[popcorn.josh.co.il](https://popcorn.josh.co.il/)**, or grab the same files from the **[Releases](https://github.com/joshmarom/popcorn-bucket/releases/latest)** page:
 
 | Platform | Artifact | Minimum Requirements |
 | :--- | :--- | :--- |
-| **macOS** | `popcorn-bucket-<version>.dmg` | macOS 13.0 (Ventura) or newer |
+| **macOS** | `popcorn-bucket-<version>.dmg` (Apple Silicon) | macOS 13.0 (Ventura) or newer |
 | **Windows** | `popcorn-bucket-<version>-setup.exe` | Windows 10 / 11 (x64) |
 | **Linux** | `.AppImage`, `.deb`, or `.snap` | 64-bit Linux distribution |
 
@@ -84,7 +84,7 @@ winget install mpv
 ## 🚀 Usage
 
 1. **Discover** — Launch Popcorn Bucket to browse Movie and TV discovery rails, filter by streaming service Top 10s, explore collections, or press search for instant autocomplete across movies, shows, and franchises.
-2. **Play or Download** — Open any title and click **Quick Play** to automatically pick the best release for your preferred resolution (`1080p` by default), or expand **Torrent Sources** to inspect individual releases, seeders, codecs, and file sizes.
+2. **Play or Download** — Open any title and press **Play**. The strip attached under the button names the copy that will play (resolution, source, size, and seeders) and opens the full source list, where you can inspect seeders, codecs, and file sizes or pick a different release.
 3. **Resume Anywhere** — Playback position is saved every few seconds (both in-app and in external `mpv` windows). Partially watched titles appear automatically in **Library → Continue Watching**.
 4. **Tune Preferences** — Visit **Settings** to customize your preferred resolution, download directory (`~/Downloads/Popcorn Bucket` by default), active download concurrency, upload/download speed limits, and default subtitle language (`ISO 639-1`, e.g., `en`).
 
@@ -177,7 +177,7 @@ popcorn-bucket/
 - **Media & Storage (`src/main`):** WebTorrent, `better-sqlite3`, Cheerio, Zod, `mpv` JSON IPC controller
 - **Backend (`server/`):** Node.js, Hono, PostgreSQL (`pg`), Drizzle ORM, Better Auth
 
-For a deep dive into how the 8-provider torrent aggregation pipeline, info-hash deduplication, per-host rate limiting, and 5-day SQLite caching work, see **[`docs/torrent-search.md`](docs/torrent-search.md)**.
+The desktop asks the Popcorn API for torrent results (`POST /v1/torrents/search`). Streaming, disk downloads, and `mpv` stay on the machine. Maintainer notes live in **[`docs/PROJECT.md`](docs/PROJECT.md)**. For how the API's 8-provider pipeline deduplicates by info-hash, rate-limits hosts, and caches results, see **[`docs/torrent-search.md`](docs/torrent-search.md)**.
 
 ---
 
