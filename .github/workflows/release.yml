@@ -62,7 +62,7 @@ jobs:
           npm ci
 
       - name: Package macOS disk image
-        run: npm run build:mac -- --universal --publish never -c.npmRebuild=true
+        run: npm run build:mac -- --arm64 --publish never
 
       - name: Upload disk image
         env:
