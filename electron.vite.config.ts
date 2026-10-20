@@ -36,6 +36,12 @@ export default defineConfig({
         '@shared': resolve('src/shared')
       }
     },
+    server: {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'credentialless'
+      }
+    },
     plugins: [react(), tailwindcss()]
   }
 })

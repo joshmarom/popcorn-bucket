@@ -1,14 +1,18 @@
 import type { TorrentSubtitleTrack } from '@shared/torrent-stream'
 import type { ReactElement } from 'react'
-import { useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { alignLoopbackStreamUrlToPageHost } from '@/lib/local-stream-url'
+import MKVWeb, { isMkvSource } from '@/lib/mkv-web/mkv-web'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
+  isVideoProvider,
   MediaPlayer,
   MediaProvider,
   Track,
   type MediaErrorDetail,
-  type MediaPlayerInstance
+  type MediaPlayerInstance,
+  type MediaProviderAdapter,
+  type PlayerSrc
 } from '@vidstack/react'
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default'
 import '@vidstack/react/player/styles/default/theme.css'
@@ -62,6 +66,48 @@ export function MoviePlaybackDialog({
     return playUrl ? alignLoopbackStreamUrlToPageHost(playUrl) : null
   }, [playUrl])
 
+  const isMkv = useMemo(() => {
+    return isMkvSource(resolvedPlayUrl, playLabel)
+  }, [resolvedPlayUrl, playLabel])
+
+  const mkvInstance = useMemo<MKVWeb | null>(() => {
+    if (!open || !resolvedPlayUrl || !isMkv) return null
+    return new MKVWeb()
+  }, [open, resolvedPlayUrl, isMkv])
+
+  useEffect(() => {
+    if (!mkvInstance) return
+    mkvInstance.retain()
+    mkvInstance.addErrorCallback((err) => {
+      onPlayerError({
+        message: err.message || 'MKV playback failed.',
+        code: 4
+      })
+    })
+    return () => {
+      mkvInstance.release()
+    }
+  }, [mkvInstance, onPlayerError])
+
+  const playerSrc = useMemo<PlayerSrc | null>(() => {
+    if (!open || !resolvedPlayUrl) return null
+    if (isMkv) {
+      if (!mkvInstance) return null
+      return { src: mkvInstance.mediaSource, type: 'video/object' }
+    }
+    return resolvedPlayUrl
+  }, [open, resolvedPlayUrl, isMkv, mkvInstance])
+
+  const handleProviderSetup = useCallback(
+    (provider: MediaProviderAdapter): void => {
+      if (isMkv && mkvInstance && resolvedPlayUrl && isVideoProvider(provider)) {
+        mkvInstance.attachVideo(provider.video)
+        void mkvInstance.loadMedia(resolvedPlayUrl)
+      }
+    },
+    [isMkv, mkvInstance, resolvedPlayUrl]
+  )
+
   const resolvedSubtitles = useMemo(() => {
     return playSubtitles.map((s) => ({ ...s, src: alignLoopbackStreamUrlToPageHost(s.src) }))
   }, [playSubtitles])
@@ -78,12 +124,13 @@ export function MoviePlaybackDialog({
         <DialogHeader>
           <DialogTitle>{playLabel}</DialogTitle>
         </DialogHeader>
-        {resolvedPlayUrl ? (
+        {playerSrc && resolvedPlayUrl ? (
           <MediaPlayer
             key={resolvedPlayUrl}
             ref={playerRef}
-            src={resolvedPlayUrl}
+            src={playerSrc}
             playsInline
+            onProviderSetup={handleProviderSetup}
             onCanPlay={() => {
               const p = playerRef.current
               if (p && startSeconds > 0 && p.state.currentTime < 1) p.currentTime = startSeconds

@@ -70,6 +70,7 @@ import {
   MP4_HEAD_PROBE_BYTES,
   choosePlaybackTarget,
   headBytesNeeded,
+  isMkvContainer,
   isMp4Container,
   parseMp4Layout,
   type Mp4Layout
@@ -672,6 +673,17 @@ function selectWantedFiles(rec: DownloadRecord, torrent: WtTorrent, video: WtFil
       torrent._select(first, last, 6, null, true)
     }
     torrent.critical?.(first, last)
+
+    // Prioritize the tail of MKV files so Matroska Cues at the end of the file are ready for seeking.
+    if (isMkvContainer(video.name) && video.length > headEnd) {
+      const tailStart = Math.max(headEnd, video.length - 1024 * 1024)
+      const tailFirst = Math.floor((video.offset + tailStart) / torrent.pieceLength)
+      const tailLast = Math.floor((video.offset + video.length - 1) / torrent.pieceLength)
+      if (typeof torrent._select === 'function') {
+        torrent._select(tailFirst, tailLast, 5, null, true)
+      }
+      torrent.critical?.(tailFirst, tailLast)
+    }
   }
 }
 

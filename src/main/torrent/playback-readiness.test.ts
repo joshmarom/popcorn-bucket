@@ -86,7 +86,7 @@ describe('choosePlaybackTarget', () => {
     ).toEqual({ kind: 'inline' })
   })
 
-  it('uses inline for MP4 and mpv for MKV when preferredPlayer is inline', () => {
+  it('uses inline for MP4 and MKV, and mpv for AVI when preferredPlayer is inline', () => {
     expect(
       choosePlaybackTarget({
         preference: 'inline',
@@ -100,6 +100,15 @@ describe('choosePlaybackTarget', () => {
       choosePlaybackTarget({
         preference: 'inline',
         fileName: 'Movie.2024.1080p.mkv',
+        hasInlineUrl: true,
+        mpvInstalled: true
+      })
+    ).toEqual({ kind: 'inline' })
+
+    expect(
+      choosePlaybackTarget({
+        preference: 'inline',
+        fileName: 'Movie.2024.1080p.avi',
         hasInlineUrl: true,
         mpvInstalled: true
       })

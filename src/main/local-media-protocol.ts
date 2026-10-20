@@ -100,21 +100,36 @@ function parseRange(header: string | null, size: number): { start: number; end: 
 
 export function installLocalMediaProtocol(): void {
   protocol.handle(LOCAL_MEDIA_SCHEME, (request) => {
+    const corsHeaders: Record<string, string> = {
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range, Content-Type',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+      'Cross-Origin-Resource-Policy': 'cross-origin'
+    }
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders })
+    }
+
     const abs = resolveRequestPath(request.url)
-    if (!abs) return new Response('Not found', { status: 404 })
+    if (!abs) return new Response('Not found', { status: 404, headers: corsHeaders })
     let size: number
     try {
       const st = statSync(abs)
-      if (!st.isFile()) return new Response('Not found', { status: 404 })
+      if (!st.isFile()) return new Response('Not found', { status: 404, headers: corsHeaders })
       size = st.size
     } catch {
-      return new Response('Not found', { status: 404 })
+      return new Response('Not found', { status: 404, headers: corsHeaders })
     }
 
     const headers: Record<string, string> = {
-      'Content-Type': MIME_BY_EXT[extname(abs).toLowerCase()] ?? 'application/octet-stream',
-      'Accept-Ranges': 'bytes',
-      'Access-Control-Allow-Origin': '*'
+      ...corsHeaders,
+      'Content-Type': MIME_BY_EXT[extname(abs).toLowerCase()] ?? 'application/octet-stream'
+    }
+    if (request.method === 'HEAD') {
+      headers['Content-Length'] = String(size)
+      return new Response(null, { status: 200, headers })
     }
     if (size === 0) return new Response(null, { status: 200, headers })
     const rangeHeader = request.headers.get('range')

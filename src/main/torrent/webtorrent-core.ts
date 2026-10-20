@@ -69,6 +69,12 @@ export type WebTorrentClient = {
 export type WtHttpServer = {
   listen: (port: number, host: string, cb: () => void) => void
   address: () => { port: number; address?: string; family?: string } | string | null
+  server?: {
+    on: (
+      ev: 'request',
+      fn: (req: unknown, res: { setHeader: (name: string, value: string) => void }) => void
+    ) => void
+  }
 }
 
 let WebTorrentCtor: (new (opts?: object) => WebTorrentClient) | null = null
@@ -143,6 +149,10 @@ export async function ensureHttpServer(c: WebTorrentClient): Promise<number> {
     },
     'node'
   )
+  srv.server?.on('request', (_req, res) => {
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+  })
   httpServer = srv
   await new Promise<void>((resolve, reject) => {
     const to = setTimeout(() => reject(new Error('Stream server listen timeout')), 15_000)

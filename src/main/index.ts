@@ -21,6 +21,8 @@ import { isSafeTorrentDetailsUrl } from '@shared/torrent'
  * @see https://github.com/electron/electron/issues/50391
  */
 app.commandLine.appendSwitch('local-network-access-permissions-policy-default-enabled')
+// Enable SharedArrayBuffer for ffmpeg.wasm (mkv-web) without requiring COEP require-corp on cross-origin embeds/posters.
+app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer')
 // Dev builds are ad-hoc signed, so macOS asks for the login keychain on every launch.
 // A mock keychain skips that prompt. Packaged builds still use the real keychain.
 if (!app.isPackaged) {
@@ -43,6 +45,20 @@ function lockDownMainSession(): void {
   ses.setPermissionCheckHandler((_wc, permission) => MAIN_ALLOWED_PERMISSIONS.has(permission))
   ses.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(MAIN_ALLOWED_PERMISSIONS.has(permission))
+  })
+  // Ensure cross-origin isolation (SharedArrayBuffer for ffmpeg.wasm / mkv-web) even if the
+  // Vite dev server wasn't restarted after config changes, while allowing cross-origin images.
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders }
+    if (
+      details.url.startsWith('http://localhost:') ||
+      details.url.startsWith('http://127.0.0.1:')
+    ) {
+      responseHeaders['Cross-Origin-Opener-Policy'] = ['same-origin']
+      responseHeaders['Cross-Origin-Embedder-Policy'] = ['credentialless']
+      responseHeaders['Cross-Origin-Resource-Policy'] = ['cross-origin']
+    }
+    callback({ responseHeaders })
   })
 }
 

@@ -8,8 +8,13 @@ export type Mp4Layout =
 
 /** RAR volumes (`.rar`, `.r00`, `.part01.rar`) and zip archives. */
 const ARCHIVE_RE = /\.(rar|r\d{2}|zip)$/i
-/** Containers Chromium refuses to play inline; we hand these off to mpv unless forced inline. */
-const EXTERNAL_CONTAINER_RE = /\.(mkv|matroska|avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
+/** Containers Chromium cannot play natively or via mkv-web; we hand these off to mpv unless forced inline. */
+const EXTERNAL_CONTAINER_RE = /\.(avi|ts|m2ts|mpg|mpeg|wmv|flv|vob)$/i
+const MKV_EXT_RE = /\.(mkv|matroska)$/i
+
+export function isMkvContainer(fileName: string): boolean {
+  return MKV_EXT_RE.test(fileName.trim())
+}
 
 export function needsExternalPlayer(fileName: string): boolean {
   const trimmed = fileName.trim()

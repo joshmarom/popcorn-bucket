@@ -119,9 +119,9 @@ export function PreferencesSection(): ReactElement {
         </select>
         <p className="text-muted-foreground text-xs">
           {prefs.preferredPlayer === 'mpv' &&
-            'Uses external mpv whenever installed, and falls back to the built-in Vidstack player window for MP4/WebM if mpv is not installed.'}
+            'Uses external mpv whenever installed, and falls back to the built-in Vidstack player window for MP4/MKV/WebM if mpv is not installed.'}
           {prefs.preferredPlayer === 'inline' &&
-            'Opens MP4, WebM, and MOV in the built-in Vidstack player window, and hands MKV, AVI, TS, or archive releases to mpv.'}
+            'Opens MP4, MKV, WebM, and MOV in the built-in Vidstack player window, and hands AVI, TS, or archive releases to mpv.'}
           {prefs.preferredPlayer === 'inline-only' &&
             'Always opens videos in the built-in Vidstack player window without launching mpv.'}
           {prefs.preferredPlayer === 'mpv-only' &&
