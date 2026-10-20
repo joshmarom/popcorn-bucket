@@ -48,8 +48,8 @@ module.exports = {
     entitlementsInherit: 'build/entitlements.mac.plist',
     hardenedRuntime: true,
     // Prebuild blobs are copied into both arch trees unchanged. Addons whose bytes differ
-    // are still merged; identical .node files are the unused copies.
-    x64ArchFiles: '**/*.node',
+    // are still merged; identical Mach-O files are the unused copies.
+    x64ArchFiles: '*',
     extendInfo: {
       NSDownloadsFolderUsageDescription: 'Popcorn Bucket saves movies to your Downloads folder.'
     },
